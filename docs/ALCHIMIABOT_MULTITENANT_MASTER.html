@@ -1,0 +1,2298 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Alchimiabot — Plan Maestro Multi-Tenant</title>
+<style>
+  @page {
+    size: A4;
+    margin: 1.5cm 1.8cm;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 11pt;
+    line-height: 1.55;
+    color: #1d1d1f;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2rem;
+    background: #fafafa;
+  }
+  h1 {
+    font-size: 26pt;
+    margin-top: 2rem;
+    margin-bottom: 0.8rem;
+    color: #4c1d95;
+    border-bottom: 3px solid #8b5cf6;
+    padding-bottom: 0.5rem;
+    page-break-after: avoid;
+  }
+  h2 {
+    font-size: 18pt;
+    margin-top: 2.5rem;
+    margin-bottom: 0.6rem;
+    color: #5b21b6;
+    border-bottom: 1px solid #c4b5fd;
+    padding-bottom: 0.3rem;
+    page-break-after: avoid;
+  }
+  h3 {
+    font-size: 14pt;
+    margin-top: 1.6rem;
+    margin-bottom: 0.4rem;
+    color: #6d28d9;
+    page-break-after: avoid;
+  }
+  h4 {
+    font-size: 12pt;
+    margin-top: 1.2rem;
+    margin-bottom: 0.3rem;
+    color: #7c3aed;
+    page-break-after: avoid;
+  }
+  p { margin: 0.6rem 0; }
+  ul, ol { margin: 0.6rem 0; padding-left: 1.8rem; }
+  li { margin: 0.2rem 0; }
+  strong { color: #1d1d1f; font-weight: 700; }
+  em { color: #475569; }
+  code {
+    background: #f3e8ff;
+    color: #6d28d9;
+    padding: 0.12rem 0.35rem;
+    border-radius: 3px;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.9em;
+  }
+  pre {
+    background: #1e1b4b;
+    color: #e0e7ff;
+    padding: 1rem;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 9pt;
+    line-height: 1.4;
+    page-break-inside: avoid;
+    border-left: 4px solid #8b5cf6;
+  }
+  pre code {
+    background: transparent;
+    color: inherit;
+    padding: 0;
+  }
+  blockquote {
+    border-left: 4px solid #8b5cf6;
+    margin: 1rem 0;
+    padding: 0.5rem 1rem;
+    background: #f5f3ff;
+    color: #5b21b6;
+    font-style: italic;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1rem 0;
+    font-size: 10pt;
+    page-break-inside: avoid;
+  }
+  th, td {
+    border: 1px solid #d4d4d8;
+    padding: 0.4rem 0.6rem;
+    text-align: left;
+  }
+  th {
+    background: #ede9fe;
+    color: #4c1d95;
+    font-weight: 600;
+  }
+  tr:nth-child(even) {
+    background: #faf5ff;
+  }
+  hr {
+    border: none;
+    border-top: 2px dashed #c4b5fd;
+    margin: 2rem 0;
+  }
+  a {
+    color: #7c3aed;
+    text-decoration: none;
+  }
+  a:hover {
+    text-decoration: underline;
+  }
+  .header-banner {
+    background: linear-gradient(135deg, #4c1d95 0%, #7c3aed 100%);
+    color: white;
+    padding: 2rem;
+    border-radius: 12px;
+    margin-bottom: 2rem;
+    text-align: center;
+    page-break-after: avoid;
+  }
+  .header-banner h1 {
+    color: white;
+    border: none;
+    margin: 0;
+    font-size: 28pt;
+  }
+  .header-banner p {
+    color: #e0e7ff;
+    margin: 0.5rem 0 0 0;
+    font-size: 12pt;
+  }
+  .print-hint {
+    background: #fef3c7;
+    border: 2px solid #f59e0b;
+    padding: 0.8rem;
+    border-radius: 6px;
+    margin-bottom: 1.5rem;
+    font-size: 10pt;
+    color: #92400e;
+  }
+  @media print {
+    body { background: white; padding: 0; }
+    .print-hint { display: none; }
+  }
+</style>
+</head>
+<body>
+  <div class="print-hint">
+    <strong>💡 Para generar PDF:</strong> Abre este archivo en el navegador y pulsa <strong>Ctrl+P</strong> (o ⌘P) → "Guardar como PDF". Los estilos de impresión están optimizados.
+  </div>
+  <div class="header-banner">
+    <h1>ALCHIMIABOT</h1>
+    <p>Plan Maestro Multi-Tenant · Documento de diseño</p>
+  </div>
+  <h1>Alchimiabot — Plan Maestro Multi-Tenant</h1>
+<blockquote>
+<p>Documento maestro de referencia para evolucionar Alchimiabot de single-tenant
+a plataforma multi-usuario con 10 amigos en beta cerrada y target de 100
+usuarios maximo. Solo Hyperliquid en la primera fase.</p>
+<p><strong>Este documento NO implementa nada. Es solo recopilacion para tomar decisiones.</strong></p>
+</blockquote>
+<p><strong>Producto:</strong> Alchimiabot
+<strong>Modelo:</strong> Non-custodial via API Wallets de Hyperliquid
+<strong>Beta:</strong> 10 amigos cerrada
+<strong>Target:</strong> 100 usuarios maximo
+<strong>Exchanges:</strong> solo Hyperliquid (otros futuros)
+<strong>Fecha:</strong> 2026-04-10
+<strong>Estado:</strong> Recopilando, no implementado</p>
+<hr />
+<h2>📋 Indice</h2>
+<ol>
+<li><a href="#1-vision-general">Vision general</a></li>
+<li><a href="#2-decisiones-tomadas">Decisiones tomadas</a></li>
+<li><a href="#3-decisiones-pendientes">Decisiones pendientes</a></li>
+<li><a href="#4-como-se-conectan-los-usuarios">Como se conectan los usuarios (non-custodial)</a></li>
+<li><a href="#5-arquitectura-tecnica">Arquitectura tecnica</a></li>
+<li><a href="#6-estrategia-de-datos">Estrategia de datos</a></li>
+<li><a href="#7-sistema-de-roles">Sistema de roles</a></li>
+<li><a href="#8-seguridad">Seguridad</a></li>
+<li><a href="#9-plan-por-fases">Plan por fases</a></li>
+<li><a href="#10-riesgos">Riesgos</a></li>
+<li><a href="#11-costes-estimados">Costes estimados</a></li>
+<li><a href="#12-documentos-relacionados">Documentos relacionados</a></li>
+</ol>
+<hr />
+<h2>1. Vision general</h2>
+<h3>El verdadero &quot;por que&quot; del proyecto</h3>
+<p><strong>Alchimiabot NO es multi-tenant para vender mas.</strong>
+<strong>Alchimiabot ES multi-tenant para APRENDER mas rapido.</strong></p>
+<h4>El problema real</h4>
+<p>Hoy el bot esta single-user. Eso significa:</p>
+<ul>
+<li>1 sola configuracion probandose en cualquier momento</li>
+<li>1 sola persona (tu) decidiendo que parametros tocar</li>
+<li>A/B testing <strong>en serie</strong>: cambias 1 parametro, esperas dias, ves resultado, cambias otro</li>
+<li>Muestra estadistica ridicula (pocos trades/dia)</li>
+<li>6 meses para descubrir lo que se podria descubrir en 2 semanas si fueras 10 personas</li>
+</ul>
+<p><strong>El bot no es malo. Lo que falta es el conocimiento de los parametros optimos para cada condicion de mercado.</strong></p>
+<p>Y ese conocimiento <strong>no se descubre con 1 usuario tradeando</strong>. Se descubre con <strong>muchos usuarios probando configs distintas en paralelo</strong>, comparando resultados, y dejando que los datos hablen.</p>
+<h4>La solucion: A/B testing distribuido</h4>
+<p>Con 10 amigos en multi-tenant:</p>
+<pre><code>Usuario A: SCALP minScore=56, trail=0.12  →  10 trades/dia
+Usuario B: SCALP minScore=58, trail=0.10  →  8 trades/dia
+Usuario C: NORMAL confirm=2min            →  6 trades/dia
+Usuario D: NORMAL confirm=3min            →  5 trades/dia
+Usuario E: SWING SL=0.50                  →  3 trades/dia
+...
+Usuario J: NORMAL custom mix              →  7 trades/dia
+
+Total: ~50-60 trades/dia con 10 configs DISTINTAS
+       en mercado SIMULTANEO (mismo BTC, mismo flow)
+</code></pre>
+<p><strong>Eso es oro estadistico.</strong> Con 10 amigos en 1 mes tienes <strong>mas data valida que tu solo en 6 meses</strong>, porque:</p>
+<ul>
+<li>Mismo mercado, configs distintas → comparacion limpia</li>
+<li>Variantes que tu nunca probarias porque pierdes dinero solo</li>
+<li>El sistema puede aprender que configs ganan en que condiciones</li>
+</ul>
+<p><strong>Esto es exactamente lo que hacen los hedge funds quants:</strong> corren miles de variantes en paralelo para descubrir que funciona.</p>
+<h3>Cambio de mentalidad fundamental</h3>
+<table>
+<thead>
+<tr>
+<th>Vision vieja</th>
+<th>Vision nueva</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>&quot;Tengo que validar el bot solo antes de venderlo&quot;</td>
+<td>&quot;Necesito muchos usuarios para validar el bot&quot;</td>
+</tr>
+<tr>
+<td>&quot;Beta = QA antes de cobrar&quot;</td>
+<td>&quot;Beta = experimento estadistico que hace el bot mejor&quot;</td>
+</tr>
+<tr>
+<td>&quot;Si el bot pierde, no puedo cobrar&quot;</td>
+<td>&quot;El bot pierde porque estoy optimizando solo. Con 10 amigos descubro los parametros y ganamos todos&quot;</td>
+</tr>
+<tr>
+<td>Single-user → multi-user despues de validar</td>
+<td><strong>Multi-user PORQUE single-user no escala el aprendizaje</strong></td>
+</tr>
+<tr>
+<td>Roadmap secuencial: optimizar → vender</td>
+<td>Roadmap paralelo: multi-tenant Y optimizar a la vez</td>
+</tr>
+</tbody>
+</table>
+<h3>El verdadero arma competitiva: aprendizaje colectivo</h3>
+<p>Hoy el <code>CoinProfileOptimizer</code> aprende per-usuario (per-coin+side+mode). Eso es bueno <strong>pero limitado</strong> porque cada usuario tiene poca muestra.</p>
+<p><strong>En multi-tenant</strong> anades un nivel mas:</p>
+<pre><code>CoinProfileOptimizer per-user (lo que tienes hoy)
+              ↓
+GlobalLearningService (NUEVO, futuro)
+  - Lee resultados de TODOS los usuarios
+  - Compara configs vs PnL agregado
+  - Sugiere &quot;best config per coin&quot; basado en N usuarios
+  - El Quantum Platform muestra:
+    &quot;Los usuarios que usan SL=0.20 en NORMAL ganan +0.15/trade mas
+     que los que usan SL=0.25 (n=247 trades, p&lt;0.01)&quot;
+</code></pre>
+<p><strong>Esto es lo que diferencia Alchimiabot de cualquier otro bot.</strong> No es solo un wrapper de HL. Es <strong>un sistema que aprende colectivamente</strong>.</p>
+<h3>El nuevo objetivo</h3>
+<p>Convertir el bot en una <strong>plataforma non-custodial de inteligencia colectiva</strong> donde:</p>
+<ul>
+<li>Cada usuario conecta su propia wallet de Hyperliquid via API Wallet</li>
+<li>El bot opera con la API Wallet del usuario (no con su wallet principal)</li>
+<li>Cada usuario tiene su propia config, perfiles, historia, schedule</li>
+<li>Multiples usuarios operan simultaneamente sin contaminacion</li>
+<li><strong>Los datos cruzados entre usuarios alimentan un sistema de aprendizaje global</strong></li>
+<li>Sistema de roles BASIC / PRO / PREMIUM con feature gating</li>
+<li><strong>El producto MEJORA con cada usuario nuevo (network effect real)</strong></li>
+</ul>
+<h3>Por que non-custodial</h3>
+<blockquote>
+<p><strong>Nunca pides la private key principal del usuario.</strong></p>
+</blockquote>
+<p>El usuario genera una <strong>API Wallet</strong> dentro de Hyperliquid (sub-key especifica para tradear) y te entrega esa. Esa key:</p>
+<ul>
+<li>Solo puede tradear, <strong>no puede retirar fondos</strong></li>
+<li>Es independiente de la wallet principal del usuario</li>
+<li>Si tu sistema se hackea, los fondos del usuario estan a salvo</li>
+<li>El usuario puede revocarla en HL en 1 click</li>
+</ul>
+<p><strong>Es el modelo que usan TODOS los bots profesionales</strong> (3Commas, Hummingbot, etc).</p>
+<h3>Lo que hace especial a Alchimiabot</h3>
+<ul>
+<li>Motor propio refinado con experiencia real (no copia de open source)</li>
+<li>Schedule semanal granular (V26)</li>
+<li>Sistema de markers para medir impacto de cambios (V25)</li>
+<li>Coin profile auto-learning per usuario</li>
+<li>Shadow mode con proposals</li>
+<li>Microestructura via WebSocket</li>
+<li>Protecciones (StoplossGuard, MaxDrawdown, LossStreak)</li>
+</ul>
+<hr />
+<h2>2. Decisiones tomadas</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Decision</th>
+<th>Razon</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><strong>Non-custodial via API Wallets</strong></td>
+<td>Cero responsabilidad legal sobre fondos. Estandar de industria.</td>
+</tr>
+<tr>
+<td>2</td>
+<td><strong>Solo Hyperliquid en Fase 1</strong></td>
+<td>Donde el bot esta optimizado. Conoces la API. Sin KYC.</td>
+</tr>
+<tr>
+<td>3</td>
+<td><strong>Single JVM + sessions per user</strong></td>
+<td>Escalable a 100 users. Mejor balance recursos/aislamiento.</td>
+</tr>
+<tr>
+<td>4</td>
+<td><strong>MarketDataService compartido</strong></td>
+<td>Sin esto, HL rate limits matan el sistema con &gt;20 users.</td>
+</tr>
+<tr>
+<td>5</td>
+<td><strong>PostgreSQL solo (no MongoDB ni nada raro)</strong></td>
+<td>Aguanta de sobra el volumen. KISS.</td>
+</tr>
+<tr>
+<td>6</td>
+<td><strong>Beta cerrada con 10 amigos primero</strong></td>
+<td>Validar el modelo antes de invertir mucho.</td>
+</tr>
+<tr>
+<td>7</td>
+<td><strong>Producto se llama Alchimiabot</strong></td>
+<td>Continuidad de marca.</td>
+</tr>
+<tr>
+<td>8</td>
+<td><strong>No custodiar wallets ajenas</strong></td>
+<td>Legal claro: cero zona gris.</td>
+</tr>
+<tr>
+<td>9</td>
+<td><strong>Refactor incremental, no rewrite</strong></td>
+<td>Reusar el motor actual, no empezar de cero.</td>
+</tr>
+<tr>
+<td>10</td>
+<td><strong>Tiempo no es un problema</strong></td>
+<td>Hacerlo bien aunque tarde 3-4 meses.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>3. Decisiones pendientes</h2>
+<p>Cosas que necesitas decidir antes de empezar:</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Decision</th>
+<th>Implicacion</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><strong>¿Modelo de negocio?</strong> (gratis / freemium / suscripcion / % profit)</td>
+<td>Define los tiers y la motivacion del usuario</td>
+</tr>
+<tr>
+<td>2</td>
+<td><strong>¿Borrar las 13 tablas legacy?</strong> (Polymarket pausado, backtest viejo, etc)</td>
+<td>Cleanup mental + 10 MB recuperados</td>
+</tr>
+<tr>
+<td>3</td>
+<td><strong>¿Mantener <code>hl_trade_micro_features</code>?</strong></td>
+<td>Solo si planeas ML futuro</td>
+</tr>
+<tr>
+<td>4</td>
+<td><strong>¿Polymarket vuelve algun dia?</strong></td>
+<td>Si NO → drop tablas. Si SI → mantenerlas dormidas.</td>
+</tr>
+<tr>
+<td>5</td>
+<td><strong>¿Servidor propio o cloud?</strong></td>
+<td>Costes y mantenimiento</td>
+</tr>
+<tr>
+<td>6</td>
+<td><strong>¿Backups: full o solo criticos?</strong></td>
+<td>Criticos minimum: <code>auth_users</code>, <code>user_wallets</code>, <code>hl_trading_history</code>, <code>change_markers</code></td>
+</tr>
+<tr>
+<td>7</td>
+<td><strong>¿Soporte tecnico?</strong> (chat, email, foro privado, ninguno)</td>
+<td>Operaciones a futuro</td>
+</tr>
+<tr>
+<td>8</td>
+<td><strong>¿Asesoria legal previa a beta?</strong></td>
+<td><strong>Recomendado SI</strong> aunque sea non-custodial. ~200-500€ una vez.</td>
+</tr>
+<tr>
+<td>9</td>
+<td><strong>¿Sistema de invitacion o abierto?</strong></td>
+<td>Beta cerrada → invitacion. Despues, abierto.</td>
+</tr>
+<tr>
+<td>10</td>
+<td><strong>¿Grafico publico de performance?</strong></td>
+<td>Marketing potencial pero exposicion</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>4. Como se conectan los usuarios</h2>
+<h3>El flujo de onboarding (no custodial)</h3>
+<pre><code>PASO 1 — USUARIO en Hyperliquid
+─────────────────────────────────
+1. Conecta MetaMask en https://app.hyperliquid.xyz
+2. Ve sus fondos ($X)
+3. Va a https://app.hyperliquid.xyz/API
+4. Click &quot;Generate&quot; → HL crea una API Wallet
+5. HL le da:
+   - Address: 0x123abc...
+   - Private Key: 0xabc123...
+6. Esa API Wallet es una sub-cuenta:
+   - Hereda los fondos de la principal
+   - SOLO puede tradear (NO retirar)
+   - Independiente, revocable
+   - El usuario puede generar otra cuando quiera
+
+PASO 2 — USUARIO en Alchimiabot
+─────────────────────────────────
+1. Login en bot.alchimiabot.com
+2. Va a &quot;Conectar Wallet HL&quot;
+3. Modal con:
+   - Tutorial visual de como crear la API Wallet
+   - Boton &quot;Ya tengo mi API Wallet&quot;
+4. Pega:
+   - Address: [0x123abc...]
+   - Private Key: [        ******     ]
+5. Tu sistema valida:
+   - La address existe en HL
+   - La private key firma correctamente
+   - El balance &gt; 0 (cuenta usable)
+   - NO puede hacer withdrawals (test dummy)
+6. Si todo OK: cifra con AES-GCM, guarda en DB
+7. UI muestra: balance, address, &quot;Listo para tradear&quot;
+
+PASO 3 — USUARIO empieza a tradear
+─────────────────────────────────
+1. Va a la pestana &quot;Trading&quot;
+2. Selecciona budget
+3. Click &quot;Iniciar&quot;
+4. SessionManager crea su TradingSession
+5. ExchangeClient con su API Wallet
+6. Bot opera con sus fondos, sus reglas, su config
+7. Stop cuando quiera
+</code></pre>
+<h3>Lo que ve el usuario (UX critica)</h3>
+<pre><code>┌────────────────────────────────────────────────────┐
+│  Conectar tu cuenta de Hyperliquid                 │
+│                                                    │
+│  ⚠️ NUNCA te pediremos tu private key principal    │
+│  ⚠️ Alchimiabot NO custodia tus fondos             │
+│  ⚠️ Solo necesitamos una API Wallet                │
+│                                                    │
+│  Como crear tu API Wallet (5 minutos):             │
+│  1. Ve a https://app.hyperliquid.xyz/API           │
+│  2. Click &quot;Generate API Wallet&quot;                    │
+│  3. Tu wallet principal NO se ve afectada          │
+│  4. Copia la dirección y la clave                  │
+│  5. Pegalas aqui abajo                             │
+│                                                    │
+│  [📺 Ver tutorial en video]                        │
+│                                                    │
+│  Address de la API Wallet:                         │
+│  ┌──────────────────────────────────────────────┐  │
+│  │ 0x...                                        │  │
+│  └──────────────────────────────────────────────┘  │
+│                                                    │
+│  API Wallet Private Key:                           │
+│  ┌──────────────────────────────────────────────┐  │
+│  │ ******                              [👁]     │  │
+│  └──────────────────────────────────────────────┘  │
+│                                                    │
+│  ☑ He leido la guia y entiendo que esta clave      │
+│    SOLO puede tradear, NO retirar fondos           │
+│                                                    │
+│              [ Validar y guardar ]                 │
+└────────────────────────────────────────────────────┘
+</code></pre>
+<h3>Modelo en DB</h3>
+<pre><code class="language-sql">CREATE TABLE user_wallets (
+    id              BIGSERIAL PRIMARY KEY,
+    user_id         BIGINT NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+    exchange        VARCHAR(30) NOT NULL,    -- &quot;HYPERLIQUID&quot;
+    label           VARCHAR(100),            -- &quot;Mi wallet principal&quot;
+    public_id       VARCHAR(200) NOT NULL,   -- address (0x123...)
+    encrypted_secret BYTEA NOT NULL,         -- private key cifrada AES-GCM
+    encryption_version INT NOT NULL DEFAULT 1,
+    permissions     JSONB,                    -- {&quot;trade&quot;:true,&quot;withdraw&quot;:false}
+    is_active       BOOLEAN DEFAULT TRUE,
+    is_default      BOOLEAN DEFAULT FALSE,
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    last_used_at    TIMESTAMPTZ,
+    UNIQUE (user_id, exchange, public_id)
+);
+</code></pre>
+<h3>Por que esto es seguro</h3>
+<table>
+<thead>
+<tr>
+<th>Escenario</th>
+<th>Que pasa</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tu servidor se hackea, atacante roba la DB</td>
+<td>Encuentra la <code>encrypted_secret</code>, pero sin <code>WALLET_MASTER_KEY</code> no la puede descifrar</td>
+</tr>
+<tr>
+<td>Atacante consigue ambas cosas</td>
+<td>Puede tradear con esa API Wallet pero <strong>NO puede retirar fondos del usuario</strong></td>
+</tr>
+<tr>
+<td>El usuario sospecha algo</td>
+<td>Va a HL, revoca la API Wallet en 1 click, el atacante queda fuera</td>
+</tr>
+<tr>
+<td>El usuario cambia de bot</td>
+<td>Genera otra API Wallet, te da la nueva, revoca la vieja</td>
+</tr>
+<tr>
+<td>Tu te vas de vacaciones</td>
+<td>No pasa nada, los usuarios pueden parar/iniciar el bot ellos mismos</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>5. Arquitectura tecnica</h2>
+<h3>Aproximacion elegida: Hibrido B</h3>
+<p><strong>Single JVM, una <code>TradingSession</code> per usuario, market data compartido.</strong></p>
+<h4>Por que no las otras</h4>
+<table>
+<thead>
+<tr>
+<th>Opcion</th>
+<th>Por que NO</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1 proceso por usuario</td>
+<td>100 JVMs = 50 GB RAM. Inviable.</td>
+</tr>
+<tr>
+<td>1 engine, userId param</td>
+<td>Race conditions. Catastrofico.</td>
+</tr>
+<tr>
+<td>Vault HL nativo</td>
+<td>Cambia el modelo de negocio. Fondos comingled. Sin configs por user.</td>
+</tr>
+</tbody>
+</table>
+<h4>Por que SI Hibrido B</h4>
+<ul>
+<li>4-8 GB RAM para 100 usuarios</li>
+<li>Aislamiento via <code>TradingSession</code> POJO dedicado per user</li>
+<li>Market data compartido = no rebasa rate limits HL</li>
+<li>Refactor incremental del motor actual</li>
+<li>1 proceso, 1 deploy, 1 monitoring</li>
+</ul>
+<h3>Componentes nuevos a crear</h3>
+<table>
+<thead>
+<tr>
+<th>Componente</th>
+<th>Responsabilidad</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>SessionManager</strong></td>
+<td>Crea/destruye <code>TradingSession</code> per usuario</td>
+</tr>
+<tr>
+<td><strong>TradingSession</strong></td>
+<td>POJO con todo el estado mutable per user (positions, config, gateStats, wallet client)</td>
+</tr>
+<tr>
+<td><strong>MarketDataService</strong></td>
+<td>Singleton compartido: 1 fetch de precios para todos</td>
+</tr>
+<tr>
+<td><strong>ExchangeClientFactory</strong></td>
+<td>Crea HL client desde credenciales descifradas</td>
+</tr>
+<tr>
+<td><strong>WalletService</strong></td>
+<td>CRUD de wallets + cifrado</td>
+</tr>
+<tr>
+<td><strong>SecretsService</strong></td>
+<td>AES-GCM encrypt/decrypt</td>
+</tr>
+<tr>
+<td><strong>TenantContext</strong></td>
+<td>ThreadLocal con <code>userId</code> actual para logging</td>
+</tr>
+<tr>
+<td><strong>FeatureGuardAspect</strong></td>
+<td>Validacion de permisos per role</td>
+</tr>
+</tbody>
+</table>
+<h3>Componentes a refactorizar</h3>
+<table>
+<thead>
+<tr>
+<th>Componente</th>
+<th>Cambio</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>HlDirectionalEngine</strong></td>
+<td>De singleton con estado → service stateless que recibe <code>TradingSession</code> como parametro</td>
+</tr>
+<tr>
+<td><strong>HyperliquidApiClient</strong></td>
+<td>De singleton con 1 wallet → instancia per <code>TradingSession</code></td>
+</tr>
+<tr>
+<td><strong>CoinProfileOptimizer</strong></td>
+<td>Anadir <code>user_id</code> a queries y persistencia</td>
+</tr>
+<tr>
+<td><strong>HyperliquidController</strong></td>
+<td>Endpoints scoped por <code>user_id</code> del JWT</td>
+</tr>
+<tr>
+<td><strong>PlatformBridge</strong></td>
+<td>Anadir <code>user_id</code> a payloads</td>
+</tr>
+</tbody>
+</table>
+<h3>Diagrama logico</h3>
+<pre><code>                  [Cloudflare Tunnel]
+                         │
+                ┌────────┴────────┐
+                │                 │
+        ┌───────▼───────┐ ┌──────▼──────┐
+        │  Bot Spring   │ │  Platform   │
+        │  Boot 8080    │ │  FastAPI    │
+        └───────┬───────┘ └──────┬──────┘
+                │                │
+        ┌───────▼───────┐        │
+        │  AuthService  │        │
+        │  JWT + roles  │        │
+        └───────┬───────┘        │
+                │                │
+        ┌───────▼─────────────────────────────┐
+        │       SessionManager                │
+        │  Map&lt;UserId, TradingSession&gt;        │
+        │  ┌────────┐ ┌────────┐ ┌────────┐  │
+        │  │Sess A  │ │Sess B  │ │Sess C  │  │
+        │  └────┬───┘ └────┬───┘ └────┬───┘  │
+        └───────┼──────────┼──────────┼──────┘
+                │          │          │
+        ┌───────▼──────────▼──────────▼──────┐
+        │      MarketDataService SHARED      │
+        │  - 1 fetch de precios cada 3s      │
+        │  - 1 trend service                 │
+        │  - 1 microstructure WS             │
+        └───────┬────────────────────────────┘
+                │
+        ┌───────▼──────┐
+        │ HL Public API│ (1 conexion total)
+        └──────────────┘
+
+        ┌─────────────────────────────┐
+        │ ExchangeClientFactory       │
+        │ ┌──────┐ ┌──────┐ ┌──────┐ │
+        │ │HL A  │ │HL B  │ │HL C  │ │ ← 1 client per session
+        │ └──────┘ └──────┘ └──────┘ │
+        └─────────────────────────────┘
+
+        ┌────────────────────────────┐
+        │  PostgreSQL multi-tenant   │
+        │  Tablas con user_id        │
+        └────────────────────────────┘
+</code></pre>
+<hr />
+<h2>6. Estrategia de datos</h2>
+<h3>Lo que importa: que se multiplica × 100</h3>
+<p><strong>Lo critico:</strong> la mayoria de tablas escalan linealmente, <strong>pero hay 2 que matan el sistema</strong> si no se atacan:</p>
+<h4>🔴 <code>feature_snapshots</code> (platform)</h4>
+<pre><code>Hoy con 1 user: 134.600 rows / dia = 140 MB / dia
+× 100 users:    13.5 millones rows / dia = 14 GB / dia
+6 meses:        ~2.500 GB = 2.5 TB
+</code></pre>
+<p><strong>Inviable.</strong> Es el asesino #1.</p>
+<p><strong>Fix:</strong> reemplazar por <code>trade_snapshots_agg</code> con 1 row por trade (no 1 por 30s). <strong>5000x menos espacio.</strong></p>
+<h4>🔴 <code>signal_evaluations</code> (platform)</h4>
+<pre><code>Hoy:           28k / dia
+× 100:         2.8M / dia
+6 meses:       ~1 TB
+</code></pre>
+<p><strong>Fix:</strong> solo guardar <code>ENTER</code> + <code>BLOCKED</code> + sample 1% del resto. <strong>56x menos.</strong></p>
+<h3>Comparativa total con 100 usuarios / 6 meses</h3>
+<table>
+<thead>
+<tr>
+<th>Escenario</th>
+<th>DB total</th>
+<th>Servidor</th>
+<th>Coste/mes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Sin optimizar</strong></td>
+<td><strong>~4 TB</strong> ⚠️ inviable</td>
+<td>Imposible</td>
+<td>~500€</td>
+</tr>
+<tr>
+<td><strong>Optimizado</strong></td>
+<td><strong>~310 GB</strong> ✅</td>
+<td>8c/32GB/1TB SSD</td>
+<td>~80-120€</td>
+</tr>
+</tbody>
+</table>
+<p><strong>El 92% del ahorro viene de UN solo cambio:</strong> agregar <code>feature_snapshots</code> por trade.</p>
+<h3>Tablas legacy a borrar (13)</h3>
+<pre><code class="language-sql">-- Polymarket pausado
+DROP TABLE real_sessions, real_session_fills, redeem_history;
+
+-- Backtest legacy
+DROP TABLE backtest_runs, monte_carlo_runs;
+
+-- Shadow legacy (sustituido por shadow_mode en coin_profiles)
+DROP TABLE shadow_snapshots, shadow_runs;
+
+-- HL legacy
+DROP TABLE hl_session_fills, hl_sessions, orders, fills, pnl;
+
+-- V26 sustituye V14
+DROP TABLE hl_mode_schedule;
+
+-- Configs legacy
+DROP TABLE trading_config_presets, trading_config_active;
+</code></pre>
+<p>Cuando: en <code>V27__cleanup_legacy.sql</code> antes de Fase 1.</p>
+<h3>TTLs propuestos</h3>
+<pre><code class="language-sql">-- Daily cron en el bot:
+DELETE FROM hl_alerts WHERE created_at &lt; NOW() - INTERVAL '30 days';
+DELETE FROM hl_trade_micro_features WHERE created_at &lt; NOW() - INTERVAL '30 days';
+DELETE FROM hl_coin_profile_changes WHERE created_at &lt; NOW() - INTERVAL '90 days';
+
+-- Daily cron en el platform:
+DELETE FROM feature_snapshots WHERE timestamp &lt; NOW() - INTERVAL '7 days';
+DELETE FROM signal_evaluations WHERE timestamp &lt; NOW() - INTERVAL '30 days';
+</code></pre>
+<h3>Tablas que llevan <code>user_id</code> nuevo</h3>
+<table>
+<thead>
+<tr>
+<th>Tabla bot</th>
+<th>Tabla platform</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>hl_trading_history</code></td>
+<td><code>change_markers</code></td>
+</tr>
+<tr>
+<td><code>hl_dir_sessions</code></td>
+<td><code>trade_outcomes</code></td>
+</tr>
+<tr>
+<td><code>hl_coin_profiles</code></td>
+<td><code>signal_evaluations</code></td>
+</tr>
+<tr>
+<td><code>hl_coin_profile_stats</code></td>
+<td><code>feature_snapshots</code> (mientras exista)</td>
+</tr>
+<tr>
+<td><code>hl_coin_profile_changes</code></td>
+<td><code>trade_snapshots_agg</code> (futura)</td>
+</tr>
+<tr>
+<td><code>hl_coin_profile_proposals</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>hl_alerts</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>hl_trade_micro_features</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>hl_mode_schedule_weekly</code></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3>Tablas nuevas</h3>
+<pre><code class="language-sql">CREATE TABLE user_wallets (...);          -- credenciales encriptadas
+CREATE TABLE user_roles (...);            -- BASIC/PRO/PREMIUM
+CREATE TABLE tier_limits (...);           -- limites por rol
+CREATE TABLE user_preset_overrides (...); -- override de presets per user
+CREATE TABLE audit_log (...);             -- compliance + debugging
+</code></pre>
+<h3>Estimacion para 10 amigos (beta)</h3>
+<p>Buenas noticias:</p>
+<pre><code>DB despues de 1 mes:      ~1 GB
+DB despues de 3 meses:    ~3 GB
+DB despues de 6 meses:    ~6 GB
+Servidor minimo:          VPS 4 GB / 2 cores / 50 GB → 10€/mes
+</code></pre>
+<p><strong>Para beta de 10, no necesitas casi optimizar nada.</strong> Solo cleanup + TTLs.</p>
+<hr />
+<h2>7. Sistema de roles y modelo de negocio</h2>
+<h3>Posicionamiento del producto</h3>
+<blockquote>
+<p><strong>Alchimiabot NO es &quot;un bot que gana dinero&quot;.</strong>
+<strong>Alchimiabot ES &quot;una herramienta profesional que te ayuda a tradear en Hyperliquid&quot;.</strong></p>
+</blockquote>
+<p>Esta distincion es <strong>critica</strong> y atraviesa todo el diseno:</p>
+<table>
+<thead>
+<tr>
+<th>Aspecto</th>
+<th>&quot;Bot ganador&quot;</th>
+<th><strong>&quot;Herramienta de trading&quot;</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Expectativa del usuario</td>
+<td>Espera ganar SI o SI</td>
+<td>Espera mejorar su trading</td>
+</tr>
+<tr>
+<td>Si pierde dinero</td>
+<td>Culpa al bot</td>
+<td>Asume parte de la responsabilidad</td>
+</tr>
+<tr>
+<td>Legal</td>
+<td>Riesgo alto (parece promesa)</td>
+<td>Riesgo bajo (eres software vendor)</td>
+</tr>
+<tr>
+<td>Marketing</td>
+<td>&quot;Gana 10% al mes&quot; → falso</td>
+<td>&quot;Automatiza tu estrategia&quot; → verdad</td>
+</tr>
+<tr>
+<td>Nicho</td>
+<td>Personas buscando dinero facil</td>
+<td>Traders reales con criterio</td>
+</tr>
+<tr>
+<td>Retencion</td>
+<td>Baja (se van si pierden 1 mes)</td>
+<td>Alta (es su herramienta diaria)</td>
+</tr>
+<tr>
+<td>Soporte</td>
+<td>Pesado (cada perdida = ticket)</td>
+<td>Ligero (entienden el mercado)</td>
+</tr>
+<tr>
+<td>Posicionamiento</td>
+<td>Vendedores de bots magicos cripto</td>
+<td>TradingView, 3Commas, Hummingbot</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Implicacion arquitectural:</strong> BASIC NO es &quot;intocable y a prueba de balas&quot;. BASIC ES <strong>una herramienta usable</strong> con lo esencial. La diferenciacion con PRO/PREMIUM es <strong>profundidad de control</strong>, no <strong>acceso a controlar</strong>.</p>
+<h3>El motor: identico para todos</h3>
+<pre><code>              ┌─── HlDirectionalEngine (mismo codigo) ───┐
+              │                                          │
+   ┌──────────▼──────────┐  ┌──────────▼──────────┐  ┌──▼──────────────┐
+   │   BASIC user        │  │   PRO user          │  │  PREMIUM user   │
+   │                     │  │                     │  │                 │
+   │  Lo esencial        │  │  Control profundo   │  │  Control total  │
+   │  Config simple      │  │  Config completa    │  │  + Research     │
+   │  Modos basicos      │  │  Modos + auto-learn │  │  + Quantum      │
+   │                     │  │                     │  │                 │
+   └─────────────────────┘  └─────────────────────┘  └─────────────────┘
+</code></pre>
+<p><strong>Mismo motor.</strong> Mismos filtros. Misma calidad de signals. Misma ejecucion. Mismo edge.</p>
+<p>Lo que cambia es <strong>la superficie de control que el usuario tiene encima</strong> y <strong>la profundidad del analisis que ve</strong>.</p>
+<p>Es como vender el mismo coche con distintos paquetes:</p>
+<ul>
+<li>BASIC = aire acondicionado, radio, navegador basico</li>
+<li>PRO = sensores, asientos electricos, modos de conduccion</li>
+<li>PREMIUM = piloto automatico, suspension adaptativa, telemetria</li>
+</ul>
+<p><strong>El motor que mueve las ruedas es identico.</strong></p>
+<hr />
+<h3>🟢 BASIC — &quot;Empieza a tradear con criterio&quot;</h3>
+<p><strong>Mensaje al usuario:</strong> &quot;Conecta tu wallet, elige modo y budget, y empieza. Lo esencial para tradear en HL con una estrategia probada.&quot;</p>
+<p><strong>Filosofia:</strong> el usuario tiene <strong>conocimientos basicos</strong> de trading, sabe que es un SL y un TP, pero no quiere meterse en parametros avanzados. Quiere una <strong>herramienta funcional</strong> que le ayude a tradear con un sistema.</p>
+<p><strong>Precio:</strong> <strong>30€/mes</strong> (sin tier gratis — Alchimiabot es producto premium).</p>
+<p><strong>Lo que tiene:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Funcion</th>
+<th>Nivel BASIC</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Wallets</strong></td>
+<td>1 wallet HL conectada</td>
+</tr>
+<tr>
+<td><strong>Budget maximo</strong></td>
+<td>$1.000 (o $200 si es plan gratis)</td>
+</tr>
+<tr>
+<td><strong>Posiciones simultaneas</strong></td>
+<td>hasta 3</td>
+</tr>
+<tr>
+<td><strong>Modos disponibles</strong></td>
+<td><strong>SCALP, NORMAL, SWING</strong> (puede elegir)</td>
+</tr>
+<tr>
+<td><strong>Schedule</strong></td>
+<td>Configurable basico (puede elegir un modo fijo o usar el horario default)</td>
+</tr>
+<tr>
+<td><strong>Config trading</strong></td>
+<td><strong>Editable basica:</strong> SL, TP, threshold, max positions, cooldown, modo activo</td>
+</tr>
+<tr>
+<td><strong>Filtros de calidad</strong></td>
+<td>Editables ON/OFF (lateral, score, late entry)</td>
+</tr>
+<tr>
+<td><strong>Coin profiles</strong></td>
+<td>Auto-learning ON, ve sus stats</td>
+</tr>
+<tr>
+<td><strong>Trades visibles</strong></td>
+<td>Sus propios trades en tiempo real</td>
+</tr>
+<tr>
+<td><strong>Historial</strong></td>
+<td>Ultimos 30 dias</td>
+</tr>
+<tr>
+<td><strong>Metricas</strong></td>
+<td>PnL, WR, profit factor, exit reasons</td>
+</tr>
+<tr>
+<td><strong>Alertas Telegram</strong></td>
+<td>Entradas/salidas, resumen diario, cambios de modo</td>
+</tr>
+<tr>
+<td><strong>Soporte</strong></td>
+<td>FAQ + comunidad (Discord/Telegram publico)</td>
+</tr>
+<tr>
+<td><strong>Pause/Reset proteccion</strong></td>
+<td>Si (manual)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Lo que NO tiene BASIC:</strong></p>
+<ul>
+<li>❌ Schedule semanal granular (grid 7×24)</li>
+<li>❌ Microstructure panel (WS orderbook/tape)</li>
+<li>❌ Coin profiles <strong>per usuario</strong> (usa los compartidos)</li>
+<li>❌ Shadow mode con proposals</li>
+<li>❌ Parametros avanzados (ATR multiplier, partial close %, score weights, fee cover, etc)</li>
+<li>❌ Multiples wallets</li>
+<li>❌ Acceso al Quantum Platform (research)</li>
+<li>❌ Markers manuales</li>
+<li>❌ API access</li>
+</ul>
+<p><strong>Por que este diseno:</strong></p>
+<ul>
+<li>Es <strong>una herramienta usable</strong>, no un producto bloqueado</li>
+<li>El usuario puede aprender y experimentar con los controles esenciales</li>
+<li>Si quiere mas profundidad → upgrade natural a PRO</li>
+<li>Cubre el 80% de los casos de uso reales</li>
+<li>Es defendible legalmente: &quot;te damos las herramientas, tu decides&quot;</li>
+</ul>
+<hr />
+<h3>🟣 PRO — &quot;Toma el control completo&quot;</h3>
+<p><strong>Mensaje al usuario:</strong> &quot;Configura el bot a tu medida. Edita cada parametro. Aprende que funciona en tus monedas favoritas con auto-learning per usuario.&quot;</p>
+<p><strong>Filosofia:</strong> trader con <strong>experiencia real</strong>, sabe lo que es ATR, microstructure, profit factor. Quiere <strong>personalizacion profunda</strong> y datos avanzados.</p>
+<p><strong>Precio:</strong> <strong>90€/mes</strong>.</p>
+<p><strong>Lo que tiene</strong> (todo lo de BASIC mas):</p>
+<table>
+<thead>
+<tr>
+<th>Funcion</th>
+<th>Nivel PRO</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Wallets</strong></td>
+<td>hasta 3 wallets HL</td>
+</tr>
+<tr>
+<td><strong>Budget maximo</strong></td>
+<td>$10.000</td>
+</tr>
+<tr>
+<td><strong>Posiciones simultaneas</strong></td>
+<td>hasta 8</td>
+</tr>
+<tr>
+<td><strong>Schedule semanal granular</strong></td>
+<td><strong>Grid 7×24 editable</strong> (V26 completo)</td>
+</tr>
+<tr>
+<td><strong>Config trading</strong></td>
+<td><strong>TODOS los parametros editables</strong>: ATR, partial close %, trailing activation/distance, score weights, fee cover, ROI table, late entry multiplier, etc</td>
+</tr>
+<tr>
+<td><strong>Filtros avanzados</strong></td>
+<td>SL viability filter (V25) editable, score excess filter, price position filter</td>
+</tr>
+<tr>
+<td><strong>Coin profiles per usuario</strong></td>
+<td>Auto-learning <strong>propio</strong>, no compartido. Ve evolucion de cada (coin, side, mode)</td>
+</tr>
+<tr>
+<td><strong>Microstructure panel</strong></td>
+<td>Visible (orderbook imbalance, tape signals, score)</td>
+</tr>
+<tr>
+<td><strong>Override manual de modo</strong></td>
+<td>Si (badge MANUAL/AUTO en horario)</td>
+</tr>
+<tr>
+<td><strong>Historial</strong></td>
+<td>Ultimos 90 dias</td>
+</tr>
+<tr>
+<td><strong>Metricas avanzadas</strong></td>
+<td>MFE/MAE per trade, profit factor, expectancy, gate stats por filtro</td>
+</tr>
+<tr>
+<td><strong>Dashboard del bot</strong></td>
+<td>Acceso completo a todas las pestanas operacionales</td>
+</tr>
+<tr>
+<td><strong>Quantum Platform</strong></td>
+<td>Acceso parcial: Bot Live, Trades, Daily Report, Cambios (read-only)</td>
+</tr>
+<tr>
+<td><strong>Markers</strong></td>
+<td>NO crea, pero VE los automaticos en pestana Cambios</td>
+</tr>
+<tr>
+<td><strong>Alertas Telegram</strong></td>
+<td>Avanzadas: cambios de modo, locks, protecciones, optimizer changes</td>
+</tr>
+<tr>
+<td><strong>Soporte</strong></td>
+<td>Email priority (24-48h respuesta)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Lo que NO tiene PRO:</strong></p>
+<ul>
+<li>❌ Conclusiones del Quantum Platform (research avanzado)</li>
+<li>❌ Validation, Lab, Reports</li>
+<li>❌ Markers manuales</li>
+<li>❌ Shadow mode con proposals</li>
+<li>❌ Mas de 3 wallets</li>
+<li>❌ API access</li>
+<li>❌ Webhooks personalizados</li>
+<li>❌ Multi-exchange (cuando llegue)</li>
+</ul>
+<p><strong>Por que este diseno:</strong></p>
+<ul>
+<li>PRO es el <strong>sweet spot comercial</strong> del producto</li>
+<li>Cubre todas las necesidades reales de un trader serio</li>
+<li>El precio (25-30€/mes) es razonable comparado con TradingView Pro (15€), 3Commas Pro (49€), etc</li>
+<li><strong>Aqui es donde se concentra la mayoria del revenue</strong></li>
+</ul>
+<hr />
+<h3>🟡 PREMIUM — &quot;Acceso completo + Quantum Platform&quot;</h3>
+<p><strong>Mensaje al usuario:</strong> &quot;Mismo nivel que el creador. Quantum Platform completo, shadow mode, markers manuales, multi-wallet, API access. Para traders profesionales.&quot;</p>
+<p><strong>Filosofia:</strong> trader <strong>profesional</strong> o quant que usa Alchimiabot como una herramienta mas en su stack. Quiere <strong>todo</strong>.</p>
+<p><strong>Precio:</strong> <strong>200€/mes</strong> flat O modelo % profit alternativo (0€/mes + 20% del profit mensual).</p>
+<p><strong>Lo que tiene</strong> (todo lo de PRO mas):</p>
+<table>
+<thead>
+<tr>
+<th>Funcion</th>
+<th>Nivel PREMIUM</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Wallets</strong></td>
+<td>Ilimitadas</td>
+</tr>
+<tr>
+<td><strong>Budget maximo</strong></td>
+<td>Sin limite (lo que aguante HL)</td>
+</tr>
+<tr>
+<td><strong>Posiciones simultaneas</strong></td>
+<td>Sin limite</td>
+</tr>
+<tr>
+<td><strong>Modos</strong></td>
+<td>Todos + posibilidad de definir presets propios con nombre custom</td>
+</tr>
+<tr>
+<td><strong>Schedule semanal</strong></td>
+<td>Editable + simulador what-if (futuro)</td>
+</tr>
+<tr>
+<td><strong>Config trading</strong></td>
+<td>TODO editable (incluyendo experimentales)</td>
+</tr>
+<tr>
+<td><strong>Coin profiles</strong></td>
+<td>Auto-learning + <strong>shadow mode</strong> (proposals revisables)</td>
+</tr>
+<tr>
+<td><strong>Microstructure</strong></td>
+<td>Panel completo + alertas WS</td>
+</tr>
+<tr>
+<td><strong>Quantum Platform</strong></td>
+<td><strong>Acceso COMPLETO</strong>: Conclusiones, Markers, Cambios, Daily Report, Validation, Lab, Reports, Features, Regimenes</td>
+</tr>
+<tr>
+<td><strong>Markers manuales</strong></td>
+<td>Si, puede crear desde Config y desde el platform</td>
+</tr>
+<tr>
+<td><strong>Shadow mode</strong></td>
+<td>Si, con UI para aceptar/rechazar proposals del optimizer</td>
+</tr>
+<tr>
+<td><strong>Backtesting personalizado</strong></td>
+<td>Si (cuando lo construyas)</td>
+</tr>
+<tr>
+<td><strong>API access</strong></td>
+<td>Si (futuro) — para integrar con otros sistemas</td>
+</tr>
+<tr>
+<td><strong>Webhooks</strong></td>
+<td>Notificaciones a webhook propio (Discord, Slack, custom)</td>
+</tr>
+<tr>
+<td><strong>Histórico</strong></td>
+<td>Ilimitado</td>
+</tr>
+<tr>
+<td><strong>Soporte</strong></td>
+<td>Chat directo (telegram privado o slack)</td>
+</tr>
+<tr>
+<td><strong>Multi-exchange</strong></td>
+<td>Si cuando llegue (Binance, Bybit)</td>
+</tr>
+<tr>
+<td><strong>Acceso anticipado a features</strong></td>
+<td>Si (early access a refactors antes que PRO)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Por que este diseno:</strong></p>
+<ul>
+<li>PREMIUM es para <strong>traders serios</strong> que ya saben lo que hacen</li>
+<li>El precio justifica el acceso a research que tu mismo usas</li>
+<li>El modelo <strong>% profit alternativo</strong> atrae a usuarios con mucho capital que no quieren pagar fijo sin garantias</li>
+<li>Pocos usuarios pero <strong>muy alto revenue per user</strong></li>
+</ul>
+<hr />
+<h3>🔴 ADMIN (interno, no vendible)</h3>
+<p>Solo tu y posibles colaboradores futuros.</p>
+<table>
+<thead>
+<tr>
+<th>Funcion</th>
+<th>Nivel ADMIN</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Todo PREMIUM</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Vista global de TODOS los usuarios</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Gestion de roles</td>
+<td>✅ asignar tiers a usuarios</td>
+</tr>
+<tr>
+<td>Reset de protecciones global</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Force-close de cualquier posicion</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Audit log completo</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Metricas agregadas del sistema</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Pause global (kill switch)</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Modificacion de tier_limits</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Acceso directo a DB</td>
+<td>✅</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3>Tabla resumen ejecutiva</h3>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>BASIC</th>
+<th>PRO</th>
+<th>PREMIUM</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Precio</strong></td>
+<td><strong>30€/mes</strong></td>
+<td><strong>90€/mes</strong></td>
+<td><strong>200€/mes</strong> (o % profit)</td>
+</tr>
+<tr>
+<td><strong>Wallets</strong></td>
+<td>1</td>
+<td>3</td>
+<td>∞</td>
+</tr>
+<tr>
+<td><strong>Budget max</strong></td>
+<td>$1.000</td>
+<td>$10.000</td>
+<td>∞</td>
+</tr>
+<tr>
+<td><strong>Posiciones max</strong></td>
+<td>3</td>
+<td>8</td>
+<td>∞</td>
+</tr>
+<tr>
+<td><strong>Modos</strong></td>
+<td>SCALP+NORMAL+SWING</td>
+<td>+ auto-learning per user</td>
+<td>+ custom presets</td>
+</tr>
+<tr>
+<td><strong>Schedule</strong></td>
+<td>Basico (modo fijo o default)</td>
+<td>Grid 7×24 editable</td>
+<td>+ simulador</td>
+</tr>
+<tr>
+<td><strong>Config trading editable</strong></td>
+<td>Esenciales (SL/TP/threshold/score)</td>
+<td>TODOS los parametros</td>
+<td>TODOS + experimentales</td>
+</tr>
+<tr>
+<td><strong>Filtros</strong></td>
+<td>Editables ON/OFF</td>
+<td>Editables completos</td>
+<td>+ experimentales</td>
+</tr>
+<tr>
+<td><strong>Coin profiles per user</strong></td>
+<td>❌ (compartidos)</td>
+<td>✅ Auto-learning</td>
+<td>✅ + Shadow mode</td>
+</tr>
+<tr>
+<td><strong>Microstructure</strong></td>
+<td>❌</td>
+<td>Panel visible</td>
+<td>Panel + alertas</td>
+</tr>
+<tr>
+<td><strong>Bot dashboard</strong></td>
+<td>Operacional</td>
+<td>Completo</td>
+<td>Completo</td>
+</tr>
+<tr>
+<td><strong>Quantum Platform</strong></td>
+<td>❌</td>
+<td>Parcial (4 pestanas)</td>
+<td>Completo (todas)</td>
+</tr>
+<tr>
+<td><strong>Markers</strong></td>
+<td>❌</td>
+<td>Solo lectura</td>
+<td>Crear manuales</td>
+</tr>
+<tr>
+<td><strong>Histórico</strong></td>
+<td>30 dias</td>
+<td>90 dias</td>
+<td>Ilimitado</td>
+</tr>
+<tr>
+<td><strong>Multi-exchange</strong></td>
+<td>❌</td>
+<td>❌</td>
+<td>✅ (cuando exista)</td>
+</tr>
+<tr>
+<td><strong>API access</strong></td>
+<td>❌</td>
+<td>❌</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong>Webhooks custom</strong></td>
+<td>❌</td>
+<td>❌</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong>Soporte</strong></td>
+<td>FAQ + comunidad</td>
+<td>Email</td>
+<td>Chat directo</td>
+</tr>
+<tr>
+<td><strong>Telegram alerts</strong></td>
+<td>Basico</td>
+<td>Avanzado</td>
+<td>+ webhooks</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3>Pricing definitivo (Alchimiabot premium)</h3>
+<pre><code>BASIC:     30€/mes
+PRO:       90€/mes
+PREMIUM:  200€/mes  (o 0€/mes + 20% del profit alternativo)
+</code></pre>
+<p><strong>No hay tier gratis.</strong> Alchimiabot es producto premium dirigido a traders con capital real.</p>
+<p><strong>Justificacion del posicionamiento premium:</strong></p>
+<ol>
+<li><strong>Es un producto profesional</strong>, no un juguete</li>
+<li><strong>Edge real probado</strong> (no es un wrapper de TradingView ni una copia open source)</li>
+<li><strong>Soporte serio</strong> y desarrollo activo</li>
+<li><strong>Comparables del mercado:</strong>
+<ul>
+<li>3Commas Pro: 59€/mes (producto generico)</li>
+<li>3Commas Expert: 99€/mes</li>
+<li>Cryptohopper Hero: 99€/mes</li>
+<li>HaasOnline Beginner: 79€/mes</li>
+<li>HaasOnline Simple: 199€/mes</li>
+<li>HaasOnline Advanced: 999€/mes</li>
+<li><strong>Alchimiabot esta en linea con productos premium del sector</strong></li>
+</ul>
+</li>
+</ol>
+<h3>Calculos de rentabilidad</h3>
+<h4>Beta (10 amigos)</h4>
+<pre><code>Si los 10 amigos pagan BASIC (30€):
+  Revenue:  300€/mes
+  Costes:    10€/mes (VPS pequeño)
+  Margen:   290€/mes ✅
+</code></pre>
+<p><strong>Pero los amigos no pagan en beta</strong> — son tu QA. La beta NO es para revenue, es para validar y pulir.</p>
+<h4>Realista (35 usuarios pagando, mix tipico)</h4>
+<p>Distribucion tipica de un producto SaaS premium:</p>
+<ul>
+<li>60% BASIC = 21 usuarios × 30€ = <strong>630€/mes</strong></li>
+<li>30% PRO   = 10 usuarios × 90€ = <strong>900€/mes</strong></li>
+<li>10% PREMIUM = 4 usuarios × 200€ = <strong>800€/mes</strong></li>
+</ul>
+<pre><code>Total revenue:  2.330€/mes
+Costes infra:      50€/mes
+Costes legal:     ~50€/mes (amortizado)
+Margen mensual: ~2.230€/mes ✅
+</code></pre>
+<h4>Target (100 usuarios)</h4>
+<p>Con la misma distribucion 60/30/10:</p>
+<ul>
+<li>60 BASIC × 30€    = 1.800€/mes</li>
+<li>30 PRO × 90€      = 2.700€/mes</li>
+<li>10 PREMIUM × 200€ = 2.000€/mes</li>
+</ul>
+<pre><code>Total revenue:  6.500€/mes  (~78.000€/año)
+Costes infra:     150€/mes
+Costes operativos: 200€/mes
+Margen mensual: ~6.150€/mes ✅
+Margen anual:  ~73.000€/año
+</code></pre>
+<p><strong>Esto es un producto SaaS rentable.</strong> Con 100 usuarios pagando, generas ~73k€/año limpio.</p>
+<h3>Alternativas de pricing a considerar</h3>
+<h4>Trial gratuito (recomendado anadir)</h4>
+<p>Sin tier gratis permanente, pero <strong>trial de 7-14 dias</strong> para que la gente pruebe:</p>
+<pre><code>Trial: 14 dias gratis con BASIC features
+       (limit $500 budget para que no se desmadre)
+       Despues: convertir a BASIC pagando o desactivar
+</code></pre>
+<p><strong>Por que:</strong> sin trial, los precios premium asustan. Con trial, el usuario prueba el producto y ve el valor antes de pagar.</p>
+<h4>% del profit como opcion en PREMIUM</h4>
+<pre><code>PREMIUM: 200€/mes flat
+   O bien
+PREMIUM: 0€/mes + 20% del profit mensual realizado
+</code></pre>
+<p><strong>Por que:</strong> atrae a usuarios con mucho capital ($50k+) que no quieren riesgo de pagar 200€ sin garantias. Si el bot gana 1.000€ → tu cobras 200€ (igual que el flat). Si el bot pierde → tu no cobras nada (vs perder 200€).</p>
+<p><strong>Aviso:</strong> este modelo solo funciona si <strong>confias en tu edge</strong>. Si el bot pierde sistematicamente, no cobras nada.</p>
+<h4>Descuento anual</h4>
+<pre><code>Mensual:  30€ / 90€ / 200€
+Anual:    300€ / 900€ / 2.000€
+          (equivale a 10 meses → 2 meses gratis)
+</code></pre>
+<p><strong>Por que:</strong> mejora cashflow, reduce churn, hace que el usuario se comprometa.</p>
+<h4>Descuentos de lanzamiento (early adopters)</h4>
+<p>Para los primeros 20-50 usuarios despues de la beta cerrada:</p>
+<pre><code>Lifetime 50% off:
+  BASIC:    15€/mes para siempre
+  PRO:      45€/mes para siempre
+  PREMIUM: 100€/mes para siempre
+</code></pre>
+<p><strong>Por que:</strong> crear una base de usuarios fieles que tambien hagan marketing boca a boca.</p>
+<h3>Lo que estos precios IMPLICAN (importante)</h3>
+<p>A 30/90/200€/mes, el producto <strong>TIENE</strong> que aportar valor real. No puede ser:</p>
+<ul>
+<li>❌ Un wrapper de TradingView</li>
+<li>❌ Un copy de un bot open source</li>
+<li>❌ Algo que el usuario podria hacer en Excel</li>
+</ul>
+<p><strong>Tiene que aportar:</strong></p>
+<ul>
+<li>✅ Un edge real (que tu motor produce ganancias en condiciones normales de mercado)</li>
+<li>✅ Una experiencia profesional pulida (UX, dashboards, métricas)</li>
+<li>✅ Soporte serio (no puedes desaparecer 1 semana)</li>
+<li>✅ Desarrollo activo (cambios visibles cada semana o mes)</li>
+<li>✅ Documentacion completa</li>
+<li>✅ Reliability alta (uptime &gt; 99%)</li>
+</ul>
+<p><strong>Es un compromiso operativo grande</strong>. No puedes lanzar a estos precios y luego desentenderte. Cada usuario pagando 90-200€/mes espera <strong>respuestas</strong> y <strong>mejoras</strong>.</p>
+<h3>Pre-requisitos antes de fijar estos precios</h3>
+<p>Para vender Alchimiabot a 30-200€/mes con honestidad necesitas tener:</p>
+<ol>
+<li>✅ <strong>Track record demostrable</strong> del bot ganando (al menos 3 meses positivos consistentes)</li>
+<li>✅ <strong>UX pulida</strong> (no errores, no glitches, no &quot;esto esta en beta&quot;)</li>
+<li>✅ <strong>Documentacion completa</strong> (FAQ, guias, tutoriales)</li>
+<li>✅ <strong>Soporte real</strong> (canal de soporte que respondas en &lt;24h)</li>
+<li>✅ <strong>Status page publica</strong> (uptime visible)</li>
+<li>✅ <strong>Onboarding facil</strong> (que un usuario pueda empezar en &lt;30 min)</li>
+<li>✅ <strong>Refund policy</strong> (aunque sea solo para el primer mes)</li>
+<li>✅ <strong>Asesoria legal</strong> sobre el posicionamiento (&quot;herramienta&quot;, no &quot;promesa&quot;)</li>
+</ol>
+<p><strong>Si NO tienes estas 8 cosas, los precios premium se vuelven en tu contra</strong> porque generan expectativas que no puedes cumplir.</p>
+<hr />
+<h3>Por que este diseno funciona comercialmente</h3>
+<ol>
+<li>
+<p><strong>BASIC es funcional, no roto.</strong> Un usuario novato puede tradear de verdad con BASIC. No es una version castrada, es una version simplificada.</p>
+</li>
+<li>
+<p><strong>PRO es donde esta el dinero.</strong> La mayoria de usuarios tecnicos van a PRO. Es el sweet spot 80/20.</p>
+</li>
+<li>
+<p><strong>PREMIUM es para los que saben.</strong> Pocos usuarios, alto revenue. Tambien funciona como &quot;validacion social&quot; — si hay traders pro usandolo, el producto se valida.</p>
+</li>
+<li>
+<p><strong>Los upgrades son naturales:</strong></p>
+<ul>
+<li>&quot;Quiero editar el ATR multiplier&quot; → upgrade a PRO</li>
+<li>&quot;Quiero ver el research del Quantum Platform&quot; → upgrade a PREMIUM</li>
+<li>&quot;Quiero conectar tambien Binance&quot; → upgrade a PREMIUM</li>
+</ul>
+</li>
+<li>
+<p><strong>Es defendible legalmente:</strong></p>
+<ul>
+<li>&quot;Te vendemos una herramienta, no resultados&quot;</li>
+<li>&quot;Tu eliges la configuracion&quot;</li>
+<li>&quot;Tu wallet, tu dinero, tu decision&quot;</li>
+</ul>
+</li>
+</ol>
+<h3>El &quot;downgrade&quot; path importa</h3>
+<p>Cuando un usuario PRO baja a BASIC (no paga):</p>
+<ul>
+<li>Sesion activa se para</li>
+<li>Mantiene wallet pero no puede anadir nuevas</li>
+<li>Mantiene historial pero solo ve ultimos 30 dias</li>
+<li>Sus configs avanzadas se pausan (no se borran)</li>
+<li>Sus coin profiles per-user se pausan (vuelve a usar los compartidos)</li>
+<li>Si vuelve a pagar, todo se reactiva</li>
+</ul>
+<p><strong>No le borras nada</strong>, solo le restringes el acceso. Es importante para que los usuarios sientan que pueden volver sin perder su trabajo.</p>
+<h3>Implementacion</h3>
+<pre><code class="language-sql">CREATE TABLE user_roles (
+    user_id BIGINT PRIMARY KEY REFERENCES auth_users(id),
+    role    VARCHAR(20) NOT NULL CHECK (role IN ('BASIC','PRO','PREMIUM','ADMIN')),
+    granted_at TIMESTAMPTZ DEFAULT NOW(),
+    expires_at TIMESTAMPTZ
+);
+
+CREATE TABLE tier_limits (
+    role          VARCHAR(20) PRIMARY KEY,
+    max_wallets   INT NOT NULL,
+    max_budget    NUMERIC(18,2) NOT NULL,
+    max_positions INT NOT NULL,
+    history_days  INT NOT NULL,
+    features      JSONB NOT NULL  -- {&quot;horario_avanzado&quot;:true,&quot;microstructure&quot;:false,...}
+);
+
+-- Datos iniciales:
+INSERT INTO tier_limits VALUES
+  ('BASIC',   1, 1000,    3, 30,
+   '{&quot;schedule_grid&quot;:false,&quot;microstructure&quot;:false,&quot;coin_profiles_per_user&quot;:false,
+     &quot;shadow_mode&quot;:false,&quot;quantum_full&quot;:false,&quot;markers_create&quot;:false,
+     &quot;advanced_params&quot;:false,&quot;api_access&quot;:false,&quot;webhooks&quot;:false}'),
+  ('PRO',     3, 10000,   8, 90,
+   '{&quot;schedule_grid&quot;:true,&quot;microstructure&quot;:true,&quot;coin_profiles_per_user&quot;:true,
+     &quot;shadow_mode&quot;:false,&quot;quantum_full&quot;:false,&quot;markers_create&quot;:false,
+     &quot;advanced_params&quot;:true,&quot;api_access&quot;:false,&quot;webhooks&quot;:false}'),
+  ('PREMIUM', 999, 999999999, 999, 999999,
+   '{&quot;schedule_grid&quot;:true,&quot;microstructure&quot;:true,&quot;coin_profiles_per_user&quot;:true,
+     &quot;shadow_mode&quot;:true,&quot;quantum_full&quot;:true,&quot;markers_create&quot;:true,
+     &quot;advanced_params&quot;:true,&quot;api_access&quot;:true,&quot;webhooks&quot;:true}');
+</code></pre>
+<pre><code>
+```java
+// Annotation declarativa
+@RequiresFeature(Feature.MICROSTRUCTURE)
+@GetMapping(&quot;/api/hl/trading/microstructure&quot;)
+public Map&lt;String,Object&gt; getMicro() { ... }
+
+// Aspect que valida
+@Aspect
+public class FeatureGuardAspect {
+    @Around(&quot;@annotation(requiresFeature)&quot;)
+    public Object check(...) {
+        if (!user.hasFeature(...)) throw new ForbiddenException();
+        return pjp.proceed();
+    }
+}
+</code></pre>
+<pre><code class="language-tsx">// Frontend
+const { hasFeature } = useUser();
+
+return (
+  &lt;&gt;
+    {hasFeature(&quot;MICROSTRUCTURE&quot;) &amp;&amp; &lt;MicroTab /&gt;}
+    {!hasFeature(&quot;MICROSTRUCTURE&quot;) &amp;&amp; &lt;UpgradePrompt /&gt;}
+  &lt;/&gt;
+);
+</code></pre>
+<hr />
+<h2>8. Seguridad</h2>
+<h3>Threat model</h3>
+<table>
+<thead>
+<tr>
+<th>Amenaza</th>
+<th>Mitigacion</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Leak de private keys de usuarios</strong></td>
+<td>AES-256-GCM. Master key separada en <code>.env</code>. NUNCA en logs. NUNCA en backups.</td>
+</tr>
+<tr>
+<td><strong>Cross-user data access</strong></td>
+<td>TODA query SQL incluye <code>WHERE user_id = ?</code>. Code review obligatorio. Tests automaticos.</td>
+</tr>
+<tr>
+<td><strong>JWT robo</strong></td>
+<td>Cookie HttpOnly + Secure + SameSite=strict. Expiracion 1h. Refresh token.</td>
+</tr>
+<tr>
+<td><strong>SQL injection</strong></td>
+<td>JPA parametrizado siempre. Nunca concatenar SQL.</td>
+</tr>
+<tr>
+<td><strong>Race condition entre sesiones</strong></td>
+<td>Cada <code>TradingSession</code> accedida desde un thread (queue) o sync.</td>
+</tr>
+<tr>
+<td><strong>Insider threat (operador)</strong></td>
+<td>Audit log de accesos. Master key separada.</td>
+</tr>
+<tr>
+<td><strong>Backups con secrets</strong></td>
+<td>Master key NO en backups. Backups encriptados.</td>
+</tr>
+<tr>
+<td><strong>Compliance / regulacion</strong></td>
+<td>Asesoria legal antes de open beta.</td>
+</tr>
+<tr>
+<td><strong>Rate limit abuse</strong></td>
+<td>Por usuario y endpoint. Bloqueo temporal en abuso.</td>
+</tr>
+<tr>
+<td><strong>Webhook spoofing PlatformBridge</strong></td>
+<td>HMAC signature en payloads.</td>
+</tr>
+</tbody>
+</table>
+<h3>Cifrado</h3>
+<table>
+<thead>
+<tr>
+<th>Capa</th>
+<th>Tecnica</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Algoritmo wallets</strong></td>
+<td>AES-256-GCM (autenticado, sin tampering)</td>
+</tr>
+<tr>
+<td><strong>Master key</strong></td>
+<td><code>WALLET_MASTER_KEY</code> en <code>.env</code> (32 bytes base64)</td>
+</tr>
+<tr>
+<td><strong>IV</strong></td>
+<td>Aleatorio 12 bytes per wallet</td>
+</tr>
+<tr>
+<td><strong>AAD</strong></td>
+<td>`userId</td>
+</tr>
+<tr>
+<td><strong>Rotacion</strong></td>
+<td><code>encryption_version</code> permite re-encrypt sin downtime</td>
+</tr>
+<tr>
+<td><strong>Decrypt timing</strong></td>
+<td>Solo en memoria, justo antes de firmar tx</td>
+</tr>
+</tbody>
+</table>
+<h3>Donde vive cada secreto</h3>
+<table>
+<thead>
+<tr>
+<th>Secreto</th>
+<th>Donde</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>WALLET_MASTER_KEY</code></td>
+<td><code>.env</code> del bot, NO en git, NO en backups</td>
+</tr>
+<tr>
+<td><code>JWT_SECRET</code></td>
+<td><code>.env</code> del bot</td>
+</tr>
+<tr>
+<td><code>DB_PASSWORD</code></td>
+<td><code>.env</code></td>
+</tr>
+<tr>
+<td><code>TELEGRAM_BOT_TOKEN</code></td>
+<td><code>.env</code></td>
+</tr>
+<tr>
+<td>Wallets de usuarios</td>
+<td><code>user_wallets</code>, encriptadas con master</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>8b. Estrategia de aprendizaje colectivo (el &quot;alma&quot; del proyecto)</h2>
+<h3>El concepto</h3>
+<p>Hoy el bot aprende <strong>per usuario</strong> (CoinProfileOptimizer). Maniana debe aprender <strong>cross-user</strong>.</p>
+<pre><code>NIVEL 1 — Per usuario (HOY)
+─────────────────────────────
+CoinProfileOptimizer ya hace esto:
+- (user_id, coin, side, mode) → stats EW → ajustes propios
+- Cada usuario tiene SU vision del coin
+- Lock automatico en perdidas
+- Auto-tuning de SL/TP/cooldown
+
+NIVEL 2 — Cross usuario (FUTURO, pero diseñado desde Fase 1)
+─────────────────────────────
+GlobalLearningService:
+- Agrega resultados de TODOS los usuarios anonimamente
+- Compara configs vs PnL real
+- Calcula &quot;que config funciona mejor&quot; para cada (coin, mode, regime)
+- Publica &quot;best practices&quot; en el Quantum Platform
+- BASIC users pueden importar &quot;config recomendada del sistema&quot;
+- PRO/PREMIUM users contribuyen al aprendizaje y reciben sugerencias
+</code></pre>
+<h3>Como funciona el GlobalLearningService</h3>
+<pre><code class="language-sql">-- Vista materializada con stats agregadas anonimas
+CREATE MATERIALIZED VIEW global_config_performance AS
+SELECT
+    config_snapshot-&gt;&gt;'mode' AS mode,
+    coin,
+    side,
+    -- Buckets de configs (para no dispersar demasiado)
+    width_bucket((config_snapshot-&gt;&gt;'stopLossPct')::numeric, 0.10, 0.80, 14) AS sl_bucket,
+    width_bucket((config_snapshot-&gt;&gt;'takeProfitPct')::numeric, 0.10, 2.00, 19) AS tp_bucket,
+    width_bucket((config_snapshot-&gt;&gt;'minScoreTotal')::numeric, 40, 80, 8) AS score_bucket,
+    -- Metricas agregadas
+    COUNT(*) AS sample_size,
+    AVG(net_pnl) AS avg_pnl,
+    AVG(mfe_pct) AS avg_mfe,
+    AVG(CASE WHEN net_pnl &gt; 0 THEN 1 ELSE 0 END) AS win_rate,
+    STDDEV(net_pnl) AS pnl_stddev,
+    COUNT(DISTINCT user_id) AS unique_users
+FROM hl_trading_history
+WHERE entry_at &gt;= NOW() - INTERVAL '30 days'
+GROUP BY mode, coin, side, sl_bucket, tp_bucket, score_bucket
+HAVING COUNT(*) &gt;= 20;  -- minimo 20 trades para considerar valido
+
+-- Refresh diario
+REFRESH MATERIALIZED VIEW CONCURRENTLY global_config_performance;
+</code></pre>
+<p><strong>Resultado:</strong> una tabla con <code>(mode, coin, side, SL bucket, TP bucket, score bucket) → avg_pnl, win_rate, n</code>.</p>
+<p><strong>Querys utiles:</strong></p>
+<pre><code class="language-sql">-- &quot;¿Cual es la mejor config global para SCALP en SOL LONG?&quot;
+SELECT * FROM global_config_performance
+WHERE mode = 'SCALP' AND coin = 'SOL' AND side = 'LONG'
+  AND sample_size &gt;= 30
+  AND unique_users &gt;= 3
+ORDER BY avg_pnl DESC LIMIT 5;
+
+-- &quot;¿Que config esta perdiendo dinero consistentemente?&quot;
+SELECT * FROM global_config_performance
+WHERE avg_pnl &lt; -0.20 AND sample_size &gt;= 50
+ORDER BY avg_pnl ASC;
+</code></pre>
+<h3>Privacidad y anonimato</h3>
+<p><strong>Critico:</strong> los datos cruzados son anonimos.</p>
+<ul>
+<li>No se guarda quien tradeo que (en la vista materializada)</li>
+<li>Solo agregados con sample_size minimo (&gt;=20 trades, &gt;=3 usuarios)</li>
+<li>Imposible re-identificar a un usuario por sus resultados</li>
+<li>El usuario puede optar por <strong>no contribuir</strong> al pool global (opt-out)</li>
+</ul>
+<h3>Fases del aprendizaje colectivo</h3>
+<table>
+<thead>
+<tr>
+<th>Fase</th>
+<th>Cuando</th>
+<th>Que hace</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Fase A — Recopilacion</strong></td>
+<td>Beta cerrada (10 amigos)</td>
+<td>Solo recopilar datos. No actuar.</td>
+</tr>
+<tr>
+<td><strong>Fase B — Insights</strong></td>
+<td>20+ usuarios</td>
+<td>Mostrar en Quantum Platform &quot;estos parametros parecen funcionar mejor&quot;</td>
+</tr>
+<tr>
+<td><strong>Fase C — Recomendaciones</strong></td>
+<td>50+ usuarios</td>
+<td>Usuario BASIC puede importar &quot;config recomendada del sistema&quot; con 1 click</td>
+</tr>
+<tr>
+<td><strong>Fase D — Auto-aplicacion</strong></td>
+<td>100+ usuarios</td>
+<td>Optimizer per-user <strong>incorpora</strong> sugerencias del global como prior bayesiano</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Por que esto es brutal:</strong></p>
+<ul>
+<li>Cada usuario contribuye al sistema sin saberlo</li>
+<li>El sistema mejora <strong>continuamente</strong> sin que tu hagas nada</li>
+<li>Los nuevos usuarios entran y reciben <strong>el conocimiento acumulado</strong> de toda la comunidad</li>
+<li>Es <strong>el unico bot del mercado</strong> que aprende asi a esta escala (3Commas, Cryptohopper, Hummingbot NO hacen esto)</li>
+</ul>
+<h3>Esto justifica TOTALMENTE los precios premium</h3>
+<p>A 30/90/200€/mes, un usuario no esta pagando solo &quot;un bot&quot;. Esta pagando:</p>
+<ul>
+<li>Acceso a un sistema que <strong>mejora cada dia</strong></li>
+<li>Beneficiarse del aprendizaje de <strong>N usuarios</strong> sin que cuente como custodia</li>
+<li>Una <strong>comunidad de inteligencia</strong> donde su data contribuye anonimamente</li>
+</ul>
+<p><strong>Network effect real:</strong> mientras mas usuarios, mejor el sistema, mas valor por usuario.</p>
+<hr />
+<h2>9. Plan por fases</h2>
+<h3>Fase 0 — Preparacion y cleanup (1-2 semanas)</h3>
+<p><strong>Sin tocar el motor todavia. Solo dejar la base lista.</strong></p>
+<ul>
+<li>[ ] Decidir las 10 decisiones pendientes (seccion 3)</li>
+<li>[ ] Asesoria legal (reunion 1h)</li>
+<li>[ ] Backup completo de DB actual</li>
+<li>[ ] Migration V27: drop de 13 tablas legacy</li>
+<li>[ ] TTLs cron job (feature_snapshots, signal_evaluations, hl_alerts)</li>
+<li>[ ] Cambio en bot: filtrar signals enviados al platform (solo ENTER/BLOCKED + sample)</li>
+<li>[ ] Tests: cobertura &gt;70% del flujo critico actual</li>
+<li>[ ] Documentar arquitectura actual para referencia</li>
+</ul>
+<p><strong>Riesgo:</strong> ✅ Bajo. El sistema sigue funcionando como single-tenant.</p>
+<h3>Fase 1 — Multi-tenant basico schema + engine (2-3 semanas)</h3>
+<p><strong>El bloque grande. Donde esta el riesgo.</strong></p>
+<ul>
+<li>[ ] Migration V28: anadir <code>user_id BIGINT NULL</code> a todas las tablas core</li>
+<li>[ ] Backfill: <code>UPDATE ... SET user_id = (SELECT id FROM auth_users WHERE username='chema200')</code></li>
+<li>[ ] Make <code>user_id NOT NULL</code></li>
+<li>[ ] Indices compuestos (user_id, ...)</li>
+<li>[ ] Crear <code>user_wallets</code> con cifrado</li>
+<li>[ ] <code>WalletService</code> + <code>SecretsService</code> + <code>ExchangeClientFactory</code></li>
+<li>[ ] <strong>Refactor <code>HlDirectionalEngine</code></strong> → extraer estado a <code>TradingSession</code></li>
+<li>[ ] Crear <code>SessionManager</code> con <code>Map&lt;UserId, TradingSession&gt;</code></li>
+<li>[ ] Crear <code>MarketDataService</code> extraido (singleton compartido)</li>
+<li>[ ] Endpoints scoped por <code>user_id</code> del JWT</li>
+<li>[ ] Frontend: muestra solo data del usuario logueado</li>
+<li>[ ] Tests: 5 usuarios paralelos sin contaminacion</li>
+</ul>
+<p><strong>Riesgo:</strong> 🔴 Alto. Es donde se rompen cosas. <strong>Hacer en branch + feature flag.</strong></p>
+<p><strong>Entrega:</strong> beta privada con 2-3 usuarios reales.</p>
+<h3>Fase 2 — Wallets multiples + UI onboarding (1-2 semanas)</h3>
+<ul>
+<li>[ ] UI &quot;Conectar wallet HL&quot; con modal y tutorial</li>
+<li>[ ] Validacion read-only call al guardar</li>
+<li>[ ] Test withdrawal dummy (debe fallar) → confirma permisos</li>
+<li>[ ] Selector de wallet activa en el header</li>
+<li>[ ] Cambio de wallet activa = stop session + start nueva</li>
+<li>[ ] Ver posiciones reales en HL desde la UI</li>
+</ul>
+<p><strong>Riesgo:</strong> 🟢 Bajo. Es UI sobre la base ya construida.</p>
+<p><strong>Entrega:</strong> beta cerrada con 5-10 amigos.</p>
+<h3>Fase 3 — Sistema de roles + tiers (1 semana)</h3>
+<ul>
+<li>[ ] Tabla <code>user_roles</code> + <code>tier_limits</code></li>
+<li>[ ] <code>Role</code> y <code>Feature</code> enums en backend</li>
+<li>[ ] <code>@RequiresFeature</code> annotation + aspect</li>
+<li>[ ] Frontend con <code>useUser().hasFeature(...)</code></li>
+<li>[ ] Pestanas condicionales por rol</li>
+<li>[ ] Tier limits enforcement (max positions, budget, etc)</li>
+<li>[ ] Admin panel basico (asignar roles)</li>
+<li>[ ] UI de &quot;upgrade&quot; para features bloqueadas</li>
+</ul>
+<p><strong>Riesgo:</strong> 🟡 Medio. Cuidado con bypasear feature flags.</p>
+<h3>Fase 4 — Refactor de datos masivos (1-2 semanas)</h3>
+<p><strong>Solo cuando empiezas a notar el volumen (&gt;20 users activos).</strong></p>
+<ul>
+<li>[ ] Crear <code>trade_snapshots_agg</code></li>
+<li>[ ] En bot: lista en memoria de snapshots por trade</li>
+<li>[ ] Calculo de agregados al cerrar trade</li>
+<li>[ ] Enviar 1 row al platform en lugar de 200</li>
+<li>[ ] Decommission de <code>feature_snapshots</code> (mantener 30 dias por seguridad)</li>
+<li>[ ] Drop de <code>feature_snapshots</code> cuando confirme</li>
+</ul>
+<p><strong>Riesgo:</strong> 🟡 Medio. Es un cambio importante en el bridge bot↔platform.</p>
+<h3>Fase 5 — Escalado para 100 users (2-4 semanas)</h3>
+<p><strong>Cuando pases de 30-50 usuarios reales.</strong></p>
+<ul>
+<li>[ ] <code>parallelStream</code> con pool dimensionado</li>
+<li>[ ] DB connection pool tuning</li>
+<li>[ ] Particionado de <code>hl_trading_history</code> (si crece &gt;10M filas)</li>
+<li>[ ] Prometheus + Grafana con metricas per user</li>
+<li>[ ] Alertas: heap, threads, latencia, errores per user</li>
+<li>[ ] Load testing: simular 100 users concurrentes</li>
+<li>[ ] Auto-restart healthcheck</li>
+<li>[ ] Backup automatico de DB con cifrado a S3/B2</li>
+<li>[ ] Status page publico</li>
+</ul>
+<p><strong>Riesgo:</strong> 🟡 Medio. Depende del servidor.</p>
+<h3>Fase 6 (futuro) — Multi-exchange</h3>
+<ul>
+<li>[ ] <code>BinanceClient implements ExchangeClient</code></li>
+<li>[ ] Symbol mapper HL ↔ Binance</li>
+<li>[ ] Adaptar gates por exchange</li>
+<li>[ ] UI: usuario puede tener wallet HL + wallet Binance</li>
+</ul>
+<p><strong>Riesgo:</strong> 🟡 Medio. Trabajo aislado.</p>
+<h3>Total estimado</h3>
+<table>
+<thead>
+<tr>
+<th>Fase</th>
+<th>Duracion</th>
+<th>Prioridad</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0 — Preparacion</td>
+<td>1-2 sem</td>
+<td>Critico</td>
+</tr>
+<tr>
+<td>1 — Multi-tenant + engine</td>
+<td>2-3 sem</td>
+<td>Critico</td>
+</tr>
+<tr>
+<td>2 — Wallets + UI</td>
+<td>1-2 sem</td>
+<td>Critico</td>
+</tr>
+<tr>
+<td>3 — Roles</td>
+<td>1 sem</td>
+<td>Importante</td>
+</tr>
+<tr>
+<td>4 — Refactor datos</td>
+<td>1-2 sem</td>
+<td>Importante (a partir de 30 users)</td>
+</tr>
+<tr>
+<td>5 — Escalado</td>
+<td>2-4 sem</td>
+<td>Cuando lo necesites</td>
+</tr>
+<tr>
+<td>6 — Multi-exchange</td>
+<td>2-3 sem</td>
+<td>Futuro</td>
+</tr>
+<tr>
+<td><strong>TOTAL realista</strong></td>
+<td><strong>9-15 semanas</strong></td>
+<td><strong>~3 meses</strong></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>10. Riesgos</h2>
+<h3>Tecnicos</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Riesgo</th>
+<th>Severidad</th>
+<th>Mitigacion</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><strong>Refactor del motor introduce bugs</strong></td>
+<td>🔴 Alto</td>
+<td>Tests exhaustivos. Feature flag. Branch separada. Rollback plan.</td>
+</tr>
+<tr>
+<td>2</td>
+<td><strong>State leak entre sesiones</strong></td>
+<td>🔴 Alto</td>
+<td>Code review estricto. Tests automaticos con 10 users paralelos.</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Memory leak con sesiones long-running</td>
+<td>🟡 Medio</td>
+<td>Heap monitoring. Cleanup periodico. Limites en colecciones.</td>
+</tr>
+<tr>
+<td>4</td>
+<td>HL API rate limits con muchos users</td>
+<td>🟡 Medio</td>
+<td>Shared market data. Backoff exponencial.</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Race condition en order execution</td>
+<td>🟡 Medio</td>
+<td>Queue per user, no paralelo masivo dentro de wallet.</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Crash de JVM mata 100 usuarios</td>
+<td>🟡 Medio</td>
+<td>Healthcheck + auto-restart. State recovery.</td>
+</tr>
+</tbody>
+</table>
+<h3>Seguridad</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Riesgo</th>
+<th>Severidad</th>
+<th>Mitigacion</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><strong>Leak de private keys</strong></td>
+<td>🔴 Critico</td>
+<td>Cifrado obligatorio. Code review. Static analysis.</td>
+</tr>
+<tr>
+<td>2</td>
+<td><strong>Cross-user data access</strong></td>
+<td>🔴 Critico</td>
+<td>Tests. Row-level security en DB (PostgreSQL RLS).</td>
+</tr>
+<tr>
+<td>3</td>
+<td>JWT theft</td>
+<td>🟡 Medio</td>
+<td>HttpOnly + Secure. Expiracion corta.</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Insider threat</td>
+<td>🟡 Medio</td>
+<td>Audit log. Master key en HSM/separada.</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Backups con secrets</td>
+<td>🔴 Alto</td>
+<td>Master key NO en backups. Backups encriptados.</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Compliance / legal</td>
+<td>🟡 Medio</td>
+<td>Modelo non-custodial reduce mucho. Pero <strong>asesoria legal recomendada</strong>.</td>
+</tr>
+</tbody>
+</table>
+<h3>Operacionales</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Riesgo</th>
+<th>Severidad</th>
+<th>Mitigacion</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Soporte tecnico 1:N</td>
+<td>🟡 Medio</td>
+<td>Self-service docs. Status page. FAQ.</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Bugs visibles a 100 users a la vez</td>
+<td>🟡 Medio</td>
+<td>Staging. Canary deploys. Feature flags.</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Onboarding complejo</td>
+<td>🟡 Medio</td>
+<td>Tutorial visual. Validacion en tiempo real.</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Usuarios pierden dinero y echan culpa</td>
+<td>🔴 Alto</td>
+<td><strong>Disclaimer legal obligatorio</strong>. Documentar limitaciones.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>11. Costes estimados</h2>
+<h3>Beta (10 amigos, 1-3 meses)</h3>
+<pre><code>Infraestructura
+─────────────────
+VPS 4GB / 2 cores / 50GB     10€/mes
+Dominio (ya tienes)            -
+Cloudflare (free tier)         -
+Total infra:                  10€/mes
+
+Dev: tu tiempo
+Total monetario beta:         ~10€/mes
+</code></pre>
+<h3>Escalado a 50 usuarios</h3>
+<pre><code>Infraestructura
+─────────────────
+VPS 8GB / 4 cores / 100GB     30-40€/mes
+Backups S3/B2                  5-10€/mes
+Monitoring (Grafana cloud)     0-10€/mes
+Total infra:                  ~50€/mes
+</code></pre>
+<h3>Produccion 100 usuarios</h3>
+<pre><code>Infraestructura
+─────────────────
+Servidor 32GB / 8c / 1TB SSD  80-150€/mes
+(VPS dedicado o bare metal)
+Backups con cifrado            10-20€/mes
+Monitoring                     0-30€/mes
+Email transaccional             5€/mes
+Total infra:                  100-200€/mes
+</code></pre>
+<h3>Costes one-off</h3>
+<pre><code>Asesoria legal inicial         200-500€
+Auditoria de seguridad          0-1000€ (opcional)
+Logo / branding (si quieres)   0-200€
+</code></pre>
+<h3>Resumen</h3>
+<blockquote>
+<p><strong>Para llegar a 100 usuarios solo necesitas ~150€/mes en infraestructura.</strong></p>
+<p>Si cobras solo 5€/mes por usuario PRO/PREMIUM, <strong>rentable con 30 usuarios pagando</strong>.
+Si cobras 10€/mes, <strong>rentable con 15 usuarios pagando</strong>.</p>
+</blockquote>
+<hr />
+<h2>12. Documentos relacionados</h2>
+<table>
+<thead>
+<tr>
+<th>Documento</th>
+<th>Que contiene</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="./MULTITENANT_ARCHITECTURE.md"><code>MULTITENANT_ARCHITECTURE.md</code></a></td>
+<td>Diseno tecnico detallado del refactor del engine, sessions, market data</td>
+</tr>
+<tr>
+<td><a href="./MULTITENANT_DATA_STRATEGY.md"><code>MULTITENANT_DATA_STRATEGY.md</code></a></td>
+<td>Analisis profundo de tablas, volumenes, optimizaciones, TTLs</td>
+</tr>
+<tr>
+<td><a href="./CHANGE_MARKERS_GUIDE.md"><code>CHANGE_MARKERS_GUIDE.md</code></a></td>
+<td>Sistema de markers para medir impacto de cambios (V25)</td>
+</tr>
+<tr>
+<td><a href="./PLATFORM_GUIDE.md"><code>PLATFORM_GUIDE.md</code></a></td>
+<td>Documentacion del platform actual</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>13. La conversacion completa de hoy en sintesis</h2>
+<h3>Lo que descubrimos</h3>
+<ol>
+<li>
+<p><strong>Tu bot funciona y aprende.</strong> Ya hicimos:</p>
+<ul>
+<li>V25 SL viability filter (parametrizado por modo)</li>
+<li>V26 schedule semanal (7×24 cells, sin hardcode del weekend)</li>
+<li>Trailing distance fix en SCALP (0.35 → 0.12)</li>
+<li>SL viability filter exposed via gate stats al platform</li>
+<li>Markers automaticos en MODE_CHANGE, PRESET_EDIT, PROTECTION, PROPOSAL_ACCEPTED</li>
+</ul>
+</li>
+<li>
+<p><strong>El sistema esta sano tecnicamente</strong> pero <strong>tiene problemas reales</strong> en mercado lateral:</p>
+<ul>
+<li>Slippage del SL (4.8x en algunos casos)</li>
+<li>Late entries</li>
+<li>Mercado lateral</li>
+<li>Optimizer demasiado conservador (necesita 10 trades para ajustar TP/SL)</li>
+</ul>
+</li>
+<li>
+<p><strong>Trades reales analizados hoy:</strong></p>
+<ul>
+<li>APT SHORT cerro a +$0.48 cuando llego a +$1.50 en peak (slippage del cierre)</li>
+<li>INJ LONG cerro perfectamente con +$0.83 (partial close + ROI)</li>
+<li>RENDER SHORT cerro con +$0.35 (ROI_0.20)</li>
+<li>3 winners totales del dia en SCALP post-V25/V26</li>
+</ul>
+</li>
+<li>
+<p><strong>El tema legal:</strong> non-custodial via API Wallets es la unica via correcta. NUNCA pides la private key principal del usuario. <strong>Hyperliquid soporta esto nativamente.</strong></p>
+</li>
+<li>
+<p><strong>Lo que mata el sistema:</strong> <code>feature_snapshots</code> con 134k inserts/dia/user. × 100 = 2.5 TB. <strong>El refactor de esto es el cambio mas critico para escalar.</strong></p>
+</li>
+</ol>
+<h3>Lo que decidimos</h3>
+<ol>
+<li>✅ Multi-tenant via Hibrido B (single JVM, sessions per user, market data shared)</li>
+<li>✅ Solo Hyperliquid en Fase 1</li>
+<li>✅ Non-custodial via API Wallets de HL</li>
+<li>✅ Beta cerrada con 10 amigos primero</li>
+<li>✅ Target final 100 usuarios</li>
+<li>✅ Producto se llama Alchimiabot</li>
+<li>✅ Refactor incremental, no rewrite</li>
+<li>✅ Tiempo no es problema (3-4 meses)</li>
+<li>✅ Cleanup de tablas legacy en V27 antes de empezar</li>
+<li>✅ Refactor de <code>feature_snapshots</code> → <code>trade_snapshots_agg</code> antes de pasar de 30 users</li>
+</ol>
+<h3>Lo que NO empezamos</h3>
+<p><strong>Modo recopilacion. NADA implementado todavia.</strong> Este documento es la fuente de verdad para cuando decidas arrancar.</p>
+<hr />
+<h2>14. Checklist antes de empezar a implementar</h2>
+<p>Cuando estes listo para arrancar la Fase 0:</p>
+<ul>
+<li>[ ] Has leido este documento entero</li>
+<li>[ ] Has tomado las 10 decisiones de la seccion 3</li>
+<li>[ ] Has hablado con un abogado de fintech (~1h, ~200€)</li>
+<li>[ ] Tienes backup completo de DB actual</li>
+<li>[ ] Has identificado 2-3 amigos para beta privada inicial</li>
+<li>[ ] Sabes que vas a hacer cuando se rompa algo</li>
+<li>[ ] Has definido tu modelo de negocio</li>
+<li>[ ] Tienes claro que esto es un proyecto de 3-4 meses</li>
+</ul>
+<hr />
+<h2>15. Notas finales</h2>
+<blockquote>
+<p>Este documento NO se autodestruye. Es la <strong>fuente de verdad</strong> para Alchimiabot multi-tenant.
+Actualizar conforme tomes decisiones y descubras cosas nuevas.</p>
+</blockquote>
+<p><strong>Filosofia:</strong></p>
+<ul>
+<li>KISS: PostgreSQL + 1 servidor + buenos indices = aguanta 100 users</li>
+<li>No reinventar: usar lo que ya funciona en otros bots (API wallets)</li>
+<li>Incremental: refactor en branches, feature flags, rollback siempre posible</li>
+<li>Honesto: el riesgo principal es legal, no tecnico</li>
+</ul>
+<p><strong>El mantra correcto del proyecto:</strong></p>
+<blockquote>
+<p><strong>El bot no es malo. Lo que falta es el conocimiento de los parametros optimos.</strong>
+<strong>Y ese conocimiento solo se descubre con muchos usuarios probando configs en paralelo.</strong></p>
+<p>Por eso multi-tenant NO es &quot;para vender mas&quot; sino <strong>&quot;para aprender mas rapido&quot;</strong>.
+El single-user NO escala el aprendizaje. Multi-user SI.</p>
+<p>El plan no es: &quot;primero rentable, luego multi-tenant&quot;.
+El plan es: <strong>&quot;multi-tenant PORQUE single-tenant no me hace rentable nunca&quot;</strong>.</p>
+</blockquote>
+<p><strong>El verdadero edge del producto:</strong> no es el motor (otros tienen motores), es <strong>el aprendizaje colectivo</strong> que solo funciona con muchos usuarios.</p>
+<p><strong>Network effect real:</strong> mas usuarios → mas data → mejores configs → mas valor → mas usuarios.</p>
+<hr />
+<p><strong>Fin del documento maestro. Modo recopilacion activo. Cero implementacion.</strong></p>
+
+</body>
+</html>

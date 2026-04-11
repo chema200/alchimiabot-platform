@@ -1,0 +1,2931 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Alchimia Platform</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* Base */
+body {
+  background: #09090f;
+  color: #e0e0e8;
+  font-family: -apple-system, 'Inter', 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Noise texture overlay */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Layout */
+.app { display: flex; min-height: 100vh; position: relative; z-index: 1; }
+
+/* Sidebar */
+.sidebar {
+  width: 220px;
+  background: linear-gradient(180deg, #0c0c16 0%, #080810 100%);
+  border-right: 1px solid rgba(255,255,255,0.06);
+  position: fixed; top: 0; left: 0; bottom: 0;
+  overflow-y: auto; z-index: 40;
+  backdrop-filter: blur(20px);
+}
+.sidebar-header { padding: 20px 16px; border-bottom: 1px solid rgba(255,255,255,0.06); display: flex; align-items: center; gap: 12px; }
+.sidebar-header .logo {
+  width: 34px; height: 34px; border-radius: 10px;
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  display: flex; align-items: center; justify-content: center;
+  color: white; font-weight: bold; font-size: 12px; flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(59,130,246,0.3);
+}
+.sidebar-header h1 { font-size: 14px; font-weight: 700; letter-spacing: -0.3px; }
+.sidebar-header .sub { font-size: 10px; color: #555; letter-spacing: 0.5px; }
+.sidebar-group { padding: 16px 0 6px 0; }
+.sidebar-group-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; padding: 0 20px 8px; opacity: 0.5; }
+.sidebar-item {
+  display: flex; align-items: center; gap: 10px; padding: 8px 20px;
+  font-size: 12px; color: rgba(255,255,255,0.45); cursor: pointer;
+  transition: all 0.2s ease; border-left: 2px solid transparent;
+  margin: 1px 0;
+}
+.sidebar-item:hover { color: rgba(255,255,255,0.7); background: rgba(255,255,255,0.03); }
+.sidebar-item.active {
+  color: #3b82f6; background: rgba(59,130,246,0.08);
+  border-left-color: #3b82f6; font-weight: 600;
+  box-shadow: inset 3px 0 12px -4px rgba(59,130,246,0.3);
+}
+.sidebar-item.active-gold {
+  color: #f59e0b; background: rgba(245,158,11,0.08);
+  border-left-color: #f59e0b; font-weight: 700;
+  box-shadow: inset 3px 0 12px -4px rgba(245,158,11,0.3);
+}
+
+/* Main */
+.main-content { margin-left: 220px; flex: 1; }
+.topbar {
+  height: 52px;
+  background: rgba(12,12,20,0.8);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  display: flex; align-items: center; justify-content: flex-end;
+  padding: 0 28px; position: sticky; top: 0; z-index: 30;
+}
+.topbar-user { display: flex; align-items: center; gap: 12px; font-size: 12px; color: rgba(255,255,255,0.5); }
+.topbar-user .avatar {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  display: flex; align-items: center; justify-content: center;
+  color: white; font-weight: 700; font-size: 11px;
+  box-shadow: 0 2px 8px rgba(59,130,246,0.3);
+}
+.topbar-user .logout-btn {
+  font-size: 10px; color: rgba(255,255,255,0.4); cursor: pointer;
+  padding: 5px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08);
+  background: transparent; transition: all 0.2s;
+}
+.topbar-user .logout-btn:hover { color: #ef4444; border-color: rgba(239,68,68,0.3); }
+.content-area { padding: 24px 28px; animation: fadeIn 0.3s ease; }
+
+/* Cards — glass morphism */
+.card {
+  background: rgba(15,15,26,0.6);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 14px; padding: 18px;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+.card:hover { border-color: rgba(255,255,255,0.1); box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+.card .label { font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; }
+.card .value { font-size: 24px; font-weight: 700; font-family: 'SF Mono', 'Fira Code', monospace; letter-spacing: -0.5px; }
+.card .sub { font-size: 10px; color: rgba(255,255,255,0.25); margin-top: 4px; }
+
+/* Grid */
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 18px; }
+
+/* Colors with glow */
+.green { color: #22c55e; }
+.red { color: #ef4444; }
+.yellow { color: #eab308; }
+.purple { color: #a855f7; }
+.blue { color: #3b82f6; }
+.ok { color: #22c55e; }
+.warning { color: #eab308; }
+.alert { color: #f97316; }
+.critical { color: #ef4444; }
+.value.green { text-shadow: 0 0 20px rgba(34,197,94,0.25); }
+.value.red { text-shadow: 0 0 20px rgba(239,68,68,0.25); }
+.value.yellow { text-shadow: 0 0 20px rgba(234,179,8,0.2); }
+.value.purple { text-shadow: 0 0 20px rgba(168,85,247,0.2); }
+.value.blue { text-shadow: 0 0 20px rgba(59,130,246,0.2); }
+
+/* Tables */
+table { width: 100%; border-collapse: collapse; font-size: 11px; }
+th { text-align: left; padding: 8px 10px; color: rgba(255,255,255,0.3); border-bottom: 1px solid rgba(255,255,255,0.06); font-weight: 500; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+td { padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.03); font-family: 'SF Mono', 'Fira Code', monospace; font-size: 11px; }
+tbody tr { transition: background 0.15s; }
+tbody tr:hover { background: rgba(59,130,246,0.04); }
+
+/* Tags */
+.tag { display: inline-block; padding: 3px 10px; border-radius: 6px; font-size: 10px; font-weight: 600; letter-spacing: 0.3px; }
+.tag-green { background: rgba(34,197,94,0.12); color: #22c55e; border: 1px solid rgba(34,197,94,0.15); }
+.tag-red { background: rgba(239,68,68,0.12); color: #ef4444; border: 1px solid rgba(239,68,68,0.15); }
+.tag-purple { background: rgba(168,85,247,0.12); color: #a855f7; border: 1px solid rgba(168,85,247,0.15); }
+.tag-blue { background: rgba(59,130,246,0.12); color: #3b82f6; border: 1px solid rgba(59,130,246,0.15); }
+.tag-yellow { background: rgba(234,179,8,0.12); color: #eab308; border: 1px solid rgba(234,179,8,0.15); }
+
+/* Section titles */
+.section-title {
+  font-size: 11px; color: rgba(255,255,255,0.4); text-transform: uppercase;
+  letter-spacing: 1px; font-weight: 600; margin-bottom: 14px;
+}
+
+/* Page title */
+.page-title {
+  font-size: 20px; font-weight: 700; margin-bottom: 20px; padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  letter-spacing: -0.3px;
+}
+.page-title .page-sub { font-size: 12px; color: rgba(255,255,255,0.3); font-weight: 400; margin-top: 4px; letter-spacing: 0; }
+
+/* Utils */
+.scroll { max-height: 400px; overflow-y: auto; }
+.loading { text-align: center; padding: 50px; color: rgba(255,255,255,0.5); font-size: 14px; }
+.loading::after { content: ""; display: block; width: 24px; height: 24px; margin: 16px auto 0; border: 2px solid rgba(139,92,246,0.3); border-top-color: #8b5cf6; border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.pill { display: inline-block; padding: 3px 12px; border-radius: 20px; font-size: 10px; font-weight: 600; }
+.progress-bar { height: 6px; background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden; margin-top: 10px; }
+.progress-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+
+/* Tabs (inside content) */
+.tab {
+  padding: 7px 16px; border-radius: 8px; font-size: 11px; font-weight: 600;
+  cursor: pointer; border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.02); color: rgba(255,255,255,0.4);
+  transition: all 0.2s; display: inline-block;
+}
+.tab:hover { border-color: rgba(255,255,255,0.12); color: rgba(255,255,255,0.6); background: rgba(255,255,255,0.04); }
+.tab.active { background: rgba(59,130,246,0.12); border-color: rgba(59,130,246,0.3); color: #3b82f6; }
+.tab.active-gold { background: rgba(245,158,11,0.12); border-color: rgba(245,158,11,0.3); color: #f59e0b; }
+
+/* Login */
+.login-page { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #09090f; }
+.login-box {
+  width: 380px; padding: 44px;
+  background: rgba(15,15,26,0.8); backdrop-filter: blur(20px);
+  border: 1px solid rgba(255,255,255,0.08); border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.login-box h1 { font-size: 24px; font-weight: 700; text-align: center; margin-bottom: 4px; letter-spacing: -0.5px; }
+.login-box .sub { font-size: 12px; color: rgba(255,255,255,0.3); text-align: center; margin-bottom: 28px; }
+.login-box input {
+  width: 100%; padding: 12px 16px; border-radius: 12px;
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+  color: #e0e0e8; font-size: 13px; margin-bottom: 14px; outline: none;
+  transition: border-color 0.2s;
+}
+.login-box input:focus { border-color: rgba(59,130,246,0.5); box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+.login-box button {
+  width: 100%; padding: 12px; border-radius: 12px;
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  color: white; font-weight: 600; font-size: 14px; border: none; cursor: pointer;
+  transition: opacity 0.2s, transform 0.2s;
+  box-shadow: 0 4px 16px rgba(59,130,246,0.3);
+}
+.login-box button:hover { opacity: 0.9; transform: translateY(-1px); }
+.login-box button:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
+
+/* Animations */
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Responsive */
+/* Mobile menu button */
+.mobile-menu-btn { display: none; background: none; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; color: rgba(255,255,255,0.6); padding: 6px 10px; cursor: pointer; font-size: 18px; }
+.mobile-menu-btn:hover { border-color: rgba(255,255,255,0.2); color: white; }
+
+@media (max-width: 900px) {
+  .sidebar { width: 60px; }
+  .sidebar-header h1, .sidebar-header .sub { display: none; }
+  .sidebar-item span:last-child { display: none; }
+  .sidebar-group-label { font-size: 7px; padding: 0 8px 4px; text-align: center; }
+  .sidebar-item { padding: 10px 0; justify-content: center; }
+  .sidebar-item span:first-child { margin: 0; }
+  .main-content { margin-left: 60px; }
+  .content-area { padding: 16px; }
+  .topbar { padding: 0 16px; }
+  .grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)) !important; gap: 10px; }
+  .page-title { font-size: 16px; }
+  .card .value { font-size: 18px; }
+  table { font-size: 10px; }
+  th, td { padding: 4px 6px; }
+}
+
+@media (max-width: 640px) {
+  .sidebar { display: none; }
+  .sidebar.mobile-open { display: block; width: 240px; z-index: 100; box-shadow: 4px 0 30px rgba(0,0,0,0.8); }
+  .sidebar.mobile-open .sidebar-header h1,
+  .sidebar.mobile-open .sidebar-header .sub { display: block; }
+  .sidebar.mobile-open .sidebar-item span:last-child { display: inline; }
+  .sidebar.mobile-open .sidebar-group-label { font-size: 9px; padding: 0 20px 8px; text-align: left; }
+  .sidebar.mobile-open .sidebar-item { padding: 8px 20px; justify-content: flex-start; }
+  .mobile-menu-btn { display: block; }
+  .main-content { margin-left: 0; }
+  .content-area { padding: 12px; }
+  .grid { grid-template-columns: 1fr !important; gap: 8px; }
+  .page-title { font-size: 15px; margin-bottom: 12px; padding-bottom: 10px; }
+  .page-title .page-sub { font-size: 10px; }
+  .card { padding: 12px; border-radius: 10px; }
+  .card .value { font-size: 16px; }
+  .card .label { font-size: 9px; }
+  .topbar-user span:not(.avatar):not(.logout-btn) { display: none; }
+  .topbar { height: 46px; }
+  table { display: block; overflow-x: auto; white-space: nowrap; }
+}
+
+/* Mobile overlay */
+.mobile-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 99; }
+@media (max-width: 640px) { .mobile-overlay.open { display: block; } }
+
+/* Hidden helpers */
+.header { display: none; }
+.tabs { display: none; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback } = React;
+
+const API = "";  // same origin
+
+// Export JSON helper
+function exportJSON(data, filename) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename || "export.json";
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function ExportBtn({ data, filename, label }) {
+  if (!data) return null;
+  return (
+    <button onClick={() => exportJSON(data, filename)} style={{
+      padding:"5px 12px", borderRadius:6, fontSize:10, fontWeight:600,
+      background:"transparent", border:"1px solid #1a1a2e", color:"#666",
+      cursor:"pointer", transition:"all 0.2s",
+    }} onMouseOver={e => { e.target.style.borderColor="#3b82f6"; e.target.style.color="#3b82f6"; }}
+       onMouseOut={e => { e.target.style.borderColor="#1a1a2e"; e.target.style.color="#666"; }}>
+      {label || "Export JSON"}
+    </button>
+  );
+}
+
+function Tip({ text }) {
+  const [show, setShow] = useState(false);
+  return (
+    <span style={{position:"relative", display:"inline-block", marginLeft:6, cursor:"help"}}
+          onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}>
+      <span style={{width:16, height:16, borderRadius:"50%", background:"#1a1a2e", border:"1px solid #2a2a4e",
+                    display:"inline-flex", alignItems:"center", justifyContent:"center", fontSize:10, color:"#666"}}>?</span>
+      {show && (
+        <div style={{position:"absolute", bottom:"calc(100% + 8px)", left:"50%", transform:"translateX(-50%)",
+                     background:"#1a1a2e", border:"1px solid #2a2a4e", borderRadius:8, padding:"8px 12px",
+                     fontSize:11, color:"#aaa", zIndex:100, maxWidth:300,
+                     boxShadow:"0 4px 20px rgba(0,0,0,0.5)", lineHeight:1.4,
+                     whiteSpace:"normal", minWidth:200}}>
+          {text}
+        </div>
+      )}
+    </span>
+  );
+}
+
+// Patch fetch globally to add auth token
+const _origFetch = window.fetch;
+window.fetch = function(url, opts = {}) {
+  const token = localStorage.getItem("platform_token");
+  if (token && typeof url === "string" && url.startsWith("/api/") && !url.includes("/platform/login")) {
+    opts.headers = { ...(opts.headers || {}), "Authorization": "Bearer " + token };
+  }
+  return _origFetch(url, opts).then(r => {
+    if (r.status === 401 && typeof url === "string" && !url.includes("/platform/")) {
+      localStorage.removeItem("platform_token");
+      window.location.reload();
+    }
+    return r;
+  });
+};
+
+function useFetch(url, interval = 5000) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+  const fetch_ = useCallback(() => {
+    fetch(API + url).then(r => r.json()).then(setData).catch(e => setError(e.message));
+  }, [url]);
+  useEffect(() => { fetch_(); const t = setInterval(fetch_, interval); return () => clearInterval(t); }, [fetch_, interval]);
+  return { data, error, refetch: fetch_ };
+}
+
+function MC({ label, value, sub, color, tip }) {
+  return (
+    <div className="card">
+      <div className="label">{label}{tip && <Tip text={tip} />}</div>
+      <div className={"value " + (color || "")}>{value}</div>
+      {sub && <div className="sub">{sub}</div>}
+    </div>
+  );
+}
+
+// ── Conclusions Tab ──
+function ConclusionsTab() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [recentMarkers, setRecentMarkers] = useState([]);
+
+  const load = () => {
+    setLoading(true);
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 15000);
+    fetch(API + "/api/quant/executive-summary", {signal: ctrl.signal}).then(r => r.json()).then(d => { clearTimeout(timeout); setData(d); setLoading(false); }).catch(() => { clearTimeout(timeout); setLoading(false); });
+    // Fetch recent markers with impact (separate, non-blocking)
+    fetch(API + "/api/markers/recent-impacts?limit=5")
+      .then(r => r.json())
+      .then(d => setRecentMarkers(Array.isArray(d) ? d : []))
+      .catch(() => setRecentMarkers([]));
+  };
+  useEffect(() => { load(); }, []);
+
+  if (loading) return <div className="loading">Cargando datos...</div>;
+  if (!data) return <div style={{textAlign:"center",padding:40}}><p style={{color:"#888",marginBottom:12}}>No se pudo cargar el resumen</p><button onClick={load} style={{padding:"8px 20px",background:"#1e1b4b",border:"1px solid #4c1d95",borderRadius:8,color:"#a78bfa",cursor:"pointer"}}>Reintentar</button></div>;
+
+  const ss = data.system_status || {};
+  const live = data.live_evidence || {};
+  const replay = data.replay_evidence || {};
+  const sp = data.score_parity || {};
+  const jc = data.joint_conclusions || {};
+  const nba = data.next_best_action || {};
+  const works = data.what_works || [];
+  const fails = data.what_fails || [];
+  const changes = data.what_to_change || [];
+  const dnt = data.do_not_touch || [];
+  const dqi = data.data_quality_issues || [];
+  const recs = data.top_recommendations || [];
+
+  const edgeColor = (e) => e === "POSITIVE" ? "#22c55e" : e === "NEUTRAL" ? "#eab308" : e === "NEGATIVE" ? "#ef4444" : "#888";
+  const confColor = (c) => c === "HIGH" ? "#22c55e" : c === "MEDIUM" ? "#eab308" : "#ef4444";
+  const dqColor = (d) => d === "GOOD" ? "#22c55e" : d === "DEGRADED" ? "#eab308" : d === "POOR" ? "#ef4444" : "#888";
+  const classColor = (c) => {
+    const m = { CONFIRMED: "#22c55e", LIKELY: "#3b82f6", CONFLICTING: "#ef4444", INVALID: "#888", WEAK_EVIDENCE: "#eab308", BLOCKED_BY_DATA_QUALITY: "#f97316" };
+    return m[c] || "#888";
+  };
+  const classBg = (c) => {
+    const m = { CONFIRMED: "rgba(34,197,94,0.15)", LIKELY: "rgba(59,130,246,0.15)", CONFLICTING: "rgba(239,68,68,0.15)", INVALID: "rgba(136,136,136,0.15)", WEAK_EVIDENCE: "rgba(234,179,8,0.15)", BLOCKED_BY_DATA_QUALITY: "rgba(249,115,22,0.15)" };
+    return m[c] || "rgba(136,136,136,0.15)";
+  };
+  const prioColor = (p) => p === "CRITICAL" ? "#ef4444" : p === "HIGH" ? "#f97316" : p === "MEDIUM" ? "#eab308" : "#22c55e";
+
+  return (<>
+    <div className="page-title" style={{display:"flex", justifyContent:"space-between", alignItems:"center", borderColor:"#2a2a1e"}}>
+      <div>
+        <span style={{color:"#f59e0b"}}>Conclusiones</span>
+        <div className="page-sub">Resumen ejecutivo del estado del sistema, evidencias y acciones recomendadas</div>
+      </div>
+      <div style={{display:"flex", gap:8}}>
+        <ExportBtn data={data} filename={"conclusiones_" + new Date().toISOString().split("T")[0] + ".json"} />
+        <button className="tab" onClick={load}>Actualizar</button>
+      </div>
+    </div>
+
+    {/* Hero Banner */}
+    <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, marginBottom:16}}>
+      <div className="card" style={{borderColor: edgeColor(ss.edge_status), textAlign:"center", padding:20}}>
+        <div className="label">Estado del Edge <Tip text="Indica si el sistema tiene ventaja estadistica real. POSITIVE = ganando, NEGATIVE = perdiendo, INCONCLUSIVE = insuficientes datos." /></div>
+        <div style={{fontSize:28, fontWeight:800, color: edgeColor(ss.edge_status), marginTop:4}}>{ss.edge_status || "?"}</div>
+        <div className="sub" style={{marginTop:4}}>{live.trades || 0} trades analizados</div>
+      </div>
+      <div className="card" style={{borderColor: confColor(ss.confidence), textAlign:"center", padding:20}}>
+        <div className="label">Confianza <Tip text="Nivel de confianza en las conclusiones. Depende del numero de trades, cobertura de scores y datos de replay." /></div>
+        <div style={{fontSize:28, fontWeight:800, color: confColor(ss.confidence), marginTop:4}}>{ss.confidence || "?"}</div>
+        <div className="sub" style={{marginTop:4}}>Cobertura actual: {((sp.post_diagnostics_coverage||{}).trade_coverage_pct ?? sp.coverage_pct) ?? 0}%</div>
+        <div className="sub" style={{marginTop:2, fontSize:10, color:"#666"}}>Global: {sp.coverage_pct || 0}%</div>
+      </div>
+      <div className="card" style={{borderColor: dqColor(ss.data_quality), textAlign:"center", padding:20}}>
+        <div className="label">Calidad de Datos <Tip text="Estado de la calidad de los datos recibidos. GOOD = todo correcto, POOR = faltan scores o hay inconsistencias." /></div>
+        <div style={{fontSize:28, fontWeight:800, color: dqColor(ss.data_quality), marginTop:4}}>{ss.data_quality || "?"}</div>
+        <div className="sub" style={{marginTop:4}}>Real: {sp.real_status || sp.status || "?"}</div>
+      </div>
+    </div>
+
+    {/* Joint Conclusion Badge */}
+    <div className="card" style={{marginBottom:16, borderColor: classColor(jc.classification), padding:"14px 20px"}}>
+      <div style={{display:"flex", alignItems:"center", gap:12}}>
+        <span style={{padding:"4px 14px", borderRadius:20, fontWeight:700, fontSize:12, background: classBg(jc.classification), color: classColor(jc.classification)}}>{jc.classification || "?"}</span>
+        <span style={{fontSize:12, color:"#bbb"}}>{jc.reasoning}</span>
+      </div>
+    </div>
+
+    {/* 4 Column Cards: Works / Fails / Change / Don't Touch */}
+    <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:12, marginBottom:16}}>
+      <div className="card" style={{borderTop:"3px solid #22c55e"}}>
+        <div className="label" style={{color:"#22c55e", marginBottom:8}}>Que Funciona</div>
+        {works.length === 0 && <div style={{fontSize:11, color:"#555"}}>No clear winners yet</div>}
+        {works.map((w, i) => <div key={i} style={{fontSize:10, color:"#aaa", padding:"3px 0", borderBottom:"1px solid #0f0f1a"}}>{w}</div>)}
+      </div>
+      <div className="card" style={{borderTop:"3px solid #ef4444"}}>
+        <div className="label" style={{color:"#ef4444", marginBottom:8}}>Que Falla</div>
+        {fails.length === 0 && <div style={{fontSize:11, color:"#555"}}>Nothing critical failing</div>}
+        {fails.map((f, i) => <div key={i} style={{fontSize:10, color:"#aaa", padding:"3px 0", borderBottom:"1px solid #0f0f1a"}}>{f}</div>)}
+      </div>
+      <div className="card" style={{borderTop:"3px solid #3b82f6"}}>
+        <div className="label" style={{color:"#3b82f6", marginBottom:8}}>Que Cambiar</div>
+        {changes.length === 0 && <div style={{fontSize:11, color:"#555"}}>No changes recommended</div>}
+        {changes.map((c, i) => (
+          <div key={i} style={{fontSize:10, padding:"4px 0", borderBottom:"1px solid #0f0f1a"}}>
+            <span style={{color: c.priority === "high" ? "#f97316" : c.priority === "medium" ? "#eab308" : "#3b82f6", fontWeight:600}}>[{c.priority}]</span>
+            <span style={{color:"#ccc", marginLeft:4}}>{c.title}</span>
+            <div style={{color:"#666", fontSize:9, marginTop:2}}>{c.action}</div>
+          </div>
+        ))}
+      </div>
+      <div className="card" style={{borderTop:"3px solid #a855f7"}}>
+        <div className="label" style={{color:"#a855f7", marginBottom:8}}>No Tocar</div>
+        {dnt.length === 0 && <div style={{fontSize:11, color:"#555"}}>Need more data</div>}
+        {dnt.map((d, i) => <div key={i} style={{fontSize:10, color:"#aaa", padding:"3px 0", borderBottom:"1px solid #0f0f1a"}}>{d}</div>)}
+      </div>
+    </div>
+
+    {/* Evidence Split: Live vs Replay */}
+    <h3 className="section-title">Evidencia <Tip text="Datos reales del bot (live) y datos historicos (replay) que respaldan las conclusiones." /></h3>
+    <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:16}}>
+      <div className="card" style={{borderTop:"3px solid #3b82f6"}}>
+        <div className="label" style={{color:"#3b82f6", marginBottom:8}}>Live Trades</div>
+        {live.status === "NO_DATA" ? <div style={{color:"#555", fontSize:11}}>No live data</div> : (<>
+          <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8}}>
+            <div><span style={{fontSize:9, color:"#666"}}>Trades</span><div style={{fontSize:16, fontWeight:700}}>{live.trades}</div></div>
+            <div><span style={{fontSize:9, color:"#666"}}>Win Rate</span><div style={{fontSize:16, fontWeight:700, color: live.winrate >= 50 ? "#22c55e" : "#ef4444"}}>{live.winrate}%</div></div>
+            <div><span style={{fontSize:9, color:"#666"}}>Expectancy</span><div style={{fontSize:16, fontWeight:700, color: live.expectancy >= 0 ? "#22c55e" : "#ef4444"}}>${live.expectancy}</div></div>
+            <div><span style={{fontSize:9, color:"#666"}}>Profit Factor</span><div style={{fontSize:16, fontWeight:700, color: live.profit_factor >= 1 ? "#22c55e" : "#ef4444"}}>{live.profit_factor}</div></div>
+            <div><span style={{fontSize:9, color:"#666"}}>Net PnL</span><div style={{fontSize:16, fontWeight:700, color: live.net_pnl >= 0 ? "#22c55e" : "#ef4444"}}>${live.net_pnl}</div></div>
+            <div><span style={{fontSize:9, color:"#666"}}>Max DD</span><div style={{fontSize:16, fontWeight:700, color:"#ef4444"}}>${live.max_drawdown}</div></div>
+          </div>
+          <div style={{display:"flex", gap:12, marginTop:8, fontSize:10, color:"#666"}}>
+            <span>W: {live.wins} / L: {live.losses}</span>
+            <span>Avg W: ${live.avg_win} / L: ${live.avg_loss}</span>
+            <span>Fee killed: {live.fee_killed}</span>
+          </div>
+        </>)}
+      </div>
+      <div className="card" style={{borderTop:"3px solid #a855f7"}}>
+        <div className="label" style={{color:"#a855f7", marginBottom:8}}>Replay (Historical)</div>
+        <div style={{textAlign:"center", padding:20}}>
+          <div style={{fontSize:14, color: replay.status === "DATA_AVAILABLE" ? "#a855f7" : "#555", fontWeight:600}}>{replay.status}</div>
+          <div style={{fontSize:11, color:"#444", marginTop:6}}>{replay.note}</div>
+          {replay.files > 0 && (
+            <div style={{fontSize:10, color:"#666", marginTop:6}}>{replay.files} files, {replay.days} days, {replay.coins} coins</div>
+          )}
+        </div>
+      </div>
+    </div>
+
+    {/* Score Parity */}
+    <h3 className="section-title">Paridad de Scores <Tip text="Verifica que los scores de las senales coinciden entre live y replay. Discrepancias indican problemas de datos." /></h3>
+    <div className="card" style={{marginBottom:16, borderColor: sp.status === "OK" ? "#22c55e" : sp.status === "DEGRADED" ? "#eab308" : sp.status === "NO_DATA" ? "#888" : "#ef4444"}}>
+      <div style={{display:"flex", alignItems:"center", gap:12, marginBottom:8}}>
+        <span className={"tag " + (sp.status === "OK" ? "tag-green" : sp.status === "DEGRADED" ? "tag-yellow" : sp.status === "NO_DATA" ? "tag-blue" : "tag-red")}>{sp.status}</span>
+        <span style={{fontSize:12, color:"#aaa"}}>{sp.details}</span>
+        <span style={{fontSize:11, color:"#888", marginLeft:"auto"}}>Coverage: {sp.coverage_pct || 0}%</span>
+      </div>
+
+      {/* Coverage breakdown: legacy vs post-diagnostics */}
+      {(sp.legacy_stats || sp.post_diagnostics_coverage) && (() => {
+        const pd = sp.post_diagnostics_coverage || {};
+        const ls = sp.legacy_stats || {};
+        const pdTradePct = pd.trade_coverage_pct ?? 0;
+        const globalPct = sp.coverage_pct ?? 0;
+        const realStatus = sp.real_status || sp.status;
+        return (
+          <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:10, padding:"8px 0", borderBottom:"1px solid #1a1a2e"}}>
+            <div>
+              <div style={{fontSize:9, color:"#666", marginBottom:2}}>Cobertura global</div>
+              <div style={{fontSize:16, fontWeight:700, color:"#eab308"}}>{globalPct}%</div>
+              <div style={{fontSize:9, color:"#555"}}>incluye datos legacy</div>
+            </div>
+            <div>
+              <div style={{fontSize:9, color:"#666", marginBottom:2}}>Cobertura actual</div>
+              <div style={{fontSize:16, fontWeight:700, color: pdTradePct >= 90 ? "#22c55e" : pdTradePct >= 50 ? "#eab308" : "#ef4444"}}>{pd.trade_count > 0 ? pdTradePct + "%" : "—"}</div>
+              <div style={{fontSize:9, color:"#555"}}>desde entry diagnostics</div>
+            </div>
+            <div>
+              <div style={{fontSize:9, color:"#666", marginBottom:2}}>Trades legacy | actuales</div>
+              <div style={{fontSize:14, fontWeight:700, color:"#aaa"}}>{ls.legacy_trades ?? "?"} <span style={{color:"#555"}}>|</span> {pd.trade_count ?? "?"}</div>
+              <div style={{fontSize:9, color: realStatus === "OK" ? "#22c55e" : realStatus === "DEGRADED" ? "#eab308" : "#ef4444"}}>Real status: {realStatus || "?"}</div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {sp.trade_scores && sp.trade_scores.total > 0 && (
+        <div style={{display:"grid", gridTemplateColumns:"repeat(5, 1fr)", gap:8, marginTop:8}}>
+          <div><span style={{fontSize:9, color:"#666"}}>Trade Signal</span><div style={{fontSize:13, fontWeight:600, color: sp.trade_scores.signal_score_pct >= 80 ? "#22c55e" : "#eab308"}}>{sp.trade_scores.signal_score_pct}%</div></div>
+          <div><span style={{fontSize:9, color:"#666"}}>Trade Trend</span><div style={{fontSize:13, fontWeight:600, color: sp.trade_scores.trend_score_pct >= 80 ? "#22c55e" : "#eab308"}}>{sp.trade_scores.trend_score_pct}%</div></div>
+          <div><span style={{fontSize:9, color:"#666"}}>Trade Micro</span><div style={{fontSize:13, fontWeight:600, color: sp.trade_scores.micro_score_pct >= 80 ? "#22c55e" : "#eab308"}}>{sp.trade_scores.micro_score_pct}%</div></div>
+          <div><span style={{fontSize:9, color:"#666"}}>All Present</span><div style={{fontSize:13, fontWeight:600, color: sp.trade_scores.all_present_pct >= 80 ? "#22c55e" : "#ef4444"}}>{sp.trade_scores.all_present_pct}%</div></div>
+          <div><span style={{fontSize:9, color:"#666"}}>All Zero</span><div style={{fontSize:13, fontWeight:600, color: sp.trade_scores.all_zero_pct <= 5 ? "#22c55e" : "#ef4444"}}>{sp.trade_scores.all_zero_pct}%</div></div>
+        </div>
+      )}
+      {sp.anomalies && sp.anomalies.length > 0 && (
+        <div style={{marginTop:8}}>
+          {sp.anomalies.map((a, i) => (
+            <div key={i} style={{fontSize:10, padding:"2px 0", color: a.severity === "critical" ? "#ef4444" : "#eab308"}}>
+              [{a.severity}] {a.code}: {a.message}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+
+    {/* Data Quality Issues */}
+    {dqi.length > 0 && (<>
+      <h3 className="section-title">Problemas de Calidad <Tip text="Incidencias detectadas en los datos: scores faltantes, inconsistencias o anomalias." /></h3>
+      <div className="card" style={{marginBottom:16}}>
+        {dqi.map((issue, i) => (
+          <div key={i} style={{fontSize:11, padding:"3px 0", color:"#eab308"}}>{issue}</div>
+        ))}
+      </div>
+    </>)}
+
+    {/* Cambios recientes con impacto */}
+    {recentMarkers.length > 0 && (<>
+      <h3 className="section-title">Cambios Recientes con Impacto <Tip text="Ultimos 5 cambios marcados con su impacto medido (20 trades antes vs 20 despues). Permite ver si tus ajustes recientes han mejorado o empeorado los resultados." /></h3>
+      <div className="card scroll" style={{marginBottom:16}}>
+        <table>
+          <thead><tr>
+            <th>Cuando</th>
+            <th>Categoria</th>
+            <th>Etiqueta</th>
+            <th style={{textAlign:"center"}}>Estado</th>
+            <th style={{textAlign:"right"}}>Δ WR</th>
+            <th style={{textAlign:"right"}}>Δ Expectancy</th>
+            <th style={{textAlign:"right"}}>Δ SL%</th>
+          </tr></thead>
+          <tbody>
+            {recentMarkers.map(m => {
+              const imp = m.impact_data || {};
+              const sColor = m.impact_status === "IMPROVED" ? "#22c55e" : m.impact_status === "WORSENED" ? "#ef4444" : "#eab308";
+              const dExp = imp.delta_expectancy;
+              const dWr = imp.delta_wr;
+              const dSl = imp.delta_sl_rate;
+              const fmt = (v, suffix) => v == null ? "-" : (v > 0 ? "+" : "") + v + (suffix || "");
+              return (
+                <tr key={m.id}>
+                  <td style={{fontSize:10, color:"#666"}}>{m.timestamp ? new Date(m.timestamp).toLocaleString("es-ES", {day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"}) : "-"}</td>
+                  <td style={{fontSize:10, color:"#888"}}>{m.category}</td>
+                  <td style={{fontSize:11, fontWeight:600, maxWidth:280, overflow:"hidden", textOverflow:"ellipsis"}} title={m.label}>{m.label}</td>
+                  <td style={{textAlign:"center"}}><span className="tag" style={{background: sColor + "20", color: sColor, border:"1px solid " + sColor + "40"}}>{m.impact_status || "PENDING"}</span></td>
+                  <td style={{textAlign:"right", fontFamily:"monospace", fontSize:10, color: dWr > 0 ? "#22c55e" : dWr < 0 ? "#ef4444" : "#888"}}>{fmt(dWr, "%")}</td>
+                  <td style={{textAlign:"right", fontFamily:"monospace", fontSize:10, fontWeight:600, color: dExp > 0 ? "#22c55e" : dExp < 0 ? "#ef4444" : "#888"}}>{fmt(dExp)}</td>
+                  <td style={{textAlign:"right", fontFamily:"monospace", fontSize:10, color: dSl < 0 ? "#22c55e" : dSl > 0 ? "#ef4444" : "#888"}}>{fmt(dSl, "%")}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </>)}
+
+    {/* Cola de Acciones */}
+    {recs.length > 0 && (<>
+      <h3 className="section-title">Cola de Acciones ({recs.length})</h3>
+      <div className="card scroll" style={{marginBottom:16}}>
+        <table>
+          <thead><tr><th>Priority</th><th>Type</th><th>Title</th><th>Action</th><th>Evidence</th></tr></thead>
+          <tbody>
+            {recs.map((r, i) => (
+              <tr key={i}>
+                <td><span className={"tag " + (r.confidence === "high" ? "tag-green" : r.confidence === "medium" ? "tag-yellow" : "tag-blue")}>{r.confidence}</span></td>
+                <td><span className={"tag " + (r.type === "recommendation" ? "tag-blue" : r.type === "warning" ? "tag-yellow" : "tag-green")}>{r.type}</span></td>
+                <td style={{fontWeight:600, fontSize:11}}>{r.title}</td>
+                <td style={{fontSize:10, color:"#3b82f6"}}>{r.action}</td>
+                <td style={{fontSize:10, color:"#888"}}>{r.evidence}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>)}
+
+    {/* Siguiente Accion Prioritaria */}
+    <div className="card" style={{borderColor: prioColor(nba.priority), background:"#0a0a12", padding:20}}>
+      <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:8}}>
+        <span style={{fontSize:10, fontWeight:700, color: prioColor(nba.priority), textTransform:"uppercase", letterSpacing:0.5}}>Siguiente Accion Prioritaria</span>
+        <span className={"tag " + (nba.priority === "CRITICAL" ? "tag-red" : nba.priority === "HIGH" ? "tag-yellow" : "tag-green")}>{nba.priority}</span>
+        {nba.category && <span style={{fontSize:9, color:"#555"}}>[{nba.category}]</span>}
+      </div>
+      <div style={{fontSize:14, fontWeight:700, color:"#e0e0e8"}}>{nba.action}</div>
+      <div style={{fontSize:11, color:"#888", marginTop:4}}>{nba.reasoning}</div>
+    </div>
+  </>);
+}
+
+// ── System Tab ──
+function SystemTab() {
+  const _title = "Sistema";
+  const { data: status } = useFetch("/api/status", 3000);
+  const { data: disk } = useFetch("/api/system/disk", 10000);
+
+  if (!status || !disk) return <div className="loading">Loading...</div>;
+
+  const d = disk.disk || {};
+  const g = disk.growth || {};
+  const dirs = disk.directories || {};
+  const sev = d.severity || "ok";
+
+  return (<>
+    <div className="page-title">Sistema<div className="page-sub">Salud tecnica, disco, CPU, RAM, estado de conexiones</div></div>
+    <div className="grid">
+      <MC label="Status" value={status.status?.toUpperCase()} color="green" />
+      <MC label="Coins" value={status.features?.coins_tracked || 0} sub="tracking" color="purple" />
+      <MC label="Events" value={(status.features?.events_ingested || 0).toLocaleString()} sub="ingested" />
+      <MC label="Features" value={status.features?.total_features || 0} sub="computed" color="blue" />
+    </div>
+
+    <h3 className="section-title">Uso de Disco <Tip text="Espacio ocupado en el servidor por datos, logs y base de datos. Si supera el 85% se activa una alerta." /></h3>
+    <div className="grid">
+      <MC label="Total" value={d.total_gb + " GB"} />
+      <MC label="Used" value={d.used_gb + " GB"} sub={d.usage_pct + "%"} color={sev} />
+      <MC label="Free" value={d.free_gb + " GB"} />
+      <MC label="Status" value={sev.toUpperCase()} color={sev} />
+    </div>
+    <div className="card" style={{marginBottom: 16}}>
+      <div className="progress-bar">
+        <div className="progress-fill" style={{
+          width: d.usage_pct + "%",
+          background: sev === "ok" ? "#22c55e" : sev === "warning" ? "#eab308" : "#ef4444"
+        }} />
+      </div>
+      <div style={{display: "flex", justifyContent: "space-between", marginTop: 8}}>
+        <span className="sub">Growth 24h: {g.growth_24h_gb} GB</span>
+        <span className="sub">Est. {g.estimated_days_remaining} days remaining</span>
+      </div>
+    </div>
+
+    <h3 className="section-title">Uso por Directorio <Tip text="Desglose del espacio ocupado por cada directorio: raw, features, logs, etc." /></h3>
+    <div className="card">
+      <table>
+        <thead><tr><th>Directory</th><th style={{textAlign:"right"}}>Size</th><th style={{textAlign:"right"}}>Files</th></tr></thead>
+        <tbody>
+          {Object.entries(dirs).map(([name, info]) => (
+            <tr key={name}>
+              <td>{name}</td>
+              <td style={{textAlign:"right"}}>{info.size_gb} GB</td>
+              <td style={{textAlign:"right"}}>{info.file_count >= 0 ? info.file_count : "-"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </>);
+}
+
+// ── Features Tab ──
+function FeaturesTab() {
+  const { data: features } = useFetch("/api/features", 5000);
+  const [selected, setSelected] = useState(null);
+
+  if (!features) return <div className="loading">Loading...</div>;
+  const coins = Object.keys(features);
+
+  return (<>
+    <div className="page-title">Features<div className="page-sub">48 features en tiempo real por moneda</div></div>
+    <div style={{display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 16}}>
+      {coins.map(c => (
+        <button key={c} className={"tab " + (selected === c ? "active" : "")} onClick={() => setSelected(c)}>{c}</button>
+      ))}
+    </div>
+    {selected && features[selected] ? (
+      <div className="card scroll">
+        <table>
+          <thead><tr><th>Feature</th><th style={{textAlign:"right"}}>Value</th></tr></thead>
+          <tbody>
+            {Object.entries(features[selected]).filter(([k]) => !["coin","timestamp_ms","version"].includes(k)).map(([k, v]) => (
+              <tr key={k}>
+                <td>{k}</td>
+                <td style={{textAlign:"right", color: Number(v) > 0 ? "#22c55e" : Number(v) < 0 ? "#ef4444" : "#888"}}>{typeof v === "number" ? v.toFixed(6) : String(v)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    ) : <div className="loading">Select a coin</div>}
+  </>);
+}
+
+// ── Regimes Tab ──
+function RegimesTab() {
+  const { data } = useFetch("/api/regimes", 5000);
+
+  if (!data) return <div className="loading">Loading...</div>;
+
+  const regimeColor = (r) => {
+    if (r?.includes("trending_up")) return "tag-green";
+    if (r?.includes("trending_down")) return "tag-red";
+    if (r?.includes("high_vol")) return "tag-yellow";
+    if (r?.includes("quiet")) return "tag-blue";
+    return "tag-purple";
+  };
+
+  return (<>
+    <div className="page-title">Regimenes de Mercado<div className="page-sub">Clasificacion actual: trending, choppy, high vol, quiet</div></div>
+    <div className="card">
+      <table>
+        <thead><tr><th>Coin</th><th>Regime</th><th style={{textAlign:"right"}}>Confianza</th><th style={{textAlign:"right"}}>Trend</th><th style={{textAlign:"right"}}>Volatility</th></tr></thead>
+        <tbody>
+          {Object.entries(data).map(([coin, s]) => (
+            <tr key={coin}>
+              <td className="purple">{coin}</td>
+              <td><span className={"tag " + regimeColor(s.regime)}>{s.regime}</span></td>
+              <td style={{textAlign:"right"}}>{(s.confidence * 100).toFixed(0)}%</td>
+              <td style={{textAlign:"right", color: s.trend_strength > 0 ? "#22c55e" : s.trend_strength < 0 ? "#ef4444" : "#888"}}>{s.trend_strength?.toFixed(4)}</td>
+              <td style={{textAlign:"right"}}>{s.volatility_level?.toFixed(4)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </>);
+}
+
+// ── Capture Tab ──
+function CaptureTab() {
+  const _title = "Captura";
+  const { data: status } = useFetch("/api/status", 3000);
+  const { data: disk } = useFetch("/api/system/disk", 10000);
+
+  if (!status || !disk) return <div className="loading">Loading...</div>;
+
+  const dirs = disk.directories || {};
+  const rawFiles = dirs.raw?.file_count || 0;
+  const rawSize = dirs.raw?.size_gb || 0;
+
+  return (<>
+    <div className="page-title">Captura de Datos<div className="page-sub">Eventos ingestados, archivos parquet, coins trackeados</div></div>
+    <div className="grid">
+      <MC label="Events Ingested" value={(status.features?.events_ingested || 0).toLocaleString()} color="blue" />
+      <MC label="Raw Files" value={rawFiles} sub="parquet chunks" />
+      <MC label="Raw Size" value={rawSize + " GB"} />
+      <MC label="Coins Tracked" value={status.features?.coins_tracked || 0} color="purple" />
+    </div>
+
+    <h3 className="section-title" style={{marginTop: 16}}>Calidad de Datos <Tip text="Metricas de computo de features y cache hits del sistema de captura." /></h3>
+    <div className="grid">
+      <MC label="Feature Computes" value={(status.features?.computes || 0).toLocaleString()} />
+      <MC label="Cache Hits" value={(status.features?.cache_hits || 0).toLocaleString()} />
+    </div>
+  </>);
+}
+
+// ── Contract Tab ──
+function ContractTab() {
+  const { data } = useFetch("/api/feature-contract", 30000);
+
+  if (!data) return <div className="loading">Loading...</div>;
+
+  return (<>
+    <div className="page-title">Contrato de Features<div className="page-sub">Definicion formal de todas las features del sistema</div></div>
+    <div className="grid">
+      <MC label="Total Features" value={data.total_features} color="blue" />
+      <MC label="Version" value={data.version?.substring(0, 30) + "..."} />
+      {Object.entries(data.groups || {}).map(([g, n]) => (
+        <MC key={g} label={g} value={n} sub="features" />
+      ))}
+    </div>
+
+    <div className="card scroll" style={{marginTop: 16}}>
+      <table>
+        <thead><tr><th>Name</th><th>Group</th><th>Source</th><th style={{textAlign:"right"}}>Window</th><th>Description</th></tr></thead>
+        <tbody>
+          {(data.features || []).map((f, i) => (
+            <tr key={i}>
+              <td className="blue">{f.name}</td>
+              <td><span className={"tag tag-purple"}>{f.group}</span></td>
+              <td>{f.source}</td>
+              <td style={{textAlign:"right"}}>{f.window_sec > 0 ? f.window_sec + "s" : "-"}</td>
+              <td style={{color: "#666", fontSize: 10}}>{f.description}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </>);
+}
+
+// ── Daily Report Tab ──
+function DailyReportTab() {
+  const [reports, setReports] = useState({});  // date -> report
+  const [selected, setSelected] = useState(null);  // selected date
+  const [loading, setLoading] = useState(false);
+  const [days, setDays] = useState([]);  // list of available dates
+
+  // Generate list of last 14 days
+  useEffect(() => {
+    const d = [];
+    for (let i = 0; i < 14; i++) {
+      const date = new Date(Date.now() - i * 86400000);
+      d.push(date.toISOString().split("T")[0]);
+    }
+    setDays(d);
+    // Auto-load today
+    loadDay(d[0]);
+  }, []);
+
+  const loadDay = (dateStr) => {
+    if (reports[dateStr]) { setSelected(dateStr); return; }
+    setLoading(true);
+    setSelected(dateStr);
+    fetch(API + "/api/daily-report/" + dateStr).then(r => r.json()).then(d => {
+      setReports(prev => ({...prev, [dateStr]: d}));
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  };
+
+  const report = selected ? reports[selected] : null;
+
+  const check = (ok) => ok ? "✓" : "✗";
+  const checkColor = (ok) => ok ? "#22c55e" : "#ef4444";
+  const scoreColor = (s) => s >= 7 ? "#22c55e" : s >= 4 ? "#eab308" : "#ef4444";
+
+  return (<>
+    <div className="page-title">Informe Diario <Tip text="Informe diario automatico. Haz click en un dia para ver el detalle completo. Se genera al cargar." /><div className="page-sub">Resumen automatico por dia con comparativa historica</div></div>
+    {/* Days table */}
+    <div className="card" style={{marginBottom:16}}>
+      <table>
+        <thead><tr>
+          <th>Date</th><th>Day</th><th style={{textAlign:"right"}}>Score</th>
+          <th style={{textAlign:"right"}}>Trades</th><th style={{textAlign:"right"}}>Net PnL</th>
+          <th style={{textAlign:"right"}}>WR</th><th style={{textAlign:"right"}}>PF</th>
+          <th style={{textAlign:"right"}}>Issues</th><th></th>
+        </tr></thead>
+        <tbody>
+          {days.map(d => {
+            const r = reports[d];
+            const isSelected = selected === d;
+            const g = r?.general || {};
+            const p = r?.pnl || {};
+            const s = r?.scores || {};
+            const issueCount = r ? Object.values(r).reduce((sum, sec) => sum + (sec?.issues?.length || 0), 0) : 0;
+            return (
+              <tr key={d} onClick={() => loadDay(d)} style={{cursor:"pointer", background: isSelected ? "#1a1a3e" : "transparent"}}>
+                <td style={{fontWeight: isSelected ? 700 : 400, color: isSelected ? "#3b82f6" : "#e0e0e8"}}>{d}</td>
+                <td style={{color:"#666"}}>{r ? r.day_of_week?.substring(0,3) : "..."}</td>
+                <td style={{textAlign:"right", color: r ? scoreColor(s.overall || 0) : "#444", fontWeight:600}}>{r ? (s.overall || 0) + "/10" : "-"}</td>
+                <td style={{textAlign:"right"}}>{r ? g.trades || 0 : "-"}</td>
+                <td style={{textAlign:"right", color: r ? (Number(g.net_pnl) >= 0 ? "#22c55e" : "#ef4444") : "#444"}}>{r ? "$" + (g.net_pnl || 0) : "-"}</td>
+                <td style={{textAlign:"right", color: r ? (p.win_rate >= 50 ? "#22c55e" : p.win_rate >= 40 ? "#eab308" : "#ef4444") : "#444"}}>{r ? (p.win_rate || 0) + "%" : "-"}</td>
+                <td style={{textAlign:"right"}}>{r ? (p.profit_factor || 0) : "-"}</td>
+                <td style={{textAlign:"right", color: issueCount > 0 ? "#eab308" : "#22c55e"}}>{r ? issueCount : "-"}</td>
+                <td style={{textAlign:"right"}}>{!r && <span style={{color:"#444", fontSize:10}}>click to load</span>}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+
+    {loading && <div className="loading">Generating report for {selected}...</div>}
+
+    {report && !loading && (() => {
+      const g = report.general || {};
+      const sys = report.system || {};
+      const integ = report.integration || {};
+      const pnl = report.pnl || {};
+      const sig = report.signals || {};
+      const feat = report.features || {};
+      const stor = report.storage || {};
+      const trad = report.trading || {};
+      const scores = report.scores || {};
+      const allIssues = [];
+      for (const [section, data] of Object.entries(report)) {
+        if (data && typeof data === "object" && data.issues) {
+          for (const issue of data.issues) allIssues.push({section, issue});
+        }
+      }
+      return (<>
+
+    {/* Scores */}
+    <div className="grid" style={{gridTemplateColumns:"repeat(4, 1fr)"}}>
+      <MC label="Overall" value={scores.overall + "/10"} color={scores.overall >= 7 ? "green" : scores.overall >= 4 ? "yellow" : "red"} />
+      <MC label="Calidad de Datos" value={scores.data_quality + "/10"} color={scores.data_quality >= 7 ? "green" : "yellow"} />
+      <MC label="Trading" value={scores.trading + "/10"} color={scores.trading >= 6 ? "green" : scores.trading >= 4 ? "yellow" : "red"} />
+      <MC label="System" value={scores.system + "/10"} color={scores.system >= 8 ? "green" : "yellow"} />
+    </div>
+
+    {/* 1. General */}
+    <h3 className="section-title" style={{marginTop:16}}>General</h3>
+    <div className="grid">
+      <MC label="Mode" value={g.mode || "?"} color="purple" />
+      <MC label="Trades" value={g.trades || 0} />
+      <MC label="PnL Bruto" value={"$" + (g.total_pnl || 0)} color={Number(g.total_pnl) >= 0 ? "green" : "red"} />
+      <MC label="Fees" value={"$" + (g.total_fees || 0)} color="yellow" />
+      <MC label="PnL Neto" value={"$" + (g.net_pnl || 0)} color={Number(g.net_pnl) >= 0 ? "green" : "red"} />
+    </div>
+
+    {/* 2. System */}
+    <h3 className="section-title" style={{marginTop:16}}>System</h3>
+    <div className="card">
+      <div style={{display:"flex", gap:24, flexWrap:"wrap", fontSize:12}}>
+        <span style={{color: checkColor(sys.bot_running)}}>{check(sys.bot_running)} Bot running</span>
+        <span style={{color: checkColor(sys.platform_running)}}>{check(sys.platform_running)} Platform running</span>
+        <span style={{color: checkColor(sys.ws_stable)}}>{check(sys.ws_stable)} WS stable</span>
+        <span style={{color: checkColor(sys.cpu_pct < 80)}}>{check(sys.cpu_pct < 80)} CPU {sys.cpu_pct}%</span>
+        <span style={{color: checkColor(sys.ram_pct < 85)}}>{check(sys.ram_pct < 85)} RAM {sys.ram_pct}%</span>
+      </div>
+    </div>
+
+    {/* 3. Integration */}
+    <h3 className="section-title" style={{marginTop:16}}>Integration</h3>
+    <div className="grid">
+      <MC label="Bot Trades" value={integ.bot_trades || 0} />
+      <MC label="Platform Trades" value={integ.platform_trades || 0} />
+      <MC label="Diff" value={integ.diff_trades || 0} color={integ.diff_trades === 0 ? "green" : "red"} />
+      <MC label="Signals" value={integ.signals_received || 0} />
+      <MC label="Duplicates" value={integ.duplicates || 0} color={integ.duplicates === 0 ? "green" : "red"} />
+    </div>
+
+    {/* 4. PnL */}
+    <h3 className="section-title" style={{marginTop:16}}>PnL & Consistency</h3>
+    <div className="grid">
+      <MC label="Wins" value={pnl.wins || 0} color="green" />
+      <MC label="Losses" value={pnl.losses || 0} color="red" />
+      <MC label="Win Rate" value={(pnl.win_rate || 0) + "%"} color={pnl.win_rate >= 50 ? "green" : pnl.win_rate >= 40 ? "yellow" : "red"} />
+      <MC label="Profit Factor" value={pnl.profit_factor || 0} color={pnl.profit_factor >= 1 ? "green" : "red"} />
+      <MC label="Avg W / L" value={"$" + (pnl.avg_win || 0) + " / $" + (pnl.avg_loss || 0)} />
+      <MC label="Fee Killed" value={pnl.fee_killed || 0} color={pnl.fee_killed === 0 ? "green" : "red"} />
+    </div>
+
+    {/* 5. Signals */}
+    <h3 className="section-title" style={{marginTop:16}}>Signals</h3>
+    <div className="grid">
+      <MC label="ENTER" value={sig.enter || 0} color="green" />
+      <MC label="SKIP" value={sig.skip || 0} color="yellow" />
+      <MC label="BLOCKED" value={sig.blocked || 0} color="red" />
+    </div>
+
+    {/* 6-7. Features & Storage */}
+    <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginTop:16}}>
+      <div>
+        <h3 className="section-title">Features</h3>
+        <div className="card">
+          <div style={{fontSize:12, display:"flex", flexDirection:"column", gap:4}}>
+            <span>Snapshots today: {feat.snapshots_today || 0}</span>
+            <span>Coins tracked: {feat.coins_with_features || 0}</span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <h3 className="section-title">Storage</h3>
+        <div className="card">
+          <div style={{fontSize:12, display:"flex", flexDirection:"column", gap:4}}>
+            <span>Disk: {stor.disk_pct}% ({stor.disk_used_gb} GB used / {stor.disk_free_gb} GB free)</span>
+            <span>Parquet files today: {stor.parquet_files_today}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* 8. Trading Analysis */}
+    <h3 className="section-title" style={{marginTop:16}}>Trading Analysis</h3>
+    <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:12}}>
+      <div className="card">
+        <div className="label" style={{marginBottom:8}}>Best Coins</div>
+        {(trad.best_coins || []).map((c, i) => (
+          <div key={i} style={{fontSize:11, display:"flex", justifyContent:"space-between"}}>
+            <span className="purple">{c.coin}</span>
+            <span style={{color:"#22c55e"}}>${c.pnl} ({c.wr}% WR, {c.trades}t)</span>
+          </div>
+        ))}
+      </div>
+      <div className="card">
+        <div className="label" style={{marginBottom:8}}>Worst Coins</div>
+        {(trad.worst_coins || []).map((c, i) => (
+          <div key={i} style={{fontSize:11, display:"flex", justifyContent:"space-between"}}>
+            <span className="purple">{c.coin}</span>
+            <span style={{color:"#ef4444"}}>${c.pnl} ({c.wr}% WR, {c.trades}t)</span>
+          </div>
+        ))}
+      </div>
+    </div>
+
+    {/* 9. Problems */}
+    {allIssues.length > 0 && (<>
+      <h3 className="section-title" style={{marginTop:16}}>Problems Detected</h3>
+      <div className="card">
+        {allIssues.map((p, i) => (
+          <div key={i} style={{padding:"3px 0", fontSize:11, color:"#eab308"}}>
+            <span style={{color:"#666"}}>[{p.section}]</span> {p.issue}
+          </div>
+        ))}
+      </div>
+    </>)}
+
+    {allIssues.length === 0 && (
+      <div className="card" style={{marginTop:16, textAlign:"center", color:"#22c55e", padding:20}}>
+        No problems detected today
+      </div>
+    )}
+
+    {/* Exit reasons */}
+    {trad.by_exit_reason && trad.by_exit_reason.length > 0 && (<>
+      <h3 className="section-title" style={{marginTop:16}}>Exit Reasons</h3>
+      <div className="card">
+        <table><thead><tr><th>Reason</th><th style={{textAlign:"right"}}>Trades</th><th style={{textAlign:"right"}}>PnL</th></tr></thead>
+        <tbody>
+          {trad.by_exit_reason.map((r, i) => (
+            <tr key={i}><td><span className={"tag " + (r.exit_reason === "SL" ? "tag-red" : "tag-green")}>{r.exit_reason}</span></td>
+            <td style={{textAlign:"right"}}>{r.trades}</td>
+            <td style={{textAlign:"right", color: Number(r.pnl) >= 0 ? "#22c55e" : "#ef4444"}}>${r.pnl}</td></tr>
+          ))}
+        </tbody></table>
+      </div>
+    </>)}
+      </>);
+    })()}
+  </>);
+}
+
+// ── Research Lab Tab ──
+function LabTab() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [view, setView] = useState("overview");
+  const [cfData, setCfData] = useState(null);
+  const [rejData, setRejData] = useState(null);
+  const [cfgData, setCfgData] = useState(null);
+  const [diagData, setDiagData] = useState(null);
+  const [eqData, setEqData] = useState(null);
+
+  const load = () => {
+    setLoading(true);
+    fetch(API + "/api/quant/full").then(r => r.json()).then(d => { setData(d); setLoading(false); }).catch(() => setLoading(false));
+    fetch(API + "/api/quant/counterfactual").then(r => r.json()).then(d => setCfData(d)).catch(() => {});
+    fetch(API + "/api/quant/rejections").then(r => r.json()).then(d => setRejData(d)).catch(() => {});
+    fetch(API + "/api/quant/config-analysis").then(r => r.json()).then(d => setCfgData(d)).catch(() => {});
+    fetch(API + "/api/quant/diagnostic").then(r => r.json()).then(d => setDiagData(d)).catch(() => {});
+    fetch(API + "/api/quant/entry-quality").then(r => r.json()).then(d => setEqData(d)).catch(() => {});
+  };
+  useEffect(() => { load(); }, []);
+
+  if (loading) return <div className="loading">Generating quant report...</div>;
+  if (!data) return <div className="loading"><button onClick={load} className="tab active">Load Research Lab</button></div>;
+
+  const m = data.metrics?.global || {};
+  const risk = data.metrics?.risk || {};
+  const exec = data.metrics?.execution || {};
+  const decisions = data.decisions || [];
+  const analysis = data.analysis || {};
+  const insights = analysis.insights || [];
+  const warnings = analysis.warnings || [];
+  const recommendations = analysis.recommendations || [];
+
+  const views = ["overview", "metrics", "analysis", "score", "mode", "config", "rejections", "counterfactual", "diagnostic", "quality", "experiments", "decisions"];
+
+  return (<>
+    <div className="page-title">Research Lab <Tip text="Vision general del rendimiento con KPIs principales y decisiones automaticas del sistema." /><div className="page-sub">Analisis cuantitativo: metricas, experiments, decisions</div></div>
+    <div style={{display:"flex", gap:4, flexWrap:"wrap", marginBottom:16}}>
+      {views.map(v => (
+        <button key={v} className={"tab " + (view === v ? "active" : "")} onClick={() => setView(v)}>{v.charAt(0).toUpperCase() + v.slice(1)}</button>
+      ))}
+      <ExportBtn data={(() => {
+        // Build comprehensive export with ALL research lab data
+        const byMode = data?.metrics?.by_mode || {};
+        const modesPresent = Object.keys(byMode).filter(k => k !== "unknown");
+        const cfgVersions = cfgData?.by_config_version ? Object.keys(cfgData.by_config_version).filter(k => k !== "unknown") : [];
+        return {
+          overview: {
+            global: data?.metrics?.global || {},
+            risk: data?.metrics?.risk || {},
+            execution: data?.metrics?.execution || {},
+            insights: data?.analysis?.insights || [],
+            warnings: data?.analysis?.warnings || [],
+            recommendations: data?.analysis?.recommendations || [],
+          },
+          metrics: data?.metrics || {},
+          analysis: data?.analysis || {},
+          score: {
+            coverage: (() => {
+              const trades = data?.metrics?.global?.trades || 0;
+              const withScore = Object.entries(data?.metrics?.by_score || {}).reduce((s, [k, v]) => k !== "0-40" ? s + (v?.trades || 0) : s, 0);
+              return { total_trades: trades, trades_with_score: withScore, coverage_pct: trades > 0 ? Math.round(withScore / trades * 100) : 0 };
+            })(),
+            by_score_bucket: data?.metrics?.by_score || {},
+            by_mode: byMode,
+            counterfactual_preview: cfData || { status: "not_loaded" },
+          },
+          mode: {
+            by_mode: byMode,
+            modes_present: modesPresent,
+          },
+          config: cfgData || { status: "no_data_yet", message: "No hay suficientes trades con config_snapshot todavia" },
+          rejections: rejData || { status: "no_data_yet", message: "No hay senales bloqueadas todavia" },
+          counterfactual: cfData || { status: "no_data_yet" },
+          experiments: { note: "Run via POST /api/quant/experiment" },
+          decisions: (data?.decisions || []),
+          meta: {
+            generated_at: new Date().toISOString(),
+            source: "research_lab",
+            modes_present: modesPresent,
+            config_versions_present: cfgVersions,
+            has_unknown_config_rows: cfgVersions.includes("unknown") || Object.keys(cfgData?.by_config_version || {}).includes("unknown"),
+            total_trades: data?.metrics?.global?.trades || 0,
+            total_signals: rejData?.totals ? Object.values(rejData.totals).reduce((s, t) => s + (t.cnt || 0), 0) : 0,
+          },
+        };
+      })()} filename={"research_lab_full_" + new Date().toISOString().split("T")[0] + ".json"} label="Export JSON Completo" />
+      <button className="tab" onClick={load}>Refresh</button>
+    </div>
+
+    {view === "overview" && (<>
+      <div className="grid" style={{gridTemplateColumns:"repeat(5, 1fr)"}}>
+        <MC label="Trades" value={m.trades || 0} sub={(m.wins || 0) + "W / " + (m.losses || 0) + "L"} />
+        <MC label="Win Rate" value={(m.winrate ? (m.winrate * 100).toFixed(1) : "0") + "%"} color={m.winrate >= 0.5 ? "green" : m.winrate >= 0.4 ? "yellow" : "red"} />
+        <MC label="PnL Neto" value={"$" + (m.net_pnl || 0)} color={Number(m.net_pnl) >= 0 ? "green" : "red"} />
+        <MC label="Expectancy" value={"$" + (m.expectancy || 0)} color={Number(m.expectancy) >= 0 ? "green" : "red"} />
+        <MC label="Profit Factor" value={m.profit_factor || 0} color={Number(m.profit_factor) >= 1 ? "green" : "red"} />
+      </div>
+      <div className="grid" style={{gridTemplateColumns:"repeat(4, 1fr)", marginTop:12}}>
+        <MC label="Avg Win" value={"$" + (m.avg_win || 0)} color="green" />
+        <MC label="Avg Loss" value={"$" + (m.avg_loss || 0)} color="red" />
+        <MC label="Max Drawdown" value={"$" + (risk.max_drawdown || 0)} color="red" />
+        <MC label="Sharpe" value={risk.sharpe || 0} color={Number(risk.sharpe) > 0 ? "green" : "red"} />
+      </div>
+
+      {/* Decisions */}
+      {decisions.length > 0 && (<>
+        <h3 className="section-title" style={{marginTop:16}}>Decisions ({decisions.length})</h3>
+        <div className="card scroll">
+          {decisions.map((d, i) => (
+            <div key={i} style={{padding:"8px 0", borderBottom:"1px solid #1a1a2e"}}>
+              <div style={{display:"flex", gap:8, alignItems:"center", marginBottom:4}}>
+                <span className={"tag " + (d.type === "recommendation" ? "tag-blue" : d.type === "warning" ? "tag-yellow" : "tag-green")}>{d.type}</span>
+                <span style={{fontWeight:600, fontSize:12}}>{d.title}</span>
+                <span className={"pill " + (d.confidence === "high" ? "tag-green" : d.confidence === "medium" ? "tag-yellow" : "tag-blue")} style={{marginLeft:"auto", fontSize:9}}>{d.confidence}</span>
+              </div>
+              <div style={{fontSize:10, color:"#888", marginLeft:8}}>
+                <div>Evidence: {d.evidence}</div>
+                <div>Action: <span style={{color:"#3b82f6"}}>{d.action}</span></div>
+                <div>Impact: {d.expected_impact}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </>)}
+
+      {/* Insights/Warnings */}
+      {(insights.length > 0 || warnings.length > 0 || recommendations.length > 0) && (<>
+        <h3 className="section-title" style={{marginTop:16}}>Insights</h3>
+        <div className="card">
+          {insights.map((t, i) => <div key={"i"+i} style={{padding:"2px 0", fontSize:11, color:"#22c55e"}}>{t}</div>)}
+          {warnings.map((t, i) => <div key={"w"+i} style={{padding:"2px 0", fontSize:11, color:"#eab308"}}>{t}</div>)}
+          {recommendations.map((t, i) => <div key={"r"+i} style={{padding:"2px 0", fontSize:11, color:"#3b82f6"}}>{t}</div>)}
+        </div>
+      </>)}
+    </>)}
+
+    {view === "metrics" && (<>
+      {/* By coin */}
+      <h3 className="section-title">By Coin</h3>
+      <div className="card scroll">
+        <table>
+          <thead><tr><th>Coin</th><th style={{textAlign:"right"}}>Trades</th><th style={{textAlign:"right"}}>WR</th><th style={{textAlign:"right"}}>Avg PnL</th><th style={{textAlign:"right"}}>Total PnL</th><th style={{textAlign:"right"}}>PF</th></tr></thead>
+          <tbody>
+            {Object.entries(data.metrics?.by_coin || {}).map(([coin, d]) => (
+              <tr key={coin}><td className="purple">{coin}</td><td style={{textAlign:"right"}}>{d.trades}</td>
+              <td style={{textAlign:"right", color: d.winrate >= 0.5 ? "#22c55e" : "#ef4444"}}>{(d.winrate*100).toFixed(0)}%</td>
+              <td style={{textAlign:"right", color: d.avg_pnl >= 0 ? "#22c55e" : "#ef4444"}}>{d.avg_pnl}</td>
+              <td style={{textAlign:"right", color: d.net_pnl >= 0 ? "#22c55e" : "#ef4444"}}>{d.net_pnl}</td>
+              <td style={{textAlign:"right"}}>{d.profit_factor}</td></tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {/* By side, score, exit */}
+      {["by_side", "by_score", "by_exit", "by_mode"].map(key => {
+        const section = data.metrics?.[key];
+        if (!section) return null;
+        return (<div key={key}>
+          <h3 className="section-title" style={{marginTop:12}}>{key.replace("by_", "By ").replace("_", " ")}</h3>
+          <div className="card">
+            <table><thead><tr><th>Group</th><th style={{textAlign:"right"}}>Trades</th><th style={{textAlign:"right"}}>WR</th><th style={{textAlign:"right"}}>PnL</th><th style={{textAlign:"right"}}>PF</th></tr></thead>
+            <tbody>
+              {Object.entries(section).map(([g, d]) => (
+                <tr key={g}><td>{g}</td><td style={{textAlign:"right"}}>{d.trades}</td>
+                <td style={{textAlign:"right", color: d.winrate >= 0.5 ? "#22c55e" : "#ef4444"}}>{(d.winrate*100).toFixed(0)}%</td>
+                <td style={{textAlign:"right", color: d.net_pnl >= 0 ? "#22c55e" : "#ef4444"}}>{d.net_pnl}</td>
+                <td style={{textAlign:"right"}}>{d.profit_factor}</td></tr>
+              ))}
+            </tbody></table>
+          </div>
+        </div>);
+      })}
+    </>)}
+
+    {view === "analysis" && (<>
+      {/* Score effectiveness */}
+      <h3 className="section-title">Score Effectiveness</h3>
+      <div className="card">
+        <table><thead><tr><th>Bucket</th><th style={{textAlign:"right"}}>Trades</th><th style={{textAlign:"right"}}>WR</th><th style={{textAlign:"right"}}>Avg PnL</th><th style={{textAlign:"right"}}>Total PnL</th></tr></thead>
+        <tbody>
+          {Object.entries(analysis.score_effectiveness || {}).map(([b, d]) => (
+            <tr key={b}><td>{b}</td><td style={{textAlign:"right"}}>{d.trades}</td>
+            <td style={{textAlign:"right", color: d.wr >= 50 ? "#22c55e" : "#ef4444"}}>{d.wr}%</td>
+            <td style={{textAlign:"right", color: d.avg_pnl >= 0 ? "#22c55e" : "#ef4444"}}>{d.avg_pnl}</td>
+            <td style={{textAlign:"right", color: d.total_pnl >= 0 ? "#22c55e" : "#ef4444"}}>{d.total_pnl}</td></tr>
+          ))}
+        </tbody></table>
+      </div>
+
+      {/* Exit analysis */}
+      <h3 className="section-title" style={{marginTop:12}}>Exit Analysis</h3>
+      <div className="card">
+        <table><thead><tr><th>Type</th><th style={{textAlign:"right"}}>%</th><th style={{textAlign:"right"}}>WR</th><th style={{textAlign:"right"}}>Avg PnL</th><th style={{textAlign:"right"}}>Total PnL</th></tr></thead>
+        <tbody>
+          {Object.entries(analysis.exit_analysis || {}).map(([t, d]) => (
+            <tr key={t}><td><span className={"tag " + (t === "SL" ? "tag-red" : "tag-green")}>{t}</span></td>
+            <td style={{textAlign:"right"}}>{d.pct}%</td>
+            <td style={{textAlign:"right"}}>{d.wr}%</td>
+            <td style={{textAlign:"right", color: d.avg_pnl >= 0 ? "#22c55e" : "#ef4444"}}>{d.avg_pnl}</td>
+            <td style={{textAlign:"right", color: d.total_pnl >= 0 ? "#22c55e" : "#ef4444"}}>{d.total_pnl}</td></tr>
+          ))}
+        </tbody></table>
+      </div>
+
+      {/* Holding time */}
+      <h3 className="section-title" style={{marginTop:12}}>Holding Time</h3>
+      <div className="card">
+        <table><thead><tr><th>Duration</th><th style={{textAlign:"right"}}>Trades</th><th style={{textAlign:"right"}}>WR</th><th style={{textAlign:"right"}}>Avg PnL</th></tr></thead>
+        <tbody>
+          {Object.entries(analysis.holding_time || {}).map(([b, d]) => (
+            <tr key={b}><td>{b}</td><td style={{textAlign:"right"}}>{d.trades}</td>
+            <td style={{textAlign:"right", color: d.wr >= 50 ? "#22c55e" : "#ef4444"}}>{d.wr}%</td>
+            <td style={{textAlign:"right", color: d.avg_pnl >= 0 ? "#22c55e" : "#ef4444"}}>{d.avg_pnl}</td></tr>
+          ))}
+        </tbody></table>
+      </div>
+
+      {/* Fee impact */}
+      <h3 className="section-title" style={{marginTop:12}}>Fee Impact</h3>
+      <div className="grid">
+        <MC label="Gross" value={"$" + (analysis.fee_impact?.total_gross || 0)} />
+        <MC label="Fees" value={"$" + (analysis.fee_impact?.total_fees || 0)} color="yellow" />
+        <MC label="Fee % of Gross" value={(analysis.fee_impact?.fee_pct_of_gross || 0) + "%"} color={Number(analysis.fee_impact?.fee_pct_of_gross) < 20 ? "green" : "red"} />
+        <MC label="Fee Killed" value={analysis.fee_impact?.fee_killed_count || 0} color={analysis.fee_impact?.fee_killed_count === 0 ? "green" : "red"} />
+      </div>
+    </>)}
+
+    {view === "score" && (() => {
+      const byScore = data.metrics?.by_score || {};
+      const hasScoreData = Object.keys(byScore).length > 0;
+      if (!hasScoreData) return <div className="card" style={{textAlign:"center", padding:30, color:"#555"}}>Recopilando datos de scores... Los nuevos trades incluiran scores reales.</div>;
+      const totalTrades = m.trades || 0;
+      const tradesWithScore = Object.values(byScore).reduce((s, d) => s + (d.trades || 0), 0);
+      const scoreCoverage = totalTrades > 0 ? ((tradesWithScore / totalTrades) * 100).toFixed(1) : "0";
+      const avgScore = tradesWithScore > 0 ? (Object.entries(byScore).reduce((s, [b, d]) => {
+        const mid = b === "<50" ? 45 : b === "70+" ? 75 : (parseInt(b.split("-")[0]) + parseInt(b.split("-")[1])) / 2;
+        return s + mid * d.trades;
+      }, 0) / tradesWithScore).toFixed(1) : "N/A";
+      const bucketOrder = ["<50", "50-55", "55-60", "60-65", "65-70", "70+"];
+      return (<>
+        <h3 className="section-title">Analisis de Score <Tip text="Analisis del score de entrada. Muestra como el score influye en la calidad de los trades." /></h3>
+        <div className="grid" style={{gridTemplateColumns:"repeat(4, 1fr)"}}>
+          <MC label="Total Trades" value={totalTrades} />
+          <MC label="Trades con Score" value={tradesWithScore} />
+          <MC label="Cobertura Score" value={scoreCoverage + "%"} color={Number(scoreCoverage) > 80 ? "green" : "yellow"} />
+          <MC label="Score Promedio" value={avgScore} color="blue" />
+        </div>
+
+        <h3 className="section-title" style={{marginTop:16}}>Rendimiento por Bucket de Score</h3>
+        <div className="card scroll">
+          <table>
+            <thead><tr><th>Bucket</th><th style={{textAlign:"right"}}>Trades</th><th style={{textAlign:"right"}}>WR</th><th style={{textAlign:"right"}}>Expectancy</th><th style={{textAlign:"right"}}>PF</th><th style={{textAlign:"right"}}>PnL</th></tr></thead>
+            <tbody>
+              {bucketOrder.map(b => {
+                const d = byScore[b];
+                if (!d) return <tr key={b}><td>{b}</td><td colSpan={5} style={{textAlign:"center", color:"#555"}}>Sin datos</td></tr>;
+                return (
+                  <tr key={b}><td className="purple">{b}</td>
+                  <td style={{textAlign:"right"}}>{d.trades}</td>
+                  <td style={{textAlign:"right", color: d.winrate >= 0.5 ? "#22c55e" : "#ef4444"}}>{(d.winrate*100).toFixed(1)}%</td>
+                  <td style={{textAlign:"right", color: d.expectancy >= 0 ? "#22c55e" : "#ef4444"}}>${d.expectancy}</td>
+                  <td style={{textAlign:"right", color: d.profit_factor >= 1 ? "#22c55e" : "#ef4444"}}>{d.profit_factor}</td>
+                  <td style={{textAlign:"right", color: d.net_pnl >= 0 ? "#22c55e" : "#ef4444"}}>${d.net_pnl}</td></tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <h3 className="section-title" style={{marginTop:16}}>Score por Modo</h3>
+        <div className="card scroll">
+          <table>
+            <thead><tr><th>Modo</th><th style={{textAlign:"right"}}>Trades</th><th style={{textAlign:"right"}}>WR</th><th style={{textAlign:"right"}}>Expectancy</th><th style={{textAlign:"right"}}>PF</th><th style={{textAlign:"right"}}>PnL</th></tr></thead>
+            <tbody>
+              {Object.entries(data.metrics?.by_mode || {}).map(([mode, d]) => (
+                <tr key={mode}><td className="blue">{mode}</td>
+                <td style={{textAlign:"right"}}>{d.trades}</td>
+                <td style={{textAlign:"right", color: d.winrate >= 0.5 ? "#22c55e" : "#ef4444"}}>{(d.winrate*100).toFixed(1)}%</td>
+                <td style={{textAlign:"right", color: d.expectancy >= 0 ? "#22c55e" : "#ef4444"}}>${d.expectancy}</td>
+                <td style={{textAlign:"right", color: d.profit_factor >= 1 ? "#22c55e" : "#ef4444"}}>{d.profit_factor}</td>
+                <td style={{textAlign:"right", color: d.net_pnl >= 0 ? "#22c55e" : "#ef4444"}}>${d.net_pnl}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {cfData && (<>
+          <h3 className="section-title" style={{marginTop:16}}>Contrafactual: Umbrales de Score</h3>
+          <div className="card scroll">
+            <table>
+              <thead><tr><th>Umbral</th><th style={{textAlign:"right"}}>Entrarian</th><th style={{textAlign:"right"}}>Bloqueados</th><th style={{textAlign:"right"}}>% Entrada</th></tr></thead>
+              <tbody>
+                {Object.entries(cfData).map(([key, d]) => (
+                  <tr key={key}><td className="blue">{d.threshold}</td>
+                  <td style={{textAlign:"right"}}>{d.would_enter}</td>
+                  <td style={{textAlign:"right"}}>{d.would_block}</td>
+                  <td style={{textAlign:"right"}}>{d.enter_pct || 0}%</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>)}
+      </>);
+    })()}
+
+    {view === "mode" && (<>
+      <h3 className="section-title">Rendimiento por Modo <Tip text="Comparativa de rendimiento entre modos: SCALP (agresivo), NORMAL (equilibrado), SWING (defensivo)." /></h3>
+      {Object.keys(data.metrics?.by_mode || {}).length === 0 ? (
+        <div className="card" style={{textAlign:"center", padding:30, color:"#555"}}>No hay datos de modos todavia.</div>
+      ) : (<>
+        <div className="grid" style={{gridTemplateColumns:"repeat(3, 1fr)"}}>
+          {["SCALP", "NORMAL", "SWING"].map(mode => {
+            const d = (data.metrics?.by_mode || {})[mode];
+            if (!d) return (
+              <div key={mode} className="card">
+                <div className="label">{mode}</div>
+                <div className="value" style={{fontSize:16, color:"#555"}}>Sin datos</div>
+              </div>
+            );
+            return (
+              <div key={mode} className="card">
+                <div className="label">{mode}</div>
+                <div className="value" style={{fontSize:16}}>{d.trades} trades</div>
+                <div style={{display:"flex", gap:12, marginTop:8, fontSize:11}}>
+                  <span>WR: <span className={d.winrate >= 0.5 ? "green" : "red"}>{(d.winrate*100).toFixed(1)}%</span></span>
+                  <span>PnL: <span className={d.net_pnl >= 0 ? "green" : "red"}>${d.net_pnl}</span></span>
+                  <span>Exp: <span className={d.expectancy >= 0 ? "green" : "red"}>${d.expectancy}</span></span>
+                </div>
+                <div style={{fontSize:10, color:"#555", marginTop:4}}>PF: {d.profit_factor}</div>
+              </div>
+            );
+          })}
+        </div>
+
+        <h3 className="section-title" style={{marginTop:16}}>Tabla Detallada por Modo</h3>
+        <div className="card scroll">
+          <table>
+            <thead><tr><th>Modo</th><th style={{textAlign:"right"}}>Trades</th><th style={{textAlign:"right"}}>Wins</th><th style={{textAlign:"right"}}>Losses</th><th style={{textAlign:"right"}}>WR</th><th style={{textAlign:"right"}}>Expectancy</th><th style={{textAlign:"right"}}>PF</th><th style={{textAlign:"right"}}>PnL Neto</th><th style={{textAlign:"right"}}>Avg Win</th><th style={{textAlign:"right"}}>Avg Loss</th><th style={{textAlign:"right"}}>Fee Killed</th></tr></thead>
+            <tbody>
+              {["SCALP", "NORMAL", "SWING"].map(mode => {
+                const d = (data.metrics?.by_mode || {})[mode];
+                if (!d) return <tr key={mode}><td>{mode}</td><td colSpan={10} style={{textAlign:"center", color:"#555"}}>Sin datos</td></tr>;
+                return (
+                  <tr key={mode}>
+                    <td className="blue">{mode}</td>
+                    <td style={{textAlign:"right"}}>{d.trades}</td>
+                    <td style={{textAlign:"right"}}>{d.wins || 0}</td>
+                    <td style={{textAlign:"right"}}>{d.losses || 0}</td>
+                    <td style={{textAlign:"right", color: d.winrate >= 0.5 ? "#22c55e" : "#ef4444"}}>{(d.winrate*100).toFixed(1)}%</td>
+                    <td style={{textAlign:"right", color: d.expectancy >= 0 ? "#22c55e" : "#ef4444"}}>${d.expectancy}</td>
+                    <td style={{textAlign:"right", color: d.profit_factor >= 1 ? "#22c55e" : "#ef4444"}}>{d.profit_factor}</td>
+                    <td style={{textAlign:"right", color: d.net_pnl >= 0 ? "#22c55e" : "#ef4444"}}>${d.net_pnl}</td>
+                    <td style={{textAlign:"right", color:"#22c55e"}}>${d.avg_win || 0}</td>
+                    <td style={{textAlign:"right", color:"#ef4444"}}>${d.avg_loss || 0}</td>
+                    <td style={{textAlign:"right", color: (d.fee_killed || 0) === 0 ? "#22c55e" : "#ef4444"}}>{d.fee_killed || 0}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </>)}
+    </>)}
+
+    {view === "config" && (() => {
+      if (!cfgData) return <div className="loading">Cargando analisis de configuracion...</div>;
+      const sections = ["by_config_version", "by_score_min", "by_stop_loss", "by_trailing_distance", "by_partial_close"];
+      const sectionLabels = { by_config_version: "Config Version", by_score_min: "Score Minimo", by_stop_loss: "Stop Loss", by_trailing_distance: "Trailing Distance", by_partial_close: "Partial Close" };
+      const allUnknown = sections.every(s => {
+        const d = cfgData[s];
+        if (!d || Object.keys(d).length === 0) return true;
+        return Object.keys(d).every(k => k === "unknown");
+      });
+      if (allUnknown) return <div className="card" style={{textAlign:"center", padding:30, color:"#555"}}>Los trades nuevos incluiran config snapshot. Los datos apareceran automaticamente.</div>;
+      return (<>
+        <h3 className="section-title">Analisis de Configuracion <Tip text="Analisis del impacto de cada parametro de configuracion en el rendimiento." /></h3>
+        {sections.map(section => {
+          const sData = cfgData[section];
+          if (!sData || Object.keys(sData).length === 0) return null;
+          return (
+            <div key={section} style={{marginBottom:16}}>
+              <h4 style={{fontSize:11, color:"#888", marginBottom:6, textTransform:"uppercase"}}>{sectionLabels[section] || section.replace(/by_/g, "").replace(/_/g, " ")}</h4>
+              <div className="card scroll">
+                <table>
+                  <thead><tr><th>Grupo</th><th style={{textAlign:"right"}}>Trades</th><th style={{textAlign:"right"}}>WR</th><th style={{textAlign:"right"}}>Expectancy</th><th style={{textAlign:"right"}}>PF</th><th style={{textAlign:"right"}}>PnL Total</th></tr></thead>
+                  <tbody>
+                    {Object.entries(sData).sort((a,b) => (b[1].total_pnl || 0) - (a[1].total_pnl || 0)).map(([group, d]) => (
+                      <tr key={group}>
+                        <td className="blue">{group}</td>
+                        <td style={{textAlign:"right"}}>{d.trades}</td>
+                        <td style={{textAlign:"right", color: d.winrate >= 0.5 ? "#22c55e" : "#ef4444"}}>{(d.winrate*100).toFixed(1)}%</td>
+                        <td style={{textAlign:"right", color: d.expectancy >= 0 ? "#22c55e" : "#ef4444"}}>${d.expectancy}</td>
+                        <td style={{textAlign:"right", color: d.profit_factor >= 1 ? "#22c55e" : "#ef4444"}}>{d.profit_factor}</td>
+                        <td style={{textAlign:"right", color: (d.total_pnl || 0) >= 0 ? "#22c55e" : "#ef4444"}}>${d.total_pnl || 0}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })}
+      </>);
+    })()}
+
+    {view === "rejections" && (() => {
+      if (!rejData) return <div className="loading">Cargando datos de rechazos...</div>;
+      const totals = rejData.totals || {};
+      const byReason = rejData.by_reason || [];
+      const byStage = rejData.by_stage || {};
+      const nearMisses = rejData.near_misses || [];
+      const totalBlocked = totals.BLOCKED?.cnt || 0;
+      const totalEntered = totals.ENTER?.cnt || 0;
+      const totalAll = totalBlocked + totalEntered;
+      const blockedPct = totalAll > 0 ? ((totalBlocked / totalAll) * 100).toFixed(1) : "0";
+      const topReason = byReason.length > 0 ? byReason.sort((a,b) => (b.cnt || 0) - (a.cnt || 0))[0]?.reason || "N/A" : "N/A";
+
+      const preCandidateRejects = byReason.filter(r => r.decision_stage === "PRE_CANDIDATE_REJECT");
+      const blockedPostCandidate = byReason.filter(r => r.decision_stage === "BLOCKED_POST_CANDIDATE");
+      const legacyBlocked = byReason.filter(r => !r.decision_stage || (r.decision_stage !== "PRE_CANDIDATE_REJECT" && r.decision_stage !== "BLOCKED_POST_CANDIDATE"));
+
+      if (totalAll === 0) return <div className="card" style={{textAlign:"center", padding:30, color:"#555"}}>No hay senales bloqueadas todavia.</div>;
+
+      return (<>
+        <h3 className="section-title">Analisis de Rechazos <Tip text="Senales que el bot detecto pero rechazo. Separadas por etapa: pre-candidato y post-candidato." /></h3>
+        <div className="grid" style={{gridTemplateColumns:"repeat(4, 1fr)"}}>
+          <MC label="Total Bloqueados" value={totalBlocked} color="red" />
+          <MC label="Total Entradas" value={totalEntered} color="green" />
+          <MC label="% Bloqueados" value={blockedPct + "%"} color={Number(blockedPct) > 50 ? "yellow" : "green"} />
+          <MC label="Razon Top" value={topReason} color="purple" />
+        </div>
+
+        {/* Decision Stage Breakdown */}
+        <h3 className="section-title" style={{marginTop:16}}>Decision Stages</h3>
+        <div className="grid" style={{gridTemplateColumns:"repeat(3, 1fr)"}}>
+          <MC label="Pre-Candidate Reject" value={byStage.PRE_CANDIDATE_REJECT?.cnt || 0} color="yellow" />
+          <MC label="Blocked Post-Candidate" value={byStage.BLOCKED_POST_CANDIDATE?.cnt || 0} color="red" />
+          <MC label="Entered" value={byStage.ENTER?.cnt || 0} color="green" />
+        </div>
+
+        {/* Pre-Candidate Rejects */}
+        {preCandidateRejects.length > 0 && (<>
+          <h3 className="section-title" style={{marginTop:16}}>Pre-Candidate Rejects (Near Misses)</h3>
+          <div className="card scroll">
+            <table>
+              <thead><tr><th>Razon</th><th>Modo</th><th style={{textAlign:"right"}}>Cantidad</th><th style={{textAlign:"right"}}>Avg Score</th><th style={{textAlign:"right"}}>Avg Score Min</th></tr></thead>
+              <tbody>
+                {preCandidateRejects.map((r, i) => (
+                  <tr key={i}>
+                    <td><span className="tag" style={{background:"rgba(234,179,8,0.15)", color:"#eab308"}}>{r.reason || "unknown"}</span></td>
+                    <td>{r.mode || "-"}</td>
+                    <td style={{textAlign:"right"}}>{r.cnt}</td>
+                    <td style={{textAlign:"right"}}>{r.avg_score}</td>
+                    <td style={{textAlign:"right"}}>{r.avg_score_min || "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>)}
+
+        {/* Blocked Post-Candidate */}
+        {blockedPostCandidate.length > 0 && (<>
+          <h3 className="section-title" style={{marginTop:16}}>Blocked Post-Candidate (Passed Score, Failed Filter)</h3>
+          <div className="card scroll">
+            <table>
+              <thead><tr><th>Razon</th><th>Modo</th><th style={{textAlign:"right"}}>Cantidad</th><th style={{textAlign:"right"}}>Avg Score</th><th style={{textAlign:"right"}}>Avg Score Min</th></tr></thead>
+              <tbody>
+                {blockedPostCandidate.map((r, i) => (
+                  <tr key={i}>
+                    <td><span className="tag tag-red">{r.reason || "unknown"}</span></td>
+                    <td>{r.mode || "-"}</td>
+                    <td style={{textAlign:"right"}}>{r.cnt}</td>
+                    <td style={{textAlign:"right"}}>{r.avg_score}</td>
+                    <td style={{textAlign:"right"}}>{r.avg_score_min || "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>)}
+
+        {/* Legacy (no stage) + full table */}
+        <h3 className="section-title" style={{marginTop:16}}>Detalle por Razon (Todos)</h3>
+        <div className="card scroll">
+          <table>
+            <thead><tr><th>Razon</th><th>Stage</th><th>Modo</th><th style={{textAlign:"right"}}>Cantidad</th><th style={{textAlign:"right"}}>Avg Score</th><th style={{textAlign:"right"}}>Avg Score Min</th></tr></thead>
+            <tbody>
+              {byReason.map((r, i) => (
+                <tr key={i}>
+                  <td><span className="tag tag-red">{r.reason || "unknown"}</span></td>
+                  <td><span className="tag" style={{background: r.decision_stage === "PRE_CANDIDATE_REJECT" ? "rgba(234,179,8,0.15)" : r.decision_stage === "BLOCKED_POST_CANDIDATE" ? "rgba(239,68,68,0.15)" : "rgba(100,100,100,0.15)", color: r.decision_stage === "PRE_CANDIDATE_REJECT" ? "#eab308" : r.decision_stage === "BLOCKED_POST_CANDIDATE" ? "#ef4444" : "#888", fontSize:10}}>{r.decision_stage || "LEGACY"}</span></td>
+                  <td>{r.mode || "-"}</td>
+                  <td style={{textAlign:"right"}}>{r.cnt}</td>
+                  <td style={{textAlign:"right"}}>{r.avg_score}</td>
+                  <td style={{textAlign:"right"}}>{r.avg_score_min || "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Near Misses */}
+        {nearMisses.length > 0 && (<>
+          <h3 className="section-title" style={{marginTop:16}}>Near Misses (Score within 5 of threshold)</h3>
+          <div className="card scroll">
+            <table>
+              <thead><tr><th>Coin</th><th>Side</th><th>Razon</th><th style={{textAlign:"right"}}>Score</th><th style={{textAlign:"right"}}>Score Min</th><th>Modo</th><th>Timestamp</th></tr></thead>
+              <tbody>
+                {nearMisses.map((r, i) => (
+                  <tr key={i}>
+                    <td style={{fontWeight:600}}>{r.coin}</td>
+                    <td><span className={"tag " + (r.side === "LONG" ? "tag-green" : "tag-red")}>{r.side}</span></td>
+                    <td>{r.reason}</td>
+                    <td style={{textAlign:"right"}}>{r.signal_score?.toFixed?.(1) || r.signal_score}</td>
+                    <td style={{textAlign:"right"}}>{r.score_min_applied}</td>
+                    <td>{r.mode || "-"}</td>
+                    <td style={{fontSize:10, color:"#888"}}>{r.timestamp ? new Date(r.timestamp).toLocaleString() : "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>)}
+
+        <h3 className="section-title" style={{marginTop:16}}>Bloqueados vs Entradas</h3>
+        <div className="grid" style={{gridTemplateColumns:"repeat(2, 1fr)"}}>
+          <div className="card">
+            <div className="label">Bloqueados</div>
+            <div style={{fontSize:13, marginTop:6}}>Cantidad: <span className="red" style={{fontWeight:700}}>{totalBlocked}</span></div>
+            <div style={{fontSize:11, marginTop:4, color:"#888"}}>Avg Score: <span style={{color:"#ef4444"}}>{totals.BLOCKED?.avg_score || "N/A"}</span></div>
+          </div>
+          <div className="card">
+            <div className="label">Entradas</div>
+            <div style={{fontSize:13, marginTop:6}}>Cantidad: <span className="green" style={{fontWeight:700}}>{totalEntered}</span></div>
+            <div style={{fontSize:11, marginTop:4, color:"#888"}}>Avg Score: <span style={{color:"#22c55e"}}>{totals.ENTER?.avg_score || "N/A"}</span></div>
+          </div>
+        </div>
+      </>);
+    })()}
+
+    {view === "counterfactual" && (() => {
+      if (!cfData || Object.keys(cfData).length === 0) return <div className="card" style={{textAlign:"center", padding:30, color:"#555"}}>No hay suficientes senales para analisis contrafactual.</div>;
+      const entries = Object.entries(cfData);
+      const totalSignals = entries.length > 0 ? (Object.values(cfData)[0]?.total_signals || 0) : 0;
+      return (<>
+        <h3 className="section-title">Analisis Contrafactual <Tip text="Simulacion de que pasaria con diferentes umbrales de score. Ayuda a decidir el threshold optimo." /></h3>
+        <div className="grid" style={{gridTemplateColumns:"repeat(2, 1fr)"}}>
+          <MC label="Senales Analizadas" value={totalSignals} color="blue" />
+          <MC label="Umbrales Evaluados" value={entries.length} color="purple" />
+        </div>
+
+        <h3 className="section-title" style={{marginTop:16}}>Comparacion de Umbrales</h3>
+        <div className="card scroll">
+          <table>
+            <thead><tr><th>Umbral</th><th style={{textAlign:"right"}}>Entrarian</th><th style={{textAlign:"right"}}>Bloqueados</th><th style={{textAlign:"right"}}>% Entrada</th><th style={{textAlign:"right"}}>% Bloqueo</th></tr></thead>
+            <tbody>
+              {entries.map(([key, d]) => {
+                const th = d.threshold || 0;
+                const rowColor = th <= 55 ? "rgba(234,179,8,0.08)" : th >= 65 ? "rgba(59,130,246,0.08)" : "transparent";
+                const blockPct = d.total_signals > 0 ? ((d.would_block / d.total_signals) * 100).toFixed(1) : "0";
+                return (
+                  <tr key={key} style={{background: rowColor}}>
+                    <td style={{color: th <= 55 ? "#eab308" : th >= 65 ? "#3b82f6" : "#e0e0e8", fontWeight:600}}>{th}</td>
+                    <td style={{textAlign:"right"}}>{d.would_enter}</td>
+                    <td style={{textAlign:"right"}}>{d.would_block}</td>
+                    <td style={{textAlign:"right", color:"#22c55e"}}>{d.enter_pct || 0}%</td>
+                    <td style={{textAlign:"right", color:"#ef4444"}}>{blockPct}%</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div style={{marginTop:8, fontSize:10, color:"#555"}}>
+          <span style={{color:"#eab308"}}>Amarillo</span> = umbrales permisivos | <span style={{color:"#3b82f6"}}>Azul</span> = umbrales restrictivos
+        </div>
+      </>);
+    })()}
+
+    {view === "experiments" && (
+      <div className="card" style={{textAlign:"center", padding:40, color:"#555"}}>
+        <p style={{fontSize:14}}>Run experiments via API:</p>
+        <p style={{fontSize:11, marginTop:8, fontFamily:"monospace"}}>POST /api/quant/experiment</p>
+        <p style={{fontSize:10, marginTop:4, color:"#444"}}>{"{"} name, score_min, micro_min, sl_max_pct, tp_min_pct, trailing_distance_pct, partial_close_pct {"}"}</p>
+      </div>
+    )}
+
+    {view === "diagnostic" && (() => {
+      const rateColor = (r) => r >= 80 ? "#22c55e" : r >= 50 ? "#eab308" : "#ef4444";
+
+      if (!diagData) return (
+        <div className="card" style={{textAlign:"center", padding:40}}>
+          <div style={{fontSize:32, marginBottom:12, opacity:0.3}}>🔬</div>
+          <div style={{fontSize:14, color:"rgba(255,255,255,0.5)", marginBottom:8}}>Diagnostico de Filtros</div>
+          <div style={{fontSize:12, color:"rgba(255,255,255,0.3)", maxWidth:400, margin:"0 auto", lineHeight:1.6}}>
+            Evalua todos los filtros del bot para cada senal, independientemente de donde falle. Permite ver el cuello de botella real del sistema.
+          </div>
+          <div style={{marginTop:16, fontSize:11, color:"rgba(255,255,255,0.2)"}}>Inicia trading para generar datos de diagnostico.</div>
+        </div>
+      );
+
+      if (diagData.status === "no_data") return (
+        <div className="card" style={{textAlign:"center", padding:40}}>
+          <div style={{fontSize:32, marginBottom:12, opacity:0.3}}>📡</div>
+          <div style={{fontSize:14, color:"rgba(255,255,255,0.5)", marginBottom:8}}>Recopilando datos...</div>
+          <div style={{fontSize:12, color:"rgba(255,255,255,0.3)"}}>Aun no hay senales con diagnostic_trace. Los datos apareceran automaticamente cuando el bot genere senales.</div>
+        </div>
+      );
+
+      const pr = diagData.pass_rates || {};
+      return (<>
+        <h3 className="section-title">Tasa de Filtros <Tip text="Evaluacion completa de todos los filtros para cada senal. Muestra el cuello de botella real." /> ({diagData.total_signals} senales)</h3>
+        <div className="card scroll">
+          <table>
+            <thead><tr>
+              <th style={{textAlign:"left"}}>Filtro</th>
+              <th style={{textAlign:"right"}}>Pasan</th>
+              <th style={{textAlign:"right"}}>Total</th>
+              <th style={{textAlign:"right"}}>Tasa</th>
+            </tr></thead>
+            <tbody>
+              {Object.entries(pr).map(([k, v]) => (
+                <tr key={k}>
+                  <td style={{fontWeight:600}}>{k.replace(/_/g, " ")}</td>
+                  <td style={{textAlign:"right"}}>{v.passed}</td>
+                  <td style={{textAlign:"right", color:"rgba(255,255,255,0.3)"}}>{v.total}</td>
+                  <td style={{textAlign:"right", color: rateColor(v.rate), fontWeight:700}}>{v.rate}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="grid" style={{marginTop:14}}>
+          <MC label="Casi Perfectas" value={diagData.near_perfect_blocked_by_score || 0} color="yellow" tip="Senales que pasan TODOS los filtros excepto score. Indica si el score es demasiado restrictivo." />
+          <MC label="Score OK pero Filtradas" value={diagData.score_ok_but_filtered || 0} color="red" tip="Senales que pasan score pero caen en filtros posteriores (trend, BTC, RSI, micro)." />
+        </div>
+        <h3 className="section-title" style={{marginTop:14}}>Ranking de Cuellos de Botella <Tip text="Filtros ordenados del mas restrictivo al menos. El primero es el que bloquea mas senales." /></h3>
+        <div className="card scroll">
+          {(diagData.bottleneck_ranking || []).map((b, i) => (
+            <div key={i} style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 10px", borderBottom:"1px solid rgba(255,255,255,0.03)"}}>
+              <span style={{fontWeight:600, fontSize:12}}>#{i+1} {b.filter.replace(/_/g, " ")}</span>
+              <div style={{display:"flex", alignItems:"center", gap:10}}>
+                <div style={{width:120, height:6, background:"rgba(255,255,255,0.06)", borderRadius:3, overflow:"hidden"}}>
+                  <div style={{width: b.pass_rate + "%", height:"100%", background: rateColor(b.pass_rate), borderRadius:3, transition:"width 0.5s"}}></div>
+                </div>
+                <span style={{fontSize:11, color: rateColor(b.pass_rate), fontWeight:700, minWidth:40, textAlign:"right"}}>{b.pass_rate}%</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </>);
+    })()}
+
+    {view === "quality" && (() => {
+      if (!eqData || (!eqData.by_quality_label && !eqData.by_late_risk)) return (
+        <div className="card" style={{textAlign:"center", padding:40}}>
+          <div style={{fontSize:32, marginBottom:12, opacity:0.3}}>&#x1F50D;</div>
+          <div style={{fontSize:14, color:"rgba(255,255,255,0.5)", marginBottom:8}}>Calidad de Entradas</div>
+          <div style={{fontSize:12, color:"rgba(255,255,255,0.3)", maxWidth:400, margin:"0 auto", lineHeight:1.6}}>
+            Recopilando datos de calidad... Inicia trading para generar diagnosticos de entrada.
+          </div>
+        </div>
+      );
+
+      const ql = eqData.by_quality_label || {};
+      const lr = eqData.by_late_risk || {};
+      const wp = eqData.winning_profile || {};
+      const lp = eqData.losing_profile || {};
+      const lf = eqData.losing_factors || [];
+      const wf = eqData.winning_factors || [];
+
+      const qualityOrder = ["A_PLUS", "A", "B", "C", "WEAK", "unknown"];
+      const riskOrder = ["LOW", "MEDIUM", "HIGH", "unknown"];
+      const wrColor = (wr) => wr >= 0.6 ? "#22c55e" : wr >= 0.45 ? "#eab308" : "#ef4444";
+      const pnlColor = (v) => v > 0 ? "#22c55e" : v < 0 ? "#ef4444" : "rgba(255,255,255,0.5)";
+
+      return (<>
+        <h3 className="section-title">Calidad de Entradas por Grado</h3>
+        <div className="grid">
+          {qualityOrder.filter(k => ql[k]).map(k => {
+            const v = ql[k];
+            return <div key={k} className="card" style={{padding:14}}>
+              <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8}}>
+                <span style={{fontWeight:700, fontSize:14, color: k === "A_PLUS" ? "#22c55e" : k === "A" ? "#3b82f6" : k === "B" ? "#eab308" : k === "C" ? "#f97316" : "#ef4444"}}>{k.replace("_", "+")}</span>
+                <span style={{fontSize:11, color:"rgba(255,255,255,0.3)"}}>{v.trades} trades</span>
+              </div>
+              <div style={{display:"flex", justifyContent:"space-between", fontSize:12, marginBottom:4}}>
+                <span style={{color:"rgba(255,255,255,0.5)"}}>WR</span>
+                <span style={{fontWeight:700, color: wrColor(v.winrate)}}>{(v.winrate * 100).toFixed(1)}%</span>
+              </div>
+              <div style={{display:"flex", justifyContent:"space-between", fontSize:12}}>
+                <span style={{color:"rgba(255,255,255,0.5)"}}>PnL Total</span>
+                <span style={{fontWeight:700, color: pnlColor(v.total_pnl)}}>${v.total_pnl.toFixed(4)}</span>
+              </div>
+              <div style={{display:"flex", justifyContent:"space-between", fontSize:12, marginTop:4}}>
+                <span style={{color:"rgba(255,255,255,0.5)"}}>Expectancy</span>
+                <span style={{fontWeight:600, color: pnlColor(v.expectancy)}}>${v.expectancy.toFixed(4)}</span>
+              </div>
+            </div>;
+          })}
+        </div>
+
+        <h3 className="section-title" style={{marginTop:14}}>Riesgo de Entrada Tardia</h3>
+        <div className="grid">
+          {riskOrder.filter(k => lr[k]).map(k => {
+            const v = lr[k];
+            return <div key={k} className="card" style={{padding:14}}>
+              <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8}}>
+                <span style={{fontWeight:700, fontSize:14, color: k === "LOW" ? "#22c55e" : k === "MEDIUM" ? "#eab308" : k === "HIGH" ? "#ef4444" : "rgba(255,255,255,0.5)"}}>{k}</span>
+                <span style={{fontSize:11, color:"rgba(255,255,255,0.3)"}}>{v.trades} trades</span>
+              </div>
+              <div style={{display:"flex", justifyContent:"space-between", fontSize:12, marginBottom:4}}>
+                <span style={{color:"rgba(255,255,255,0.5)"}}>WR</span>
+                <span style={{fontWeight:700, color: wrColor(v.winrate)}}>{(v.winrate * 100).toFixed(1)}%</span>
+              </div>
+              <div style={{display:"flex", justifyContent:"space-between", fontSize:12}}>
+                <span style={{color:"rgba(255,255,255,0.5)"}}>PnL Total</span>
+                <span style={{fontWeight:700, color: pnlColor(v.total_pnl)}}>${v.total_pnl.toFixed(4)}</span>
+              </div>
+            </div>;
+          })}
+        </div>
+
+        <h3 className="section-title" style={{marginTop:14}}>Perfil: Ganadores vs Perdedores</h3>
+        <div className="grid" style={{gridTemplateColumns:"1fr 1fr"}}>
+          <div className="card" style={{padding:14}}>
+            <div style={{fontWeight:700, fontSize:13, color:"#22c55e", marginBottom:10}}>Ganadores ({wp.count || 0})</div>
+            <div style={{fontSize:12, display:"flex", flexDirection:"column", gap:6}}>
+              <div style={{display:"flex", justifyContent:"space-between"}}><span style={{color:"rgba(255,255,255,0.5)"}}>Avg Score</span><span>{wp.avg_score || 0}</span></div>
+              <div style={{display:"flex", justifyContent:"space-between"}}><span style={{color:"rgba(255,255,255,0.5)"}}>Avg Spread %</span><span>{wp.avg_spread_pct || 0}</span></div>
+              <div style={{display:"flex", justifyContent:"space-between"}}><span style={{color:"rgba(255,255,255,0.5)"}}>Move vs Fee</span><span>{wp.avg_move_vs_fee || 0}</span></div>
+              <div style={{display:"flex", justifyContent:"space-between"}}><span style={{color:"rgba(255,255,255,0.5)"}}>Confirmacion</span><span>{wp.avg_confirmation || 0}</span></div>
+              {wp.quality_distribution && <div style={{marginTop:6}}>
+                <div style={{fontSize:11, color:"rgba(255,255,255,0.3)", marginBottom:4}}>Distribucion calidad</div>
+                {Object.entries(wp.quality_distribution).map(([k,v]) => <div key={k} style={{display:"flex", justifyContent:"space-between", fontSize:11}}><span>{k}</span><span>{v}</span></div>)}
+              </div>}
+            </div>
+          </div>
+          <div className="card" style={{padding:14}}>
+            <div style={{fontWeight:700, fontSize:13, color:"#ef4444", marginBottom:10}}>Perdedores ({lp.count || 0})</div>
+            <div style={{fontSize:12, display:"flex", flexDirection:"column", gap:6}}>
+              <div style={{display:"flex", justifyContent:"space-between"}}><span style={{color:"rgba(255,255,255,0.5)"}}>Avg Score</span><span>{lp.avg_score || 0}</span></div>
+              <div style={{display:"flex", justifyContent:"space-between"}}><span style={{color:"rgba(255,255,255,0.5)"}}>Avg Spread %</span><span>{lp.avg_spread_pct || 0}</span></div>
+              <div style={{display:"flex", justifyContent:"space-between"}}><span style={{color:"rgba(255,255,255,0.5)"}}>Move vs Fee</span><span>{lp.avg_move_vs_fee || 0}</span></div>
+              <div style={{display:"flex", justifyContent:"space-between"}}><span style={{color:"rgba(255,255,255,0.5)"}}>Confirmacion</span><span>{lp.avg_confirmation || 0}</span></div>
+              {lp.quality_distribution && <div style={{marginTop:6}}>
+                <div style={{fontSize:11, color:"rgba(255,255,255,0.3)", marginBottom:4}}>Distribucion calidad</div>
+                {Object.entries(lp.quality_distribution).map(([k,v]) => <div key={k} style={{display:"flex", justifyContent:"space-between", fontSize:11}}><span>{k}</span><span>{v}</span></div>)}
+              </div>}
+            </div>
+          </div>
+        </div>
+
+        {(lf.length > 0 || wf.length > 0) && <>
+          <h3 className="section-title" style={{marginTop:14}}>Factores Principales</h3>
+          <div className="grid" style={{gridTemplateColumns:"1fr 1fr"}}>
+            {lf.length > 0 && <div className="card" style={{padding:14}}>
+              <div style={{fontWeight:700, fontSize:13, color:"#ef4444", marginBottom:10}}>Top Factores Perdedores</div>
+              {lf.map((f, i) => <div key={i} style={{display:"flex", justifyContent:"space-between", fontSize:12, padding:"4px 0", borderBottom:"1px solid rgba(255,255,255,0.03)"}}>
+                <span>{f.factor}</span>
+                <span style={{color:"#ef4444", fontWeight:600}}>{f.count} ({f.pct}%)</span>
+              </div>)}
+            </div>}
+            {wf.length > 0 && <div className="card" style={{padding:14}}>
+              <div style={{fontWeight:700, fontSize:13, color:"#22c55e", marginBottom:10}}>Top Factores Ganadores</div>
+              {wf.map((f, i) => <div key={i} style={{display:"flex", justifyContent:"space-between", fontSize:12, padding:"4px 0", borderBottom:"1px solid rgba(255,255,255,0.03)"}}>
+                <span>{f.factor}</span>
+                <span style={{color:"#22c55e", fontWeight:600}}>{f.count} ({f.pct}%)</span>
+              </div>)}
+            </div>}
+          </div>
+        </>}
+      </>);
+    })()}
+
+    {view === "decisions" && (<>
+      <h3 className="section-title">Automated Decisions ({decisions.length})</h3>
+      {decisions.length === 0 ? <div className="loading">No decisions yet — need more trades</div> :
+      <div className="card scroll">
+        {decisions.map((d, i) => (
+          <div key={i} style={{padding:"10px 0", borderBottom:"1px solid #1a1a2e"}}>
+            <div style={{display:"flex", gap:8, alignItems:"center"}}>
+              <span className={"tag " + (d.type === "recommendation" ? "tag-blue" : d.type === "warning" ? "tag-yellow" : "tag-green")}>{d.type}</span>
+              <span style={{fontWeight:700, fontSize:13}}>{d.title}</span>
+              <span className={"pill " + (d.confidence === "high" ? "tag-green" : "tag-yellow")} style={{marginLeft:"auto"}}>{d.confidence}</span>
+            </div>
+            <div style={{marginTop:6, padding:"8px 12px", background:"#0a0a12", borderRadius:8, fontSize:11}}>
+              <div style={{color:"#888"}}><b>Evidence:</b> {d.evidence}</div>
+              <div style={{color:"#3b82f6", marginTop:4}}><b>Action:</b> {d.action}</div>
+              <div style={{color:"#22c55e", marginTop:4}}><b>Expected impact:</b> {d.expected_impact}</div>
+            </div>
+          </div>
+        ))}
+      </div>}
+    </>)}
+  </>);
+}
+
+// ── Validation Tab ──
+function ValidationTab() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [mode, setMode] = useState("live_trades");
+
+  const run = () => {
+    setLoading(true);
+    fetch(API + "/api/quant/validation?mode=" + mode).then(r => r.json()).then(d => { setData(d); setLoading(false); }).catch(() => setLoading(false));
+  };
+
+  const verdictColor = (v) => v === "ADOPT" ? "tag-green" : v === "TEST_LIVE" ? "tag-yellow" : v === "REJECT" ? "tag-red" : v === "BLOCKED_BY_DATA_QUALITY" ? "tag-red" : "tag-blue";
+  const confColor = (c) => c === "HIGH" ? "#22c55e" : c === "MEDIUM" ? "#eab308" : "#ef4444";
+  const flagColor = (f) => f === "NO_EFFECT" || f === "BEST_IS_BASELINE" ? "#f97316" : f === "DATA_QUALITY" ? "#ef4444" : "#eab308";
+
+  if (!data) return (<div style={{textAlign:"center", padding:40}}>
+    <div style={{display:"flex", justifyContent:"center", gap:8, marginBottom:12}}>
+      <button className={"tab " + (mode === "live_trades" ? "active" : "")} onClick={() => setMode("live_trades")}>Live Trades</button>
+      <button className={"tab " + (mode === "replay_historical" ? "active" : "")} onClick={() => setMode("replay_historical")}>Historical Replay</button>
+    </div>
+    <button onClick={run} className="tab active">{loading ? "Running experiments..." : "Run Full Validation"}</button>
+    <p style={{fontSize:10, color:"#555", marginTop:8}}>{mode === "live_trades" ? "Runs 12 experiments across 3 batches against real trade data" : "Replay mode: requires 7+ days of captured raw data"}</p>
+  </div>);
+
+  const b = data.baseline_summary || {};
+
+  return (<>
+    <div className="page-title">Validacion <Tip text="Pruebas formales de cambios antes de aplicarlos al bot. Compara variantes contra el baseline actual." /><div className="page-sub">Pruebas formales de cambios antes de aplicar al bot</div></div>
+    {/* Baseline */}
+    <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12}}>
+      <h3 className="section-title" style={{margin:0}}>Baseline ({data.total_trades_baseline} trades)</h3>
+      <div style={{display:"flex", gap:8}}>
+        <button onClick={run} className="tab">{loading ? "Running..." : "Re-run"}</button>
+        <ExportBtn data={data} filename={"validation_" + new Date().toISOString().split("T")[0] + ".json"} />
+      </div>
+    </div>
+    <div className="grid" style={{gridTemplateColumns:"repeat(6, 1fr)"}}>
+      <MC label="Expectancy" value={"$" + (b.expectancy || 0)} color={Number(b.expectancy) >= 0 ? "green" : "red"} />
+      <MC label="Win Rate" value={((b.winrate || 0) * 100).toFixed(0) + "%"} color={b.winrate >= 0.5 ? "green" : "red"} />
+      <MC label="PF" value={b.profit_factor || 0} color={Number(b.profit_factor) >= 1 ? "green" : "red"} />
+      <MC label="Net PnL" value={"$" + (b.net_pnl || 0)} color={Number(b.net_pnl) >= 0 ? "green" : "red"} />
+      <MC label="Max DD" value={"$" + (b.max_drawdown || 0)} color="red" />
+      <MC label="Fee Killed" value={b.fee_killed_count || 0} color={b.fee_killed_count === 0 ? "green" : "red"} />
+    </div>
+
+    {/* Validation Integrity */}
+    {data.validation_integrity && data.validation_integrity.status !== "OK" && (
+      <div className="card" style={{marginTop:12, borderColor:"#f97316", padding:"10px 14px"}}>
+        <div style={{fontSize:12, fontWeight:700, color:"#f97316", marginBottom:4}}>Validation Integrity: {data.validation_integrity.status}</div>
+        {(data.validation_integrity.issues || []).map((issue, i) => (
+          <div key={i} style={{fontSize:10, color:"#aaa", padding:"2px 0"}}>{issue}</div>
+        ))}
+      </div>
+    )}
+
+    {/* Batches */}
+    {(data.batches || []).map((batch, bi) => (
+      <div key={bi} className="card" style={{marginTop:16}}>
+        <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8}}>
+          <div>
+            <span style={{fontWeight:700, fontSize:14, color:"#e0e0e8"}}>{batch.batch_name.replace(/_/g, " ").toUpperCase()}</span>
+            <span className={"tag " + verdictColor(batch.verdict?.decision)} style={{marginLeft:8}}>{batch.verdict?.decision}</span>
+            {batch.verdict?.confidence && (
+              <span style={{marginLeft:6, fontSize:10, fontWeight:600, color: confColor(batch.verdict.confidence)}}>[{batch.verdict.confidence}]</span>
+            )}
+          </div>
+          <span style={{fontSize:10, color:"#666"}}>Best: <span className="purple">{batch.best_experiment || "none"}</span></span>
+        </div>
+        <p style={{fontSize:10, color:"#888", marginBottom:8}}>{batch.hypothesis}</p>
+
+        {/* Status flags */}
+        {batch.batch_status_flags?.length > 0 && (
+          <div style={{marginBottom:6, display:"flex", gap:4, flexWrap:"wrap"}}>
+            {batch.batch_status_flags.map((f, i) => <span key={i} style={{padding:"2px 8px", borderRadius:10, fontSize:9, fontWeight:600, background:"rgba(249,115,22,0.15)", color: flagColor(f)}}>{f}</span>)}
+          </div>
+        )}
+
+        {/* Data quality blockers */}
+        {batch.data_quality_blockers?.length > 0 && (
+          <div style={{padding:"6px 10px", background:"rgba(239,68,68,0.1)", borderRadius:6, fontSize:10, marginBottom:8, color:"#ef4444"}}>
+            {batch.data_quality_blockers.map((b, i) => <div key={i}>{b}</div>)}
+          </div>
+        )}
+
+        {/* Verdict */}
+        <div style={{padding:"6px 10px", background:"#0a0a12", borderRadius:6, fontSize:11, marginBottom:8}}>
+          <span style={{color:"#aaa"}}>{batch.verdict?.reasoning}</span>
+          {batch.verdict?.risk_flags?.length > 0 && (
+            <span style={{marginLeft:8}}>{batch.verdict.risk_flags.map((f, i) => <span key={i} className="tag tag-yellow" style={{marginLeft:4}}>{f}</span>)}</span>
+          )}
+        </div>
+
+        {/* Experiments table */}
+        <table>
+          <thead><tr>
+            <th>Experiment</th><th style={{textAlign:"right"}}>Trades</th><th style={{textAlign:"right"}}>WR</th>
+            <th style={{textAlign:"right"}}>Expectancy</th><th style={{textAlign:"right"}}>PF</th>
+            <th style={{textAlign:"right"}}>Net PnL</th><th style={{textAlign:"right"}}>DD</th>
+            <th style={{textAlign:"right"}}>Exp %</th><th style={{textAlign:"right"}}>PF %</th>
+          </tr></thead>
+          <tbody>
+            {batch.experiments?.map((exp, i) => {
+              const km = exp.key_metrics || {};
+              const vs = exp.vs_baseline || {};
+              const isBest = exp.name === batch.best_experiment;
+              return (
+                <tr key={i} style={{background: isBest ? "#1a1a3e" : "transparent"}}>
+                  <td style={{fontWeight: isBest ? 700 : 400}}>{isBest && ">> "}{exp.name}</td>
+                  <td style={{textAlign:"right"}}>{exp.trades_accepted}</td>
+                  <td style={{textAlign:"right"}}>{((km.winrate || 0) * 100).toFixed(0)}%</td>
+                  <td style={{textAlign:"right", color: km.expectancy >= 0 ? "#22c55e" : "#ef4444"}}>{km.expectancy}</td>
+                  <td style={{textAlign:"right"}}>{km.profit_factor}</td>
+                  <td style={{textAlign:"right", color: km.net_pnl >= 0 ? "#22c55e" : "#ef4444"}}>{km.net_pnl}</td>
+                  <td style={{textAlign:"right"}}>{km.max_drawdown}</td>
+                  <td style={{textAlign:"right", color: vs.expectancy_change_pct > 0 ? "#22c55e" : "#ef4444"}}>{vs.expectancy_change_pct > 0 ? "+" : ""}{vs.expectancy_change_pct}%</td>
+                  <td style={{textAlign:"right", color: vs.pf_change_pct > 0 ? "#22c55e" : "#ef4444"}}>{vs.pf_change_pct > 0 ? "+" : ""}{vs.pf_change_pct}%</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    ))}
+
+    {/* Combination */}
+    {data.combination_suggestion && (
+      <div className="card" style={{marginTop:16, borderColor:"#3b82f6"}}>
+        <h3 className="section-title" style={{color:"#3b82f6"}}>Suggested Combined Config</h3>
+        <pre style={{fontSize:11, color:"#aaa", background:"#0a0a12", padding:12, borderRadius:8}}>{JSON.stringify(data.combination_suggestion.proposed_config, null, 2)}</pre>
+        <p style={{fontSize:10, color:"#666", marginTop:4}}>{data.combination_suggestion.note}</p>
+      </div>
+    )}
+  </>);
+}
+
+// ── Research Tab (old) ──
+function ResearchTab() {
+  const [report, setReport] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [view, setView] = useState("daily_summary");
+
+  const loadReport = () => {
+    setLoading(true);
+    fetch(API + "/api/reports/full").then(r => r.json()).then(d => { setReport(d); setLoading(false); }).catch(() => setLoading(false));
+  };
+
+  useEffect(() => { loadReport(); }, []);
+
+  const views = ["daily_summary", "wr_by_coin", "wr_by_side", "wr_by_hour", "pnl_by_mode", "pnl_by_tag", "pnl_by_exit_reason", "fee_analysis", "poison_coins", "rescuable_coins", "signal_blocked_vs_entered"];
+
+  if (loading) return <div className="loading">Generating reports...</div>;
+  if (!report) return <div className="loading">No data yet. <button onClick={loadReport} className="tab">Load</button></div>;
+
+  const data = report[view] || [];
+  const cols = data.length > 0 ? Object.keys(data[0]) : [];
+
+  return (<>
+    <div className="page-title">Informes<div className="page-sub">Reports operativos: por coin, hora, modo, tags</div></div>
+    <div style={{display:"flex", gap:4, flexWrap:"wrap", marginBottom:16}}>
+      {views.map(v => (
+        <button key={v} className={"tab " + (view === v ? "active" : "")} onClick={() => setView(v)}>{v.replace(/_/g, " ")}</button>
+      ))}
+      <button className="tab" onClick={loadReport} style={{marginLeft:"auto"}}>Refresh</button>
+    </div>
+    <div className="card scroll">
+      <table>
+        <thead><tr>{cols.map(c => <th key={c} style={{textAlign: typeof data[0]?.[c] === "number" ? "right" : "left"}}>{c}</th>)}</tr></thead>
+        <tbody>
+          {data.map((row, i) => (
+            <tr key={i}>
+              {cols.map(c => {
+                const v = row[c];
+                const isNum = typeof v === "number";
+                const color = c.includes("pnl") || c === "net" || c === "gross" ? (v >= 0 ? "#22c55e" : "#ef4444") : c === "wr" ? (v >= 50 ? "#22c55e" : v >= 40 ? "#eab308" : "#ef4444") : undefined;
+                return <td key={c} style={{textAlign: isNum ? "right" : "left", color}}>{isNum ? v.toLocaleString() : String(v ?? "-")}</td>;
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {data.length === 0 && <div className="loading">No data for this report</div>}
+    </div>
+  </>);
+}
+
+// ── Audit Tab ──
+function AuditTab() {
+  const { data: status } = useFetch("/api/audit/status", 10000);
+  const { data: findings } = useFetch("/api/audit/findings", 10000);
+  const [fullReport, setFullReport] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const runAll = () => {
+    setLoading(true);
+    fetch(API + "/api/audit/run").then(r => r.json()).then(d => { setFullReport(d); setLoading(false); }).catch(() => setLoading(false));
+  };
+
+  const scoreColor = (s) => s >= 80 ? "green" : s >= 60 ? "yellow" : "red";
+  const sevColor = (s) => s === "critical" ? "tag-red" : s === "error" ? "tag-red" : s === "warning" ? "tag-yellow" : "tag-blue";
+
+  return (<>
+    <div className="page-title">Auditoria <Tip text="Sistema de auditorias automaticas que verifica la integridad de datos cada 5-60 minutos." /><div className="page-sub">Calidad de datos, integridad, checks automaticos</div></div>
+    {/* Global Score */}
+    <div className="grid">
+      <MC label="Health Score" value={status?.global_score ?? "..."} color={scoreColor(status?.global_score || 0)} sub="0-100" />
+      <MC label="Active Findings" value={findings?.length || 0} color={findings?.length > 0 ? "yellow" : "green"} />
+      <div className="card">
+        <div className="label">Run All</div>
+        <button onClick={runAll} className="tab active" style={{marginTop:8}}>{loading ? "Running..." : "Audit Now"}</button>
+      </div>
+    </div>
+
+    {/* Per-Check Status */}
+    {status?.checks && (<>
+      <h3 className="section-title" style={{marginTop:16}}>Checks <Tip text="Cada check se ejecuta en intervalos distintos: integracion (5m), calidad (15m), storage (1h), consistencia (6h)." /></h3>
+      <div className="card">
+        <table>
+          <thead><tr><th>Check</th><th>Status</th><th style={{textAlign:"right"}}>Score</th><th style={{textAlign:"right"}}>Findings</th><th style={{textAlign:"right"}}>Runs</th><th>Interval</th><th>Last Run</th></tr></thead>
+          <tbody>
+            {Object.entries(status.checks).map(([name, c]) => (
+              <tr key={name}>
+                <td className="purple">{name}</td>
+                <td><span className={"tag " + (c.status === "OK" ? "tag-green" : c.status === "WARNING" ? "tag-yellow" : c.status === "ERROR" ? "tag-red" : "tag-blue")}>{c.status}</span></td>
+                <td style={{textAlign:"right", color: scoreColor(c.score) === "green" ? "#22c55e" : scoreColor(c.score) === "yellow" ? "#eab308" : "#ef4444"}}>{c.score}</td>
+                <td style={{textAlign:"right"}}>{c.findings}</td>
+                <td style={{textAlign:"right"}}>{c.run_count}</td>
+                <td style={{color:"#666"}}>{c.interval_sec < 60 ? c.interval_sec + "s" : Math.round(c.interval_sec / 60) + "m"}</td>
+                <td style={{fontSize:10, color:"#555"}}>{c.last_run ? new Date(c.last_run).toLocaleTimeString() : "-"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>)}
+
+    {/* Current Findings */}
+    {findings && findings.length > 0 && (<>
+      <h3 className="section-title" style={{marginTop:16}}>Current Findings</h3>
+      <div className="card scroll">
+        <table>
+          <thead><tr><th>Severity</th><th>Check</th><th>Code</th><th>Message</th></tr></thead>
+          <tbody>
+            {findings.map((f, i) => (
+              <tr key={i}>
+                <td><span className={"tag " + sevColor(f.severity)}>{f.severity}</span></td>
+                <td className="purple">{f.check}</td>
+                <td style={{fontFamily:"monospace", fontSize:10}}>{f.code}</td>
+                <td style={{color:"#bbb"}}>{f.message}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>)}
+
+    {/* Full Report (after Run All) */}
+    {fullReport && (<>
+      <h3 className="section-title" style={{marginTop:16}}>Full Report</h3>
+      {Object.entries(fullReport.checks || {}).map(([name, c]) => (
+        <div key={name} className="card" style={{marginBottom:8}}>
+          <div style={{display:"flex", justifyContent:"space-between", marginBottom:8}}>
+            <span className="purple" style={{fontWeight:600}}>{name}</span>
+            <span className={"tag " + (c.status === "OK" ? "tag-green" : c.status === "WARNING" ? "tag-yellow" : "tag-red")}>{c.status} ({c.score})</span>
+          </div>
+          {c.metrics && (
+            <div style={{display:"flex", gap:12, flexWrap:"wrap", marginBottom:8}}>
+              {Object.entries(c.metrics).map(([k, v]) => (
+                <span key={k} style={{fontSize:10, color:"#666"}}>{k}: <span style={{color:"#aaa"}}>{typeof v === "number" ? v.toLocaleString() : String(v)}</span></span>
+              ))}
+            </div>
+          )}
+          {c.findings && c.findings.length > 0 && c.findings.map((f, i) => (
+            <div key={i} style={{padding:"2px 0", fontSize:11, color: f.severity === "error" || f.severity === "critical" ? "#ef4444" : f.severity === "warning" ? "#eab308" : "#888"}}>
+              [{f.severity}] {f.code}: {f.message}
+            </div>
+          ))}
+        </div>
+      ))}
+    </>)}
+  </>);
+}
+
+// ── Trades Tab (Trade Detail & Analysis) ──
+function TradesTab() {
+  const [trades, setTrades] = useState(null);
+  const [selected, setSelected] = useState(null);
+  const [detail, setDetail] = useState(null);
+  const [snapStats, setSnapStats] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/trades?limit=100").then(r=>r.json()).then(setTrades).catch(()=>{});
+    fetch("/api/trades/snapshots/stats").then(r=>r.json()).then(setSnapStats).catch(()=>{});
+  }, []);
+
+  const loadDetail = (id) => {
+    setSelected(id);
+    setLoading(true);
+    fetch("/api/trades/" + id).then(r=>r.json()).then(d => { setDetail(d); setLoading(false); }).catch(()=>setLoading(false));
+  };
+
+  const cleanSnapshots = (days) => {
+    if(!confirm("Borrar snapshots de mas de " + days + " dias?")) return;
+    fetch("/api/trades/snapshots/cleanup?days=" + days, {method:"DELETE"}).then(r=>r.json()).then(d => {
+      alert("Eliminados: " + d.deleted + " snapshots");
+      fetch("/api/trades/snapshots/stats").then(r=>r.json()).then(setSnapStats);
+    });
+  };
+
+  const VC = {GOOD:"#22c55e", ACCEPTABLE:"#3b82f6", BAD:"#f59e0b", TERRIBLE:"#ef4444"};
+
+  if (detail && selected) {
+    const t = detail.trade || {};
+    const v = detail.verdict || {};
+    const snaps = detail.snapshots || [];
+    const sig = detail.signal || {};
+    return (<div>
+      <button onClick={()=>{setSelected(null);setDetail(null);}} style={{marginBottom:12,padding:"6px 16px",background:"#1e1b4b",border:"1px solid #4c1d95",borderRadius:8,color:"#a78bfa",cursor:"pointer"}}>Volver a lista</button>
+      <h3 style={{fontSize:18,fontWeight:700,marginBottom:4}}>{t.coin} {t.side} <span style={{color:VC[v.verdict]||"#888",fontWeight:700}}>{v.verdict||"?"}</span></h3>
+      <p style={{fontSize:11,color:"#666",marginBottom:16}}>{t.mode} | {t.entry_tag} | {new Date(t.entry_time).toLocaleString("es-ES")}</p>
+
+      {/* Verdict */}
+      <div style={{background:"rgba(30,27,75,0.5)",border:"1px solid "+(VC[v.verdict]||"#333"),borderRadius:12,padding:16,marginBottom:16}}>
+        <div style={{fontSize:13,fontWeight:700,color:VC[v.verdict],marginBottom:6}}>Veredicto: {v.verdict}</div>
+        <p style={{fontSize:12,color:"#aaa"}}>{v.verdict_reason}</p>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginTop:12}}>
+          <MC label="Entry Timing" value={v.entry_timing||"?"} />
+          <MC label="MFE Captura" value={(v.mfe_capture_pct||0).toFixed(1)+"%"} />
+          <MC label="Tiempo en Profit" value={(v.time_in_profit_pct||0).toFixed(0)+"%"} />
+          <MC label="Fee Killed" value={v.fee_killed?"SI":"NO"} accent={!v.fee_killed} negative={v.fee_killed} />
+        </div>
+      </div>
+
+      {/* Entry / Exit */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:16}}>
+        <div style={{background:"#111",borderRadius:8,padding:12,textAlign:"center"}}>
+          <div style={{fontSize:9,color:"#666",textTransform:"uppercase"}}>Entry</div>
+          <div style={{fontSize:16,fontWeight:700,fontFamily:"monospace"}}>${Number(t.entry_price).toFixed(5)}</div>
+        </div>
+        <div style={{background:"#111",borderRadius:8,padding:12,textAlign:"center"}}>
+          <div style={{fontSize:9,color:"#666",textTransform:"uppercase"}}>Exit ({t.exit_reason})</div>
+          <div style={{fontSize:16,fontWeight:700,fontFamily:"monospace",color:t.net_pnl>=0?"#22c55e":"#ef4444"}}>${Number(t.exit_price).toFixed(5)}</div>
+        </div>
+        <div style={{background:t.net_pnl>=0?"rgba(34,197,94,0.1)":"rgba(239,68,68,0.1)",borderRadius:8,padding:12,textAlign:"center",border:"1px solid "+(t.net_pnl>=0?"#22c55e33":"#ef444433")}}>
+          <div style={{fontSize:9,color:"#666",textTransform:"uppercase"}}>PnL Neto</div>
+          <div style={{fontSize:18,fontWeight:700,fontFamily:"monospace",color:t.net_pnl>=0?"#22c55e":"#ef4444"}}>${Number(t.net_pnl).toFixed(4)}</div>
+          <div style={{fontSize:10,color:"#666"}}>Bruto: ${Number(t.gross_pnl).toFixed(4)} | Fee: ${Number(t.fee).toFixed(4)}</div>
+        </div>
+      </div>
+
+      {/* Scores */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8,marginBottom:16}}>
+        <MC label="Score" value={(t.signal_score||0).toFixed(1)} />
+        <MC label="Trend" value={(t.trend_score||0).toFixed(1)} />
+        <MC label="Micro" value={(t.micro_score||0).toFixed(0)} />
+        <MC label="MFE" value={(t.mfe_pct||0).toFixed(3)+"%"} />
+        <MC label="MAE" value={(t.mae_pct||0).toFixed(3)+"%"} />
+      </div>
+
+      {/* SL Movement from snapshots */}
+      {snaps.length > 0 && (<div style={{marginBottom:16}}>
+        <h4 style={{fontSize:12,fontWeight:700,color:"#a78bfa",marginBottom:8}}>Timeline ({snaps.length} snapshots)</h4>
+        <div style={{maxHeight:200,overflowY:"auto",background:"#0a0a14",borderRadius:8,padding:8}}>
+          <table style={{width:"100%",fontSize:10}}><thead><tr style={{color:"#666"}}>
+            <th style={{textAlign:"left"}}>Tiempo</th><th style={{textAlign:"right"}}>Precio</th><th style={{textAlign:"right"}}>SL</th><th style={{textAlign:"right"}}>HWM</th><th style={{textAlign:"right"}}>PnL%</th>
+          </tr></thead><tbody>
+          {snaps.map((s,i) => (<tr key={i} style={{borderTop:"1px solid #1a1a2e"}}>
+            <td style={{color:"#888"}}>{new Date(s.timestamp).toLocaleTimeString("es-ES")}</td>
+            <td style={{textAlign:"right",fontFamily:"monospace"}}>{Number(s.mid_price).toFixed(5)}</td>
+            <td style={{textAlign:"right",fontFamily:"monospace",color:"#ef4444"}}>{Number(s.sl_price).toFixed(5)}</td>
+            <td style={{textAlign:"right",fontFamily:"monospace",color:"#a78bfa"}}>{Number(s.high_water_mark).toFixed(5)}</td>
+            <td style={{textAlign:"right",fontFamily:"monospace",color:s.pnl_pct>=0?"#22c55e":"#ef4444"}}>{Number(s.pnl_pct).toFixed(3)}%</td>
+          </tr>))}
+          </tbody></table>
+        </div>
+      </div>)}
+
+      {/* Improvements */}
+      {v.improvements && (<div style={{marginBottom:16}}>
+        <h4 style={{fontSize:12,fontWeight:700,color:"#f59e0b",marginBottom:8}}>Que se puede mejorar</h4>
+        {(typeof v.improvements === "string" ? JSON.parse(v.improvements) : v.improvements).map((imp,i) => (
+          <div key={i} style={{background:"rgba(245,158,11,0.08)",border:"1px solid rgba(245,158,11,0.2)",borderRadius:8,padding:10,marginBottom:6,fontSize:12,color:"#ddd"}}>{imp}</div>
+        ))}
+      </div>)}
+
+      {/* Counterfactual */}
+      {v.counterfactual && (<div style={{marginBottom:16}}>
+        <h4 style={{fontSize:12,fontWeight:700,color:"#3b82f6",marginBottom:8}}>Que habria pasado si...</h4>
+        {Object.entries(typeof v.counterfactual === "string" ? JSON.parse(v.counterfactual) : v.counterfactual).map(([k,val]) => {
+          const obj = typeof val === "object" && val !== null ? val : {};
+          const desc = obj.description || k;
+          const result = obj.survived != null ? (obj.survived ? "SI habria sobrevivido" : "NO habria sobrevivido")
+                       : obj.would_have_tp != null ? (obj.would_have_tp ? "SI habria cerrado en profit" : "NO habria llegado al TP")
+                       : JSON.stringify(val);
+          const isGood = obj.survived === true || obj.would_have_tp === true;
+          return (
+            <div key={k} style={{background:isGood?"rgba(34,197,94,0.08)":"rgba(239,68,68,0.08)",border:"1px solid "+(isGood?"rgba(34,197,94,0.2)":"rgba(239,68,68,0.2)"),borderRadius:8,padding:12,marginBottom:6}}>
+              <div style={{fontSize:12,fontWeight:700,color:isGood?"#22c55e":"#ef4444",marginBottom:4}}>{result}</div>
+              <div style={{fontSize:11,color:"#aaa"}}>{desc}</div>
+              {obj.original_sl_pct && <div style={{fontSize:10,color:"#666",marginTop:4}}>SL original: {obj.original_sl_pct}% → SL ancho: {obj.wider_sl_pct}% | MAE: {obj.mae_pct}%</div>}
+              {obj.original_tp_pct && <div style={{fontSize:10,color:"#666",marginTop:4}}>TP original: {obj.original_tp_pct}% → TP corto: {obj.tighter_tp_pct}% | MFE: {obj.mfe_pct}%</div>}
+            </div>
+          );
+        })}
+      </div>)}
+    </div>);
+  }
+
+  return (<div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+      <h3 style={{fontSize:16,fontWeight:700}}>Historial de Trades</h3>
+      {snapStats && (<div style={{display:"flex",alignItems:"center",gap:12}}>
+        <span style={{fontSize:10,color:"#666"}}>Snapshots: {snapStats.total||0} ({snapStats.disk_size||"?"})</span>
+        <button onClick={()=>cleanSnapshots(7)} style={{padding:"4px 12px",fontSize:10,background:"#7f1d1d",border:"1px solid #991b1b",borderRadius:6,color:"#fca5a5",cursor:"pointer"}}>Limpiar +7d</button>
+        <button onClick={()=>cleanSnapshots(3)} style={{padding:"4px 12px",fontSize:10,background:"#7f1d1d",border:"1px solid #991b1b",borderRadius:6,color:"#fca5a5",cursor:"pointer"}}>Limpiar +3d</button>
+      </div>)}
+    </div>
+    {!trades ? <p style={{color:"#666"}}>Cargando...</p> : trades.length === 0 ? <p style={{color:"#666"}}>No hay trades</p> : (
+      <div style={{overflowX:"auto"}}>
+        <table style={{width:"100%",fontSize:11,borderCollapse:"collapse"}}>
+          <thead><tr style={{color:"#666",borderBottom:"1px solid #222"}}>
+            <th style={{textAlign:"left",padding:6}}>Fecha</th>
+            <th>Coin</th><th>Side</th><th>Modo</th>
+            <th style={{textAlign:"right"}}>Neto</th>
+            <th style={{textAlign:"right"}}>MFE</th>
+            <th style={{textAlign:"right"}}>MAE</th>
+            <th>Salida</th>
+            <th>Veredicto</th>
+            <th>Quality</th>
+            <th></th>
+          </tr></thead>
+          <tbody>
+          {trades.map((t,i) => (
+            <tr key={i} style={{borderBottom:"1px solid #111",cursor:"pointer"}} onClick={()=>loadDetail(t.id)}>
+              <td style={{padding:6,color:"#888",fontSize:10}}>{t.entry_time ? new Date(t.entry_time).toLocaleString("es-ES",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : "?"}</td>
+              <td style={{fontWeight:700,color:"#a78bfa"}}>{t.coin}</td>
+              <td><span style={{padding:"2px 8px",borderRadius:4,fontSize:10,fontWeight:700,background:t.side==="LONG"?"rgba(34,197,94,0.2)":"rgba(239,68,68,0.2)",color:t.side==="LONG"?"#22c55e":"#ef4444"}}>{t.side}</span></td>
+              <td style={{color:"#888"}}>{t.mode}</td>
+              <td style={{textAlign:"right",fontFamily:"monospace",fontWeight:700,color:t.net_pnl>=0?"#22c55e":"#ef4444"}}>${Number(t.net_pnl||0).toFixed(4)}</td>
+              <td style={{textAlign:"right",fontFamily:"monospace",color:"#22c55e"}}>{(t.mfe_pct||0).toFixed(3)}%</td>
+              <td style={{textAlign:"right",fontFamily:"monospace",color:"#ef4444"}}>{(t.mae_pct||0).toFixed(3)}%</td>
+              <td style={{fontSize:10,color:"#888"}}>{t.exit_reason}</td>
+              <td>{t.verdict ? <span style={{padding:"2px 8px",borderRadius:4,fontSize:10,fontWeight:700,background:(VC[t.verdict]||"#333")+"22",color:VC[t.verdict]||"#888"}}>{t.verdict}</span> : <span style={{color:"#444"}}>-</span>}</td>
+              <td style={{fontSize:10,color:"#888"}}>{t.entry_quality_label||""}</td>
+              <td><span style={{color:"#4c1d95",fontSize:10}}>Ver</span></td>
+            </tr>
+          ))}
+          </tbody>
+        </table>
+      </div>
+    )}
+  </div>);
+}
+
+// ── Bot Live Tab ──
+// ── Cambios Tab ──
+// Lista de change markers (manuales y automaticos) con su impacto antes/despues calculado.
+// Permite ver el efecto real de cada cambio que has hecho en el bot.
+function CambiosTab() {
+  const [items, setItems] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [days, setDays] = useState(30);
+  const [filterCat, setFilterCat] = useState("ALL");
+  const [recalcId, setRecalcId] = useState(null);
+
+  const load = () => {
+    setLoading(true);
+    fetch(API + "/api/markers?limit=200&days=" + days)
+      .then(r => r.json())
+      .then(d => { setItems(Array.isArray(d) ? d : []); setLoading(false); })
+      .catch(() => { setItems([]); setLoading(false); });
+  };
+  useEffect(() => { load(); }, [days]);
+
+  const recalc = async (id) => {
+    setRecalcId(id);
+    try {
+      await fetch(API + "/api/markers/" + id + "/recalculate", { method: "POST" });
+      load();
+    } finally { setRecalcId(null); }
+  };
+
+  if (loading) return <div className="loading">Cargando markers...</div>;
+
+  const categories = ["ALL", ...Array.from(new Set((items || []).map(m => m.category))).sort()];
+  const filtered = (items || []).filter(m => filterCat === "ALL" || m.category === filterCat);
+
+  const statusColor = (s) => {
+    if (s === "IMPROVED") return "#22c55e";
+    if (s === "WORSENED") return "#ef4444";
+    if (s === "NEUTRAL") return "#eab308";
+    if (s === "INSUFFICIENT_DATA") return "#888";
+    return "#555";
+  };
+  const catColor = (c) => {
+    const m = { MANUAL: "#3b82f6", MODE_CHANGE: "#a855f7", PRESET_EDIT: "#f59e0b",
+                PROPOSAL_ACCEPTED: "#22c55e", PROTECTION: "#ef4444", TEST: "#666" };
+    return m[c] || "#888";
+  };
+  const fmtDelta = (v, suffix) => {
+    if (v == null) return "-";
+    const sign = v > 0 ? "+" : "";
+    return sign + v + (suffix || "");
+  };
+  const fmtTime = (ts) => {
+    if (!ts) return "-";
+    try { return new Date(ts).toLocaleString("es-ES", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" }); }
+    catch { return ts; }
+  };
+
+  return (<>
+    <div className="page-title" style={{display:"flex", justifyContent:"space-between", alignItems:"center"}}>
+      <div>
+        <span>Cambios</span>
+        <div className="page-sub">Eventos que pueden cambiar el comportamiento del bot, con su impacto antes/despues calculado automaticamente</div>
+      </div>
+      <div style={{display:"flex", gap:8, alignItems:"center"}}>
+        <select value={days} onChange={e => setDays(Number(e.target.value))}
+                style={{background:"#1a1a1a", color:"#aaa", border:"1px solid #333", borderRadius:6, padding:"6px 10px", fontSize:11}}>
+          <option value={7}>Ultimos 7 dias</option>
+          <option value={30}>Ultimos 30 dias</option>
+          <option value={90}>Ultimos 90 dias</option>
+        </select>
+        <button className="tab" onClick={load}>Actualizar</button>
+      </div>
+    </div>
+
+    {/* Category filter */}
+    <div style={{display:"flex", gap:6, marginBottom:12, flexWrap:"wrap"}}>
+      {categories.map(c => (
+        <button key={c}
+                className={"tab " + (filterCat === c ? "active" : "")}
+                onClick={() => setFilterCat(c)}>
+          {c} {c !== "ALL" && <span style={{opacity:0.6, marginLeft:4}}>({(items || []).filter(m => m.category === c).length})</span>}
+        </button>
+      ))}
+    </div>
+
+    {filtered.length === 0 ? (
+      <div className="card" style={{textAlign:"center", padding:30, color:"#666"}}>
+        No hay markers en este periodo. Crea uno con el boton "Marcar cambio" del bot, o haz un cambio de modo / acepta una proposal.
+      </div>
+    ) : (
+      <div className="card scroll">
+        <table>
+          <thead><tr>
+            <th>Cuando</th>
+            <th>Categoria</th>
+            <th>Etiqueta</th>
+            <th>Contexto</th>
+            <th style={{textAlign:"center"}}>Estado</th>
+            <th style={{textAlign:"right"}}>WR antes/despues</th>
+            <th style={{textAlign:"right"}}>Expectancy antes/despues</th>
+            <th style={{textAlign:"right"}}>Δ exp</th>
+            <th style={{textAlign:"right"}}>SL% antes/despues</th>
+            <th></th>
+          </tr></thead>
+          <tbody>
+            {filtered.map(m => {
+              const imp = m.impact_data || {};
+              const before = imp.before || {};
+              const after = imp.after || {};
+              const ctx = [m.coin, m.side, m.mode].filter(Boolean).join(" / ") || "-";
+              return (
+                <tr key={m.id}>
+                  <td style={{fontSize:10, color:"#666", whiteSpace:"nowrap"}}>{fmtTime(m.timestamp)}</td>
+                  <td><span className="tag" style={{background: catColor(m.category) + "20", color: catColor(m.category), border: "1px solid " + catColor(m.category) + "40"}}>{m.category}</span></td>
+                  <td style={{maxWidth:300, overflow:"hidden", textOverflow:"ellipsis"}} title={m.description || ""}>
+                    <div>{m.label}</div>
+                    {m.description && <div style={{fontSize:9, color:"#555", marginTop:2}}>{m.description.length > 80 ? m.description.slice(0, 80) + "..." : m.description}</div>}
+                  </td>
+                  <td style={{fontSize:10, color:"#888"}}>{ctx}</td>
+                  <td style={{textAlign:"center"}}>
+                    <span className="tag" style={{background: statusColor(m.impact_status) + "20", color: statusColor(m.impact_status), border: "1px solid " + statusColor(m.impact_status) + "40"}}>
+                      {m.impact_status || "PENDING"}
+                    </span>
+                  </td>
+                  <td style={{textAlign:"right", fontFamily:"monospace", fontSize:10}}>
+                    {before.wr != null ? before.wr + "% / " + after.wr + "%" : "-"}
+                  </td>
+                  <td style={{textAlign:"right", fontFamily:"monospace", fontSize:10}}>
+                    {before.expectancy != null ? before.expectancy + " / " + after.expectancy : "-"}
+                  </td>
+                  <td style={{textAlign:"right", fontFamily:"monospace", fontSize:10, fontWeight:600,
+                              color: imp.delta_expectancy > 0 ? "#22c55e" : imp.delta_expectancy < 0 ? "#ef4444" : "#888"}}>
+                    {fmtDelta(imp.delta_expectancy)}
+                  </td>
+                  <td style={{textAlign:"right", fontFamily:"monospace", fontSize:10}}>
+                    {before.sl_rate != null ? before.sl_rate + "% / " + after.sl_rate + "%" : "-"}
+                  </td>
+                  <td>
+                    <button onClick={() => recalc(m.id)}
+                            disabled={recalcId === m.id}
+                            style={{background:"#1a1a2e", border:"1px solid #2a3f5f", color:"#3b82f6", padding:"3px 8px", borderRadius:4, fontSize:9, cursor:"pointer"}}>
+                      {recalcId === m.id ? "..." : "Recalcular"}
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    )}
+
+    <div style={{marginTop:12, fontSize:10, color:"#555", padding:12, background:"#0a0a0a", borderRadius:6}}>
+      <b>Como funciona:</b> cada marker compara las metricas (WR, expectancy, SL rate, profit factor) de los 20 trades antes vs los 20 trades despues del evento.
+      Si no hay 10 trades minimos en alguna ventana, hace fallback a las 6 horas antes/despues.
+      Si el marker tiene contexto (coin/side/mode) solo cuenta esos trades.
+      El estado se calcula con un score ponderado: <b style={{color:"#22c55e"}}>IMPROVED</b> si mejora &gt; 10%, <b style={{color:"#ef4444"}}>WORSENED</b> si empeora &gt; 10%, sino <b style={{color:"#eab308"}}>NEUTRAL</b>.
+    </div>
+  </>);
+}
+
+function BotLiveTab() {
+  const { data: stats } = useFetch("/api/bot/trades/stats", 5000);
+  const { data: trades } = useFetch("/api/bot/trades", 5000);
+  const { data: sigStats } = useFetch("/api/bot/signals/stats", 10000);
+  // V25: gate stats — telemetria de filtros que bloquean entradas
+  const { data: gateStats } = useFetch("/api/bot/gate-stats", 10000);
+
+  if (!stats) return <div className="loading">Loading bot data...</div>;
+
+  const s = stats;
+  const winRate = s.win_rate ? (s.win_rate * 100).toFixed(0) + "%" : "0%";
+
+  return (<>
+    <div className="page-title">Bot Live<div className="page-sub">Estado del bot en tiempo real: trades, senales y PnL</div></div>
+    <h3 className="section-title">Resumen de Trades <Tip text="Resumen en tiempo real de los trades ejecutados por el bot. Los datos se actualizan automaticamente." /></h3>
+    <div className="grid">
+      <MC label="Trades" value={s.total_trades || 0} sub={(s.wins || 0) + "W / " + (s.losses || 0) + "L"} />
+      <MC label="Win Rate" value={winRate} color={s.win_rate >= 0.5 ? "green" : "red"} />
+      <MC label="PnL Bruto" value={"$" + (s.total_gross || 0)} color={Number(s.total_gross) >= 0 ? "green" : "red"} />
+      <MC label="PnL Neto" value={"$" + (s.total_net || 0)} color={Number(s.total_net) >= 0 ? "green" : "red"} />
+      <MC label="Fees" value={"$" + (s.total_fees || 0)} color="yellow" />
+      <MC label="Avg W / L" value={"$" + (s.avg_win || 0) + " / $" + (s.avg_loss || 0)} />
+    </div>
+
+    {sigStats && sigStats.actions && (<>
+      <h3 className="section-title" style={{marginTop: 16}}>Decisiones de Senales <Tip text="Desglose de senales: ENTER (ejecutadas), SKIP (ignoradas), BLOCKED (rechazadas por filtros)." /></h3>
+      <div className="grid">
+        {sigStats.actions.map((a, i) => (
+          <MC key={i} label={a.action} value={a.total} sub={"avg score: " + (a.avg_score || 0)} color={a.action === "ENTER" ? "green" : a.action === "BLOCKED" ? "red" : "yellow"} />
+        ))}
+      </div>
+    </>)}
+
+    {/* ── Gate Stats (V25) — telemetria de filtros que bloquean entradas ── */}
+    {gateStats && gateStats.data && Object.keys(gateStats.data).length > 0 && (() => {
+      const g = gateStats.data;
+      const rej = g.rejections_total || {};
+      const cfg = g.sl_viability_config || {};
+      const topCoins = g.sl_viability_top_coins || {};
+      const uptime = g.uptime_sec || 0;
+      const upMin = Math.round(uptime / 60);
+      const recvAt = gateStats.received_at ? new Date(gateStats.received_at).toLocaleTimeString("es-ES") : "?";
+      return (
+        <>
+          <h3 className="section-title" style={{marginTop: 16}}>Gate Stats <Tip text="Contadores de rechazos por cada filtro de entrada del bot. Reemplaza los antiguos rechazos invisibles. Permite ver que filtro esta bloqueando las entradas. Snapshot enviado por el bot cada ~1 min." /> <span style={{fontSize:10,color:"#666",marginLeft:8,fontWeight:400}}>recibido {recvAt} · uptime {upMin}m · modo {g.mode}</span></h3>
+          <div className="grid">
+            <MC label="SL Viability rejects" value={rej.sl_viability ?? 0} sub={"min ticks " + (cfg.min_ticks_in_sl ?? "?")} color={rej.sl_viability > 100 ? "red" : rej.sl_viability > 0 ? "yellow" : "green"} />
+            <MC label="Spread rejects" value={rej.spread ?? 0} sub="spread > 0.05% mid" color={rej.spread > 50 ? "red" : "yellow"} />
+            <MC label="Cooldown skips" value={rej.cooldown ?? 0} sub="coin en cooldown" />
+            <MC label="Coin blocked" value={rej.coin_blocked ?? 0} sub="loss streak block" />
+          </div>
+          <div className="card" style={{marginTop:8, padding:12}}>
+            <div style={{fontSize:11,color:"#888",marginBottom:6}}>
+              <b style={{color:"#aaa"}}>SL Viability filter config:</b>{" "}
+              enabled <span className="purple">{String(cfg.enabled)}</span>{" · "}
+              minTicks <span className="purple">{cfg.min_ticks_in_sl}</span>{" · "}
+              floor <span className="purple">{cfg.sl_viability_floor_pct}%</span>{" · "}
+              configSL <span className="purple">{cfg.config_sl_pct}%</span>{" · "}
+              atrMin <span className="purple">{cfg.atr_sl_min_pct}%</span>
+            </div>
+            {Object.keys(topCoins).length > 0 ? (
+              <>
+                <div style={{fontSize:11,color:"#888",marginBottom:4}}><b style={{color:"#aaa"}}>Top coins bloqueadas por SL Viability:</b></div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                  {Object.entries(topCoins).map(([coin, count]) => (
+                    <span key={coin} className="tag" style={{background:"rgba(239,68,68,0.12)",color:"#ef4444",border:"1px solid rgba(239,68,68,0.3)"}}>
+                      {coin} <b style={{marginLeft:4}}>{count}</b>
+                    </span>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div style={{fontSize:11,color:"#666"}}>Sin rechazos por SL Viability en esta ventana.</div>
+            )}
+          </div>
+        </>
+      );
+    })()}
+
+    {trades && trades.length > 0 && (<>
+      <h3 className="section-title" style={{marginTop: 16}}>Trades Recientes <Tip text="Ultimos trades ejecutados con detalle de PnL bruto, fees y neto por operacion." /></h3>
+      <div className="card scroll">
+        <table>
+          <thead><tr>
+            <th>Time</th><th>Coin</th><th>Side</th><th>Reason</th><th>Mode</th>
+            <th style={{textAlign:"right"}}>Gross</th><th style={{textAlign:"right"}}>Fee</th>
+            <th style={{textAlign:"right"}}>Net</th><th style={{textAlign:"right"}}>Hold</th>
+          </tr></thead>
+          <tbody>
+            {trades.map((t, i) => {
+              const net = Number(t.net_pnl || 0);
+              const gross = Number(t.gross_pnl || 0);
+              const exitTime = t.exit_time ? new Date(t.exit_time).toLocaleString() : "-";
+              const holdMin = t.hold_seconds ? Math.round(t.hold_seconds / 60) + "m" : "-";
+              return (
+                <tr key={i}>
+                  <td style={{fontSize:10, color:"#555"}}>{exitTime}</td>
+                  <td className="purple">{t.coin}</td>
+                  <td><span className={"tag " + (t.side === "LONG" ? "tag-green" : "tag-red")}>{t.side}</span></td>
+                  <td><span className={"tag " + (t.exit_reason === "SL" ? "tag-red" : t.exit_reason === "TP" ? "tag-green" : "tag-yellow")}>{t.exit_reason}</span></td>
+                  <td style={{color:"#666"}}>{t.mode}</td>
+                  <td style={{textAlign:"right", color: gross >= 0 ? "#22c55e" : "#ef4444"}}>{gross.toFixed(4)}</td>
+                  <td style={{textAlign:"right", color:"#888"}}>{Number(t.fee || 0).toFixed(4)}</td>
+                  <td style={{textAlign:"right", fontWeight:600, color: net >= 0 ? "#22c55e" : "#ef4444"}}>{net.toFixed(4)}</td>
+                  <td style={{textAlign:"right", color:"#666"}}>{holdMin}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </>)}
+  </>);
+}
+
+// ── App ──
+// ── Help Tab ──
+function HelpTab() {
+  const sections = [
+    {
+      title: "OPERATIONS — Estado del sistema en tiempo real",
+      color: "#3b82f6",
+      items: [
+        { tab: "Bot Live", desc: "PnL en vivo, trades recientes, senales ENTER/SKIP/BLOCKED del bot. Responde: como va el bot ahora mismo?" },
+        { tab: "Trades", desc: "Historial completo de trades. Click en cualquiera para ver detalle: veredicto (GOOD/ACCEPTABLE/BAD/TERRIBLE), timeline de snapshots (SL, precio, HWM), sugerencias de mejora, y counterfactual (que habria pasado con SL mas ancho, TP mas corto). Boton de limpiar snapshots antiguos." },
+        { tab: "Daily Report", desc: "Informe diario automatico con 12 secciones: general, sistema, integracion, PnL, senales, features, storage, trading analysis, problemas. Compara dias entre si." },
+        { tab: "System", desc: "Salud tecnica: disco (uso, crecimiento, dias restantes), CPU, RAM, estado WS, estado DB." },
+        { tab: "Capture", desc: "Volumen de captura: eventos ingestados, archivos parquet, coins trackeados, computes de features." },
+      ]
+    },
+    {
+      title: "RESEARCH — Analisis cuantitativo",
+      color: "#a855f7",
+      items: [
+        { tab: "Research Lab", desc: "Cerebro de research. 5 vistas: Overview (KPIs + decisions), Metrics (breakdowns por coin/side/score/exit/mode), Analysis (score effectiveness, micro value, fee impact, holding time), Experiments (simular configs alternativas), Decisions (sugerencias automaticas con evidencia)." },
+        { tab: "Validation", desc: "Proceso formal de cambio. Ejecuta 3 batches de experimentos (score threshold, trailing, SL/fees) contra datos reales. Cada uno con verdict: ADOPT / TEST_LIVE / REJECT / INCONCLUSIVE. Sugiere combinacion optima." },
+        { tab: "Reports", desc: "Informes operativos: WR por coin/side/hora, PnL por mode/tag/reason, fee analysis, poison coins, rescuable coins, signal blocked vs entered, daily summary." },
+        { tab: "Features", desc: "Las 48 features en vivo por coin: momentum, volatilidad, tendencia, microestructura, temporales. Selector de coin con tabla de valores." },
+        { tab: "Regimes", desc: "Regimen de mercado actual por coin: trending_up/down, choppy, high_vol, quiet. Con confianza, trend strength y volatilidad." },
+      ]
+    },
+    {
+      title: "GOVERNANCE — Calidad y contratos",
+      color: "#22c55e",
+      items: [
+        { tab: "Audit", desc: "Sistema de auditorias automaticas: 4 checks (integration cada 5m, data_quality cada 15m, storage cada 1h, consistency cada 6h). Health score 0-100, findings activos, historial de runs." },
+        { tab: "Contract", desc: "Contrato formal de features: las 48 features definidas con nombre, version, grupo, fuente, ventana temporal. Garantiza que live = replay = training." },
+      ]
+    },
+  ];
+
+  return (<>
+    <div className="page-title">Ayuda<div className="page-sub">Guia completa del sistema, arquitectura y proceso de mejora</div></div>
+    <div style={{marginBottom:24}}>
+      <h2 style={{fontSize:18, fontWeight:700, marginBottom:8}}>Alchimia Platform — Guia</h2>
+      <p style={{fontSize:12, color:"#888", lineHeight:1.6}}>
+        Esta plataforma tiene 3 capas separadas con funciones distintas.
+        Cada pestana responde a una pregunta concreta. Si no sabes donde mirar, usa esta guia.
+      </p>
+    </div>
+
+    <div style={{padding:"12px 16px", background:"#0f0f1a", border:"1px solid #1a1a2e", borderRadius:10, marginBottom:16}}>
+      <h3 style={{fontSize:13, fontWeight:700, color:"#e0e0e8", marginBottom:8}}>Regla clave</h3>
+      <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, fontSize:11}}>
+        <div><span style={{color:"#3b82f6"}}>Operations</span> = como va el sistema ahora?</div>
+        <div><span style={{color:"#a855f7"}}>Research</span> = que podemos mejorar?</div>
+        <div><span style={{color:"#22c55e"}}>Governance</span> = los datos son fiables?</div>
+        <div><span style={{color:"#eab308"}}>Validation</span> = este cambio merece ir a live?</div>
+      </div>
+    </div>
+
+    {sections.map((section, si) => (
+      <div key={si} style={{marginBottom:20}}>
+        <h3 style={{fontSize:13, fontWeight:700, color: section.color, marginBottom:10, textTransform:"uppercase", letterSpacing:0.5}}>{section.title}</h3>
+        {section.items.map((item, ii) => (
+          <div key={ii} className="card" style={{marginBottom:8, padding:"10px 14px"}}>
+            <div style={{display:"flex", gap:8, alignItems:"center", marginBottom:4}}>
+              <span style={{fontWeight:700, fontSize:12, color:"#e0e0e8"}}>{item.tab}</span>
+            </div>
+            <p style={{fontSize:11, color:"#888", lineHeight:1.5}}>{item.desc}</p>
+          </div>
+        ))}
+      </div>
+    ))}
+
+    <div className="card" style={{marginTop:20, borderColor:"#333"}}>
+      <h3 style={{fontSize:13, fontWeight:700, color:"#e0e0e8", marginBottom:10}}>Arquitectura del sistema</h3>
+      <pre style={{fontSize:10, color:"#888", lineHeight:1.6, fontFamily:"monospace"}}>{`
+agentbot-live (Java)          agentbot-platform (Python)
+━━━━━━━━━━━━━━━━━              ━━━━━━━━━━━━━━━━━━━━━━━━━
+  Trading engine                 Ingestion (HL + Binance WS)
+  Signal detection        →      Storage (Parquet + PostgreSQL)
+  Risk management         →      Feature Store (48 features)
+  Position management     →      Regime Detection (5 regimes)
+  Telegram notifications         Audit System (4 checks)
+                                 Research Lab (metrics + analysis)
+  PlatformBridge ──POST──→       Validation Runner
+  (fire-and-forget)              Decision Engine
+                                 Daily Reports
+                                 Dashboard (este frontend)
+
+bot.alchimiabot.com             platform.alchimiabot.com
+api.alchimiabot.com
+      `}</pre>
+    </div>
+
+    <div className="card" style={{marginTop:12, borderColor:"#333"}}>
+      <h3 style={{fontSize:13, fontWeight:700, color:"#e0e0e8", marginBottom:10}}>Flujo de datos</h3>
+      <pre style={{fontSize:10, color:"#888", lineHeight:1.6, fontFamily:"monospace"}}>{`
+1. BOT LIVE ejecuta trades en Hyperliquid
+2. PlatformBridge envia cada trade y senal a platform (fire-and-forget)
+3. Platform guarda en PostgreSQL (trade_outcomes, signal_evaluations)
+4. Ingestion WS captura raw trades + L2 book → Parquet
+5. Feature Store computa 48 features cada 3s → snapshots cada 60s a DB
+6. Audit system valida integridad cada 5-60 min
+7. Research Lab analiza todo offline → genera insights y decisions
+8. Validation Runner prueba cambios antes de aplicarlos al bot
+
+Principio: el bot NUNCA depende de la platform.
+Si platform cae, el bot sigue operando normal.
+      `}</pre>
+    </div>
+
+    <div className="card" style={{marginTop:12, borderColor:"#333"}}>
+      <h3 style={{fontSize:13, fontWeight:700, color:"#e0e0e8", marginBottom:10}}>Proceso de mejora</h3>
+      <ol style={{fontSize:11, color:"#888", lineHeight:1.8, paddingLeft:20}}>
+        <li>Capturar datos (minimo 5-7 dias sin cambiar el bot)</li>
+        <li>Revisar Daily Report cada dia — detectar anomalias</li>
+        <li>Research Lab → entender que funciona y que no</li>
+        <li>Decision Engine → genera sugerencias automaticas</li>
+        <li>Validation → probar el cambio sugerido contra datos reales</li>
+        <li>Si verdict = ADOPT → aplicar al bot</li>
+        <li>Si verdict = TEST_LIVE → probar en shadow mode primero</li>
+        <li>Si verdict = REJECT → NO cambiar, buscar otra hipotesis</li>
+        <li>Repetir desde paso 1</li>
+      </ol>
+    </div>
+
+    <div className="card" style={{marginTop:12, borderColor:"#ef4444"}}>
+      <h3 style={{fontSize:13, fontWeight:700, color:"#ef4444", marginBottom:10}}>Errores a evitar</h3>
+      <ul style={{fontSize:11, color:"#888", lineHeight:1.8, paddingLeft:20}}>
+        <li>Cambiar el bot cada dia → rompe el baseline, no puedes medir nada</li>
+        <li>Optimizar con pocos datos (menos de 50 trades) → sobreoptimizacion</li>
+        <li>Ignorar las fees → te parece q ganas pero pierdes por costes</li>
+        <li>Confiar en 1 dia → un dia no significa nada, necesitas tendencia</li>
+        <li>Mezclar cambios → si cambias 3 cosas a la vez, no sabes cual funciono</li>
+        <li>No usar Validation → cambiar "porque creo que mejora" sin datos</li>
+      </ul>
+    </div>
+  </>);
+}
+
+// ── Auth helpers ──
+function getToken() { return localStorage.getItem("platform_token"); }
+function setTokenLS(t) { localStorage.setItem("platform_token", t); }
+function clearToken() { localStorage.removeItem("platform_token"); }
+
+// Override useFetch to include auth
+function useAuthFetch(url, interval = 5000) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+  const fetch_ = useCallback(() => {
+    const token = getToken();
+    fetch(url, { headers: token ? { "Authorization": "Bearer " + token } : {} })
+      .then(r => { if (r.status === 401) { clearToken(); window.location.reload(); } return r.json(); })
+      .then(setData).catch(e => setError(e.message));
+  }, [url]);
+  useEffect(() => { fetch_(); const t = setInterval(fetch_, interval); return () => clearInterval(t); }, [fetch_, interval]);
+  return { data, error, refetch: fetch_ };
+}
+
+// ── Login Page ──
+function LoginPage({ onLogin }) {
+  const [user, setUser] = useState("");
+  const [pass, setPass] = useState("");
+  const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setErr(""); setLoading(true);
+    try {
+      const r = await fetch("/api/platform/login", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: user, password: pass }),
+      });
+      if (!r.ok) { setErr("Usuario o contrasena incorrectos"); return; }
+      const data = await r.json();
+      setTokenLS(data.token);
+      onLogin(data.username);
+    } catch { setErr("Error de conexion"); } finally { setLoading(false); }
+  };
+
+  return (
+    <div className="login-page">
+      <form className="login-box" onSubmit={submit}>
+        <div style={{textAlign:"center", marginBottom:20}}>
+          <div style={{width:48, height:48, borderRadius:12, background:"linear-gradient(135deg, #3b82f6, #8b5cf6)", display:"inline-flex", alignItems:"center", justifyContent:"center", color:"white", fontWeight:700, fontSize:18}}>AP</div>
+        </div>
+        <h1>Alchimia Platform</h1>
+        <div className="sub">Quantitative Trading Platform</div>
+        <input type="text" placeholder="Usuario" value={user} onChange={e => setUser(e.target.value)} autoFocus />
+        <input type="password" placeholder="Contrasena" value={pass} onChange={e => setPass(e.target.value)} />
+        {err && <div style={{color:"#ef4444", fontSize:12, textAlign:"center", marginBottom:8}}>{err}</div>}
+        <button type="submit" disabled={loading || !user || !pass}>{loading ? "Entrando..." : "Entrar"}</button>
+      </form>
+    </div>
+  );
+}
+
+// ── Main App ──
+function App() {
+  const [authed, setAuthed] = useState(!!getToken());
+  const [username, setUsername] = useState("");
+  const [tab, setTab] = useState("conclusions");
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  const selectTab = (id) => { setTab(id); setMobileOpen(false); };
+
+  // Check token on mount + periodic session check every 60s
+  useEffect(() => {
+    const checkSession = () => {
+      const token = getToken();
+      if (!token) { setAuthed(false); return; }
+      fetch("/api/platform/me", { headers: { "Authorization": "Bearer " + token } })
+        .then(r => {
+          if (r.ok) return r.json();
+          // Only clear token on 401 (expired), not on 502/503 (server not ready)
+          if (r.status === 401) { clearToken(); setAuthed(false); }
+          return null;
+        })
+        .then(d => { if (d) { setAuthed(true); setUsername(d.username); } })
+        .catch(() => {}); // Network error — don't clear token
+    };
+    checkSession();
+    const iv = setInterval(checkSession, 60000);
+    return () => clearInterval(iv);
+  }, []);
+
+  if (!authed) return <LoginPage onLogin={(u) => { setAuthed(true); setUsername(u); }} />;
+
+  const logout = () => { clearToken(); setAuthed(false); };
+
+  const nav = [
+    { id: "conclusions", label: "Conclusiones", icon: "◆", gold: true },
+    { group: "Operations", color: "#3b82f6", items: [
+      { id: "botlive", label: "Bot Live", icon: "▶" },
+      { id: "trades", label: "Trades", icon: "📈" },
+      { id: "cambios", label: "Cambios", icon: "✎" },
+      { id: "daily", label: "Daily Report", icon: "📋" },
+      { id: "system", label: "Sistema", icon: "⚙" },
+      { id: "capture", label: "Captura", icon: "📡" },
+    ]},
+    { group: "Research", color: "#a855f7", items: [
+      { id: "lab", label: "Research Lab", icon: "🔬" },
+      { id: "validation", label: "Validation", icon: "✓" },
+      { id: "research", label: "Reports", icon: "📊" },
+      { id: "features", label: "Features", icon: "◎" },
+      { id: "regimes", label: "Regimenes", icon: "◈" },
+    ]},
+    { group: "Governance", color: "#22c55e", items: [
+      { id: "audit", label: "Audit", icon: "🛡" },
+      { id: "contract", label: "Contrato", icon: "📄" },
+    ]},
+    { id: "help", label: "Ayuda", icon: "?" },
+  ];
+
+  return (
+    <div className="app">
+      {/* Sidebar */}
+      {/* Mobile overlay */}
+      <div className={"mobile-overlay " + (mobileOpen ? "open" : "")} onClick={() => setMobileOpen(false)} />
+      <nav className={"sidebar " + (mobileOpen ? "mobile-open" : "")}>
+        <div className="sidebar-header">
+          <div className="logo">AP</div>
+          <div>
+            <h1>Alchimia</h1>
+            <div className="sub">Quant Platform</div>
+          </div>
+        </div>
+
+        {nav.map((item, i) => {
+          // Top-level item (Conclusiones, Help)
+          if (item.id) {
+            return (
+              <div key={i} className={"sidebar-item " + (tab === item.id ? (item.gold ? "active-gold" : "active") : "")}
+                   onClick={() => selectTab(item.id)}>
+                <span style={{width:16, textAlign:"center", fontSize:11}}>{item.icon}</span>
+                <span>{item.label}</span>
+              </div>
+            );
+          }
+          // Group
+          return (
+            <div key={i} className="sidebar-group">
+              <div className="sidebar-group-label" style={{color: item.color}}>{item.group}</div>
+              {item.items.map(sub => (
+                <div key={sub.id} className={"sidebar-item " + (tab === sub.id ? "active" : "")}
+                     onClick={() => selectTab(sub.id)}>
+                  <span style={{width:16, textAlign:"center", fontSize:11, opacity:0.6}}>{sub.icon}</span>
+                  <span>{sub.label}</span>
+                </div>
+              ))}
+            </div>
+          );
+        })}
+      </nav>
+
+      {/* Main content */}
+      <div className="main-content">
+        <div className="topbar" style={{justifyContent:"space-between"}}>
+          <button className="mobile-menu-btn" onClick={() => setMobileOpen(!mobileOpen)}>☰</button>
+          <div className="topbar-user">
+            <span style={{color:"#555"}}>{new Date().toLocaleDateString("es-ES", {weekday:"short", day:"numeric", month:"short"})}</span>
+            <div className="avatar">{(username || "U")[0].toUpperCase()}</div>
+            <span>{username || "User"}</span>
+            <button className="logout-btn" onClick={logout}>Salir</button>
+          </div>
+        </div>
+        <div className="content-area">
+        {tab === "conclusions" && <ConclusionsTab />}
+        {tab === "botlive" && <BotLiveTab />}
+        {tab === "trades" && <TradesTab />}
+        {tab === "cambios" && <CambiosTab />}
+        {tab === "daily" && <DailyReportTab />}
+        {tab === "system" && <SystemTab />}
+        {tab === "capture" && <CaptureTab />}
+        {tab === "lab" && <LabTab />}
+        {tab === "validation" && <ValidationTab />}
+        {tab === "research" && <ResearchTab />}
+        {tab === "features" && <FeaturesTab />}
+        {tab === "regimes" && <RegimesTab />}
+        {tab === "audit" && <AuditTab />}
+        {tab === "contract" && <ContractTab />}
+        {tab === "help" && <HelpTab />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
