@@ -13,7 +13,7 @@ logger = structlog.get_logger()
 class DashboardServer:
     """Runs the dashboard API server."""
 
-    def __init__(self, host: str = "0.0.0.0", port: int = 8090, **api_kwargs) -> None:
+    def __init__(self, host: str = "0.0.0.0", port: int = 8190, **api_kwargs) -> None:
         self._host = host
         self._port = port
         self._app = create_app(**api_kwargs)

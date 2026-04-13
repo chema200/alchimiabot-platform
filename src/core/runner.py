@@ -113,9 +113,9 @@ class PlatformRunner:
         # Telegram summary every 4 hours
         self.telegram_summary = TelegramSummaryService(self.db.session, interval_hours=4)
 
-        # Dashboard API server (port 8090)
+        # Dashboard API server (port 8190 for v2)
         self.dashboard = DashboardServer(
-            port=8090,
+            port=8190,
             feature_store=self.feature_store,
             system_monitor=self.system_monitor,
             session_factory=self.db.session if self.db else None,

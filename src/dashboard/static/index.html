@@ -842,18 +842,30 @@ function DailyReportTab() {
   const [selected, setSelected] = useState(null);  // selected date
   const [loading, setLoading] = useState(false);
   const [days, setDays] = useState([]);  // list of available dates
+  const [page, setPage] = useState(0);  // pagination
+  const PAGE_SIZE = 15;
+  const AUTO_LOAD_DAYS = 7;  // auto-load last 7 days
 
-  // Generate list of last 14 days
+  // Generate list of last 90 days, auto-load last 7
   useEffect(() => {
     const d = [];
-    for (let i = 0; i < 14; i++) {
+    for (let i = 0; i < 90; i++) {
       const date = new Date(Date.now() - i * 86400000);
       d.push(date.toISOString().split("T")[0]);
     }
     setDays(d);
-    // Auto-load today
-    loadDay(d[0]);
+    // Auto-load last 7 days
+    for (let i = 0; i < AUTO_LOAD_DAYS && i < d.length; i++) {
+      loadDayQuiet(d[i]);
+    }
+    setSelected(d[0]);
   }, []);
+
+  const loadDayQuiet = (dateStr) => {
+    fetch(API + "/api/daily-report/" + dateStr).then(r => r.json()).then(d => {
+      setReports(prev => ({...prev, [dateStr]: d}));
+    }).catch(() => {});
+  };
 
   const loadDay = (dateStr) => {
     if (reports[dateStr]) { setSelected(dateStr); return; }
@@ -883,7 +895,7 @@ function DailyReportTab() {
           <th style={{textAlign:"right"}}>Issues</th><th></th>
         </tr></thead>
         <tbody>
-          {days.map(d => {
+          {days.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map(d => {
             const r = reports[d];
             const isSelected = selected === d;
             const g = r?.general || {};
@@ -900,12 +912,26 @@ function DailyReportTab() {
                 <td style={{textAlign:"right", color: r ? (p.win_rate >= 50 ? "#22c55e" : p.win_rate >= 40 ? "#eab308" : "#ef4444") : "#444"}}>{r ? (p.win_rate || 0) + "%" : "-"}</td>
                 <td style={{textAlign:"right"}}>{r ? (p.profit_factor || 0) : "-"}</td>
                 <td style={{textAlign:"right", color: issueCount > 0 ? "#eab308" : "#22c55e"}}>{r ? issueCount : "-"}</td>
-                <td style={{textAlign:"right"}}>{!r && <span style={{color:"#444", fontSize:10}}>click to load</span>}</td>
+                <td style={{textAlign:"right"}}>{!r && <span onClick={(e) => { e.stopPropagation(); loadDay(d); }} style={{color:"#666", fontSize:10, cursor:"pointer"}}>cargar</span>}</td>
               </tr>
             );
           })}
         </tbody>
       </table>
+      {/* Pagination */}
+      {days.length > PAGE_SIZE && (
+        <div style={{display:"flex", justifyContent:"center", alignItems:"center", gap:12, marginTop:12}}>
+          <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}
+            style={{padding:"4px 12px", fontSize:11, borderRadius:6, border:"1px solid #333", background:"#1a1a2e", color: page===0?"#444":"#aaa", cursor: page===0?"not-allowed":"pointer"}}>
+            ← Anterior
+          </button>
+          <span style={{fontSize:11, color:"#666"}}>{page + 1} / {Math.ceil(days.length / PAGE_SIZE)}</span>
+          <button onClick={() => setPage(Math.min(Math.ceil(days.length / PAGE_SIZE) - 1, page + 1))} disabled={page >= Math.ceil(days.length / PAGE_SIZE) - 1}
+            style={{padding:"4px 12px", fontSize:11, borderRadius:6, border:"1px solid #333", background:"#1a1a2e", color: page>=Math.ceil(days.length/PAGE_SIZE)-1?"#444":"#aaa", cursor: page>=Math.ceil(days.length/PAGE_SIZE)-1?"not-allowed":"pointer"}}>
+            Siguiente →
+          </button>
+        </div>
+      )}
     </div>
 
     {loading && <div className="loading">Generating report for {selected}...</div>}
