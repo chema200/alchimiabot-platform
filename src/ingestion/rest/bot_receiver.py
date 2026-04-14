@@ -264,9 +264,17 @@ async def receive_signals(payloads: list[SignalEvalPayload]) -> dict:
 
 @router.post("/trade")
 async def receive_trade(payload: TradeOutcomePayload) -> dict:
-    """Receive a completed trade from agentbot-live."""
+    """Receive a completed trade from agentbot-live.
+
+    After inserting the trade outcome, attempts to back-link the originating
+    ENTER signal_evaluation by matching (coin, side, ~entry_time). This makes
+    decision_trace queryable per-trade for ratio/quality analysis.
+    """
     if not _session_factory:
         return {"ok": False, "error": "DB not ready"}
+
+    entry_time = datetime.fromisoformat(payload.entry_time)
+    exit_time = datetime.fromisoformat(payload.exit_time)
 
     record = TradeOutcome(
         coin=payload.coin, side=payload.side,
@@ -286,16 +294,51 @@ async def receive_trade(payload: TradeOutcomePayload) -> dict:
         config_snapshot=payload.config_snapshot or None,
         entry_quality_label=payload.entry_quality_label,
         late_entry_risk=payload.late_entry_risk,
-        entry_time=datetime.fromisoformat(payload.entry_time),
-        exit_time=datetime.fromisoformat(payload.exit_time),
+        entry_time=entry_time,
+        exit_time=exit_time,
     )
 
     try:
+        from sqlalchemy import text as sql_text
+        from datetime import timedelta
+
         async with _session_factory() as session:
             session.add(record)
+            await session.flush()  # populate record.id without committing
+            trade_id = record.id
+
+            # Back-link most recent matching ENTER signal evaluation.
+            # Window: entry_time - 5min .. entry_time + 1min (signal precedes fill).
+            # Pick closest in time, only if not already linked (idempotent).
+            link_result = await session.execute(sql_text("""
+                UPDATE signal_evaluations
+                SET trade_outcome_id = :trade_id
+                WHERE id = (
+                    SELECT id FROM signal_evaluations
+                    WHERE coin = :coin
+                      AND side = :side
+                      AND action = 'ENTER'
+                      AND trade_outcome_id IS NULL
+                      AND timestamp BETWEEN :t_from AND :t_to
+                    ORDER BY ABS(EXTRACT(EPOCH FROM (timestamp - :entry_time)))
+                    LIMIT 1
+                )
+                RETURNING id
+            """), {
+                "trade_id": trade_id,
+                "coin": payload.coin,
+                "side": payload.side,
+                "entry_time": entry_time,
+                "t_from": entry_time - timedelta(minutes=5),
+                "t_to": entry_time + timedelta(minutes=1),
+            })
+            linked_signal_id = link_result.scalar()
+
             await session.commit()
-        logger.info("bot_receiver.trade", coin=payload.coin, net_pnl=payload.net_pnl)
-        return {"ok": True}
+
+        logger.info("bot_receiver.trade", coin=payload.coin, net_pnl=payload.net_pnl,
+                    trade_id=trade_id, linked_signal_id=linked_signal_id)
+        return {"ok": True, "trade_id": trade_id, "linked_signal_id": linked_signal_id}
     except Exception as e:
         logger.warning("bot_receiver.trade_error", error=str(e))
         return {"ok": False, "error": str(e)}

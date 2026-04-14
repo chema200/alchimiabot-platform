@@ -15,13 +15,21 @@ from sqlalchemy import text
 
 logger = structlog.get_logger()
 
-BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8466920425:AAGTHoeH0SsUEnU2a6LHX1cBRicc2tGRvfs")
-CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "8711351034")
-TELEGRAM_URL = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+TELEGRAM_API = "https://api.telegram.org/bot{token}/sendMessage"
+
+# Bot DB connection string to read user_notification_settings
+BOT_DB_URL = os.environ.get(
+    "BOT_DB_URL",
+    f"postgresql://{os.environ.get('BOT_DB_USER', 'alchimiabot')}:{os.environ.get('BOT_DB_PASSWORD', 'alchimiabot')}@{os.environ.get('BOT_DB_HOST', 'localhost')}:{os.environ.get('BOT_DB_PORT', '5442')}/{os.environ.get('BOT_DB_NAME', 'alchimiabot')}"
+)
 
 
 class TelegramSummaryService:
-    """Sends periodic platform analysis summaries via Telegram."""
+    """Sends periodic platform analysis summaries via Telegram.
+
+    Reads telegram credentials PER USER from the bot's user_notification_settings table.
+    Sends the summary to all users with telegram_enabled=true.
+    """
 
     def __init__(self, session_factory, interval_hours: int = 4) -> None:
         self._sf = session_factory
@@ -235,17 +243,41 @@ class TelegramSummaryService:
         return "\n".join(lines)
 
     async def _send_telegram(self, message: str) -> None:
+        """Send summary to all users with telegram enabled (reads from bot DB)."""
+        recipients = await self._get_telegram_recipients()
+        if not recipients:
+            logger.info("telegram_summary.no_recipients")
+            return
+
+        async with httpx.AsyncClient(timeout=10) as client:
+            for user_id, bot_token, chat_id in recipients:
+                try:
+                    url = TELEGRAM_API.format(token=bot_token)
+                    r = await client.post(url, json={
+                        "chat_id": chat_id,
+                        "text": message,
+                        "parse_mode": "Markdown",
+                        "disable_web_page_preview": True,
+                    })
+                    if r.status_code == 200:
+                        logger.info("telegram_summary.sent", user_id=user_id, length=len(message))
+                    else:
+                        logger.warning("telegram_summary.send_failed", user_id=user_id, status=r.status_code, body=r.text[:200])
+                except Exception as e:
+                    logger.warning("telegram_summary.send_error", user_id=user_id, error=str(e))
+
+    async def _get_telegram_recipients(self) -> list[tuple[int, str, str]]:
+        """Read all users with telegram_enabled from the bot's DB."""
+        import asyncpg
         try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                r = await client.post(TELEGRAM_URL, json={
-                    "chat_id": CHAT_ID,
-                    "text": message,
-                    "parse_mode": "Markdown",
-                    "disable_web_page_preview": True,
-                })
-                if r.status_code == 200:
-                    logger.info("telegram_summary.sent", length=len(message))
-                else:
-                    logger.warning("telegram_summary.send_failed", status=r.status_code, body=r.text[:200])
+            conn = await asyncpg.connect(BOT_DB_URL)
+            rows = await conn.fetch(
+                "SELECT user_id, telegram_bot_token, telegram_chat_id "
+                "FROM user_notification_settings "
+                "WHERE telegram_enabled = true AND telegram_bot_token IS NOT NULL AND telegram_chat_id IS NOT NULL"
+            )
+            await conn.close()
+            return [(r["user_id"], r["telegram_bot_token"], r["telegram_chat_id"]) for r in rows]
         except Exception as e:
-            logger.warning("telegram_summary.send_error", error=str(e))
+            logger.warning("telegram_summary.recipients_error", error=str(e))
+            return []

@@ -420,10 +420,12 @@ def create_app(
         async def quant_counterfactual(date_from: str | None = None) -> dict:
             """Counterfactual analysis: what-if at different score thresholds."""
             from sqlalchemy import text as sql_text
+            from ..quant.datasets.trades_enriched import _coerce_date
+            df = _coerce_date(date_from)
             signals = []
             async with session_factory() as s:
-                where = "WHERE timestamp >= :date_from" if date_from else ""
-                params = {"date_from": date_from} if date_from else {}
+                where = "WHERE timestamp >= :date_from" if df is not None else ""
+                params = {"date_from": df} if df is not None else {}
                 result = await s.execute(sql_text(f"""
                     SELECT coin, side, signal_score, action, reason, mode,
                            score_min_applied, config_version
@@ -437,12 +439,14 @@ def create_app(
         async def quant_diagnostic(date_from: str | None = None) -> dict:
             """Diagnostic trace analysis: evaluate ALL filters pass rates."""
             from sqlalchemy import text as sql_text
+            from ..quant.datasets.trades_enriched import _coerce_date
+            df = _coerce_date(date_from)
             async with session_factory() as s:
                 where_parts = ["diagnostic_trace IS NOT NULL"]
                 params: dict = {}
-                if date_from:
+                if df is not None:
                     where_parts.append("timestamp >= :d")
-                    params["d"] = date_from
+                    params["d"] = df
                 where = "WHERE " + " AND ".join(where_parts)
 
                 result = await s.execute(sql_text(f"""

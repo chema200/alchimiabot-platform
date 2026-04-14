@@ -35,6 +35,9 @@ class ExperimentConfig:
     use_spread: bool = True
     use_btc_filter: bool = True
     use_overextension: bool = True
+    # Confirm/Signal ratio filter (parabolic detection)
+    use_ratio_filter: bool = False
+    ratio_max: float = 0.60
 
     def to_dict(self) -> dict:
         return {k: v for k, v in self.__dict__.items()}
@@ -131,6 +134,14 @@ class ExperimentEngine:
         # Trend filter
         if trend > 0 and trend < config.trend_min:
             return False
+
+        # Confirm/Signal ratio filter (parabolic entry detection)
+        # Block trades where the confirmation window did most of the move,
+        # which suggests a late, exhausted entry.
+        if config.use_ratio_filter:
+            r = trade.get("confirm_signal_ratio")
+            if r is not None and r > config.ratio_max:
+                return False
 
         return True
 

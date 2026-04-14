@@ -7,13 +7,37 @@ This is THE core dataset for all quant analysis. Every trade gets enriched with:
 - execution quality metrics
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, date, timezone
 from typing import Any
 
 import structlog
 from sqlalchemy import text
 
 logger = structlog.get_logger()
+
+
+def _coerce_date(value: Any) -> Any:
+    """Convert string date/datetime to a Python date/datetime for asyncpg.
+
+    Accepts: None, datetime, date, ISO-8601 string ('2026-04-10' or
+    '2026-04-10T12:00:00' or with timezone). Returns the input unchanged
+    if it's already a date/datetime, or None if input is None/empty.
+    asyncpg requires real date/datetime objects, not strings.
+    """
+    if value is None or value == "":
+        return None
+    if isinstance(value, (datetime, date)):
+        return value
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value)
+        except ValueError:
+            try:
+                return date.fromisoformat(value)
+            except ValueError:
+                logger.warning("trades_enriched.invalid_date", value=value)
+                return None
+    return value
 
 
 class TradesEnrichedBuilder:
@@ -31,12 +55,14 @@ class TradesEnrichedBuilder:
         filters = []
         params: dict[str, Any] = {}
 
-        if date_from:
+        df = _coerce_date(date_from)
+        dt = _coerce_date(date_to)
+        if df is not None:
             filters.append("t.entry_time >= :date_from")
-            params["date_from"] = date_from
-        if date_to:
+            params["date_from"] = df
+        if dt is not None:
             filters.append("t.entry_time < :date_to")
-            params["date_to"] = date_to
+            params["date_to"] = dt
         if coins:
             filters.append("t.coin = ANY(:coins)")
             params["coins"] = coins
@@ -96,7 +122,15 @@ class TradesEnrichedBuilder:
 
                     -- Features at entry (from closest snapshot)
                     fs.features as features_at_entry,
-                    fs.version as feature_version
+                    fs.version as feature_version,
+
+                    -- Linked signal evaluation (decision_trace, features at signal time)
+                    se.id as signal_eval_id,
+                    se.decision_trace as decision_trace,
+                    se.diagnostic_trace as diagnostic_trace,
+                    se.features as signal_features,
+                    se.entry_diagnostics as entry_diagnostics,
+                    se.reason as signal_reason
 
                 FROM trade_outcomes t
                 LEFT JOIN LATERAL (
@@ -107,6 +141,7 @@ class TradesEnrichedBuilder:
                     ORDER BY timestamp DESC
                     LIMIT 1
                 ) fs ON true
+                LEFT JOIN signal_evaluations se ON se.trade_outcome_id = t.id
                 {where}
                 ORDER BY t.entry_time DESC
             """), params)
@@ -172,6 +207,18 @@ class TradesEnrichedBuilder:
             else:
                 trade["hold_bucket"] = "slow"
 
+            # Decision trace (from linked signal_evaluation, may be None for pre-link trades)
+            dt = trade.get("decision_trace") or {}
+            trade["change_signal"] = dt.get("changeSignal")
+            trade["change_confirm"] = dt.get("changeConfirm")
+            trade["entry_threshold"] = dt.get("entryThreshold")
+            cs_v = trade.get("change_signal")
+            cc_v = trade.get("change_confirm")
+            if cs_v is not None and cc_v is not None and cs_v != 0:
+                trade["confirm_signal_ratio"] = abs(cc_v) / abs(cs_v)
+            else:
+                trade["confirm_signal_ratio"] = None
+
             # Score bucket
             score = trade.get("score_total") or 0
             if score >= 80:
@@ -195,9 +242,10 @@ class TradesEnrichedBuilder:
         # Get signal evaluations
         params: dict[str, Any] = {}
         where = ""
-        if date_from:
+        df = _coerce_date(date_from)
+        if df is not None:
             where = "WHERE timestamp >= :date_from"
-            params["date_from"] = date_from
+            params["date_from"] = df
 
         async with self._sf() as s:
             result = await s.execute(text(f"""

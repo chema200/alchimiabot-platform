@@ -68,20 +68,29 @@ class ScoreParityAnalyzer:
                     "all_zero_pct": round(trade_row["all_zero"] / total * 100, 1),
                 }
 
-            # ── Global signal evaluations score coverage (all rows) ──
+            # ── Signal evaluations score coverage ──
+            # CRITICAL: only count signals that actually REACHED the micro stage.
+            # Pre-candidate rejects (SCORE_BELOW_THRESHOLD, ENTRY_THRESHOLD_NOT_MET, etc.)
+            # never evaluate micro by design — including them makes micro_score_pct look
+            # broken (e.g., 0.5% because 99% of signals never ran micro). Filter by
+            # decision_stage: ENTER or BLOCKED_POST_CANDIDATE = micro was evaluated.
+            # micro_score = 0 is a legitimate value (when all micro checks fail hard).
+            # We only flag as "missing" when NULL, not when 0. Same for signal/trend.
             signal_result = await session.execute(text("""
                 SELECT
                     count(*) as total,
-                    count(CASE WHEN signal_score IS NOT NULL AND signal_score > 0 THEN 1 END) as has_signal_score,
-                    count(CASE WHEN trend_score IS NOT NULL AND trend_score > 0 THEN 1 END) as has_trend_score,
-                    count(CASE WHEN micro_score IS NOT NULL AND micro_score > 0 THEN 1 END) as has_micro_score,
-                    count(CASE WHEN (signal_score IS NULL OR signal_score = 0)
-                                AND (trend_score IS NULL OR trend_score = 0)
-                                AND (micro_score IS NULL OR micro_score = 0) THEN 1 END) as all_zero,
-                    count(CASE WHEN signal_score IS NOT NULL AND signal_score > 0
-                                AND trend_score IS NOT NULL AND trend_score > 0
-                                AND micro_score IS NOT NULL AND micro_score > 0 THEN 1 END) as all_present
+                    count(CASE WHEN signal_score IS NOT NULL THEN 1 END) as has_signal_score,
+                    count(CASE WHEN trend_score IS NOT NULL THEN 1 END) as has_trend_score,
+                    count(CASE WHEN micro_score IS NOT NULL THEN 1 END) as has_micro_score,
+                    count(CASE WHEN signal_score IS NULL
+                                AND trend_score IS NULL
+                                AND micro_score IS NULL THEN 1 END) as all_zero,
+                    count(CASE WHEN signal_score IS NOT NULL
+                                AND trend_score IS NOT NULL
+                                AND micro_score IS NOT NULL THEN 1 END) as all_present
                 FROM signal_evaluations
+                WHERE action = 'ENTER'
+                   OR reason LIKE 'MICRO_BLOCK%'
             """))
             signal_row = signal_result.mappings().first()
 
@@ -117,18 +126,20 @@ class ScoreParityAnalyzer:
             """))
             pd_trade_row = pd_trade_result.mappings().first()
 
-            # ── Post-diagnostics signals (join to trade_outcomes via signal_id or standalone check) ──
+            # ── Post-diagnostics signals ──
+            # micro_score = 0 is legitimate (all hard-fail); use IS NOT NULL for truthiness.
             pd_signal_result = await session.execute(text("""
                 SELECT
                     count(*) as total,
-                    count(CASE WHEN signal_score IS NOT NULL AND signal_score > 0 THEN 1 END) as has_signal_score,
-                    count(CASE WHEN trend_score IS NOT NULL AND trend_score > 0 THEN 1 END) as has_trend_score,
-                    count(CASE WHEN micro_score IS NOT NULL AND micro_score > 0 THEN 1 END) as has_micro_score,
-                    count(CASE WHEN signal_score IS NOT NULL AND signal_score > 0
-                                AND trend_score IS NOT NULL AND trend_score > 0
-                                AND micro_score IS NOT NULL AND micro_score > 0 THEN 1 END) as all_present
+                    count(CASE WHEN signal_score IS NOT NULL THEN 1 END) as has_signal_score,
+                    count(CASE WHEN trend_score IS NOT NULL THEN 1 END) as has_trend_score,
+                    count(CASE WHEN micro_score IS NOT NULL THEN 1 END) as has_micro_score,
+                    count(CASE WHEN signal_score IS NOT NULL
+                                AND trend_score IS NOT NULL
+                                AND micro_score IS NOT NULL THEN 1 END) as all_present
                 FROM signal_evaluations
                 WHERE entry_quality_label IS NOT NULL
+                  AND (action = 'ENTER' OR reason LIKE 'MICRO_BLOCK%')
             """))
             pd_signal_row = pd_signal_result.mappings().first()
 

@@ -42,4 +42,20 @@ def get_batches() -> dict[str, dict]:
                                  sl_max_pct=0.55, tp_min_pct=0.60),
             ],
         },
+        "ratio_filter": {
+            "hypothesis": "Trades parabolicos (confirm/signal ratio alto) revierten antes. "
+                          "Bloquearlos mejora expectancy filtrando entradas tardias.",
+            "configs": [
+                ExperimentConfig(name="ratio_baseline", description="Sin filtro ratio",
+                                 use_ratio_filter=False),
+                ExperimentConfig(name="ratio_050", description="Bloquear ratio > 0.50 (estricto)",
+                                 use_ratio_filter=True, ratio_max=0.50),
+                ExperimentConfig(name="ratio_055", description="Bloquear ratio > 0.55",
+                                 use_ratio_filter=True, ratio_max=0.55),
+                ExperimentConfig(name="ratio_060", description="Bloquear ratio > 0.60 (recomendado)",
+                                 use_ratio_filter=True, ratio_max=0.60),
+                ExperimentConfig(name="ratio_070", description="Bloquear ratio > 0.70 (laxo)",
+                                 use_ratio_filter=True, ratio_max=0.70),
+            ],
+        },
     }
