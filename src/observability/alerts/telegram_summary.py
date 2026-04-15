@@ -1,7 +1,7 @@
-"""Telegram Summary: sends periodic platform status reports in Spanish.
+"""Telegram Summary: sends a daily platform status report in Spanish.
 
-Runs every 4 hours, analyzes recent data, and sends actionable insights
-to Telegram. Uses the same bot token as agentbot-live.
+Runs once per day at a fixed local time (default 23:30 Europe/Madrid),
+analyzes recent data and sends actionable insights to Telegram.
 """
 
 import asyncio
@@ -10,6 +10,7 @@ import httpx
 import structlog
 from datetime import datetime, timezone, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import text
 
@@ -31,22 +32,38 @@ class TelegramSummaryService:
     Sends the summary to all users with telegram_enabled=true.
     """
 
-    def __init__(self, session_factory, interval_hours: int = 4) -> None:
+    def __init__(self, session_factory, send_hour: int = 23, send_minute: int = 30,
+                 tz_name: str = "Europe/Madrid") -> None:
         self._sf = session_factory
-        self._interval = interval_hours * 3600
+        self._send_hour = send_hour
+        self._send_minute = send_minute
+        self._tz = ZoneInfo(tz_name)
         self._running = False
+
+    def _seconds_until_next_run(self) -> float:
+        from datetime import datetime, timedelta
+        now = datetime.now(self._tz)
+        target = now.replace(hour=self._send_hour, minute=self._send_minute,
+                             second=0, microsecond=0)
+        if target <= now:
+            target += timedelta(days=1)
+        return (target - now).total_seconds()
 
     async def start(self) -> None:
         self._running = True
-        logger.info("telegram_summary.started", interval_h=self._interval // 3600)
-        # Wait 2 min after startup before first report
-        await asyncio.sleep(120)
+        logger.info("telegram_summary.started",
+                    send_at=f"{self._send_hour:02d}:{self._send_minute:02d}",
+                    tz=str(self._tz))
         while self._running:
+            wait = self._seconds_until_next_run()
+            logger.info("telegram_summary.scheduled", seconds_until_next=int(wait))
+            await asyncio.sleep(wait)
+            if not self._running:
+                break
             try:
                 await self._send_summary()
             except Exception:
                 logger.exception("telegram_summary.error")
-            await asyncio.sleep(self._interval)
 
     async def stop(self) -> None:
         self._running = False
@@ -59,7 +76,7 @@ class TelegramSummaryService:
     async def _gather_data(self) -> dict[str, Any]:
         """Gather all metrics for the summary."""
         result = {}
-        hours = self._interval // 3600
+        hours = 24
 
         async with self._sf() as s:
             # Trades in period
@@ -148,7 +165,7 @@ class TelegramSummaryService:
         return result
 
     def _build_message(self, data: dict) -> str:
-        hours = self._interval // 3600
+        hours = 24
         t = data.get("trades", {})
         trades = int(t.get("trades") or 0)
         wins = int(t.get("wins") or 0)

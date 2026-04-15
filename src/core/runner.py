@@ -110,8 +110,8 @@ class PlatformRunner:
         self.audit_runner.register(StorageCheck(), interval_sec=3600)                     # 1 hour
         self.audit_runner.register(ConsistencyCheck(self.db.session), interval_sec=21600) # 6 hours
 
-        # Telegram summary every 4 hours
-        self.telegram_summary = TelegramSummaryService(self.db.session, interval_hours=4)
+        # Telegram summary once per day at 23:30 Europe/Madrid
+        self.telegram_summary = TelegramSummaryService(self.db.session, send_hour=23, send_minute=30)
 
         # Dashboard API server (port 8190 for v2)
         self.dashboard = DashboardServer(
