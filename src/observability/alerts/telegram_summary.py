@@ -69,17 +69,31 @@ class TelegramSummaryService:
         self._running = False
 
     async def _send_summary(self) -> None:
-        data = await self._gather_data()
-        message = self._build_message(data)
-        await self._send_telegram(message)
+        """Fan out a per-user summary to every eligible recipient.
 
-    async def _gather_data(self) -> dict[str, Any]:
-        """Gather all metrics for the summary."""
-        result = {}
+        Eligibility: role ∈ {ADMIN, PREMIUM} (the tiers with platform_access).
+        Each recipient gets metrics scoped to their own user_id only.
+        """
+        recipients = await self._get_telegram_recipients()
+        if not recipients:
+            logger.info("telegram_summary.no_recipients")
+            return
+        async with httpx.AsyncClient(timeout=10) as client:
+            for user_id, role, bot_token, chat_id in recipients:
+                try:
+                    data = await self._gather_data(user_id)
+                    message = self._build_message(data, role)
+                    await self._send_one(client, user_id, bot_token, chat_id, message)
+                except Exception:
+                    logger.exception("telegram_summary.per_user_error", user_id=user_id)
+
+    async def _gather_data(self, user_id: int) -> dict[str, Any]:
+        """Gather metrics scoped to a single user_id."""
+        result: dict[str, Any] = {}
         hours = 24
+        params = {"user_id": user_id}
 
         async with self._sf() as s:
-            # Trades in period
             r = await s.execute(text(f"""
                 SELECT count(*) as trades,
                     sum(case when net_pnl > 0 then 1 else 0 end) as wins,
@@ -89,82 +103,98 @@ class TelegramSummaryService:
                     round(sum(net_pnl)::numeric, 4) as net,
                     round(avg(net_pnl)::numeric, 4) as avg_pnl
                 FROM trade_outcomes
-                WHERE exit_time > now() - interval '{hours} hours'
-            """))
+                WHERE user_id = :user_id
+                  AND exit_time > now() - interval '{hours} hours'
+            """), params)
             row = r.mappings().first()
             result["trades"] = dict(row) if row else {}
 
-            # By quality label
             r = await s.execute(text(f"""
                 SELECT entry_quality_label as label, count(*) as cnt,
                     round(avg(net_pnl)::numeric, 4) as avg_pnl
                 FROM trade_outcomes
-                WHERE exit_time > now() - interval '{hours} hours' AND entry_quality_label IS NOT NULL
+                WHERE user_id = :user_id
+                  AND exit_time > now() - interval '{hours} hours'
+                  AND entry_quality_label IS NOT NULL
                 GROUP BY entry_quality_label ORDER BY avg_pnl DESC
-            """))
+            """), params)
             result["by_quality"] = [dict(row) for row in r.mappings().all()]
 
-            # By late entry risk
             r = await s.execute(text(f"""
                 SELECT late_entry_risk as risk, count(*) as cnt,
                     round(avg(net_pnl)::numeric, 4) as avg_pnl
                 FROM trade_outcomes
-                WHERE exit_time > now() - interval '{hours} hours' AND late_entry_risk IS NOT NULL
+                WHERE user_id = :user_id
+                  AND exit_time > now() - interval '{hours} hours'
+                  AND late_entry_risk IS NOT NULL
                 GROUP BY late_entry_risk ORDER BY avg_pnl DESC
-            """))
+            """), params)
             result["by_late_risk"] = [dict(row) for row in r.mappings().all()]
 
-            # Signal rejection breakdown
             r = await s.execute(text(f"""
                 SELECT reason, count(*) as cnt
                 FROM signal_evaluations
-                WHERE timestamp > now() - interval '{hours} hours' AND action = 'BLOCKED'
+                WHERE user_id = :user_id
+                  AND timestamp > now() - interval '{hours} hours'
+                  AND action = 'BLOCKED'
                 GROUP BY reason ORDER BY cnt DESC LIMIT 5
-            """))
+            """), params)
             result["top_rejections"] = [dict(row) for row in r.mappings().all()]
 
-            # Worst coins
             r = await s.execute(text(f"""
                 SELECT coin, count(*) as trades, round(sum(net_pnl)::numeric, 4) as pnl
                 FROM trade_outcomes
-                WHERE exit_time > now() - interval '{hours} hours'
+                WHERE user_id = :user_id
+                  AND exit_time > now() - interval '{hours} hours'
                 GROUP BY coin HAVING count(*) >= 2
                 ORDER BY pnl ASC LIMIT 3
-            """))
+            """), params)
             result["worst_coins"] = [dict(row) for row in r.mappings().all()]
 
-            # Best coins
             r = await s.execute(text(f"""
                 SELECT coin, count(*) as trades, round(sum(net_pnl)::numeric, 4) as pnl
                 FROM trade_outcomes
-                WHERE exit_time > now() - interval '{hours} hours'
+                WHERE user_id = :user_id
+                  AND exit_time > now() - interval '{hours} hours'
                 GROUP BY coin HAVING count(*) >= 2
                 ORDER BY pnl DESC LIMIT 3
-            """))
+            """), params)
             result["best_coins"] = [dict(row) for row in r.mappings().all()]
 
-            # Score parity
             r = await s.execute(text("""
                 SELECT count(*) as total,
                     count(case when signal_score > 0 then 1 end) as has_score
-                FROM trade_outcomes WHERE entry_quality_label IS NOT NULL
-            """))
+                FROM trade_outcomes
+                WHERE user_id = :user_id AND entry_quality_label IS NOT NULL
+            """), params)
             sp = r.mappings().first()
-            result["score_coverage"] = round(float(sp["has_score"]) / max(float(sp["total"]), 1) * 100, 1) if sp else 0
+            result["score_coverage"] = (
+                round(float(sp["has_score"]) / max(float(sp["total"]), 1) * 100, 1)
+                if sp and sp["total"] else 0
+            )
 
-            # Total signals
             r = await s.execute(text(f"""
                 SELECT count(*) as total,
                     sum(case when action = 'ENTER' then 1 else 0 end) as enters,
                     sum(case when action = 'BLOCKED' then 1 else 0 end) as blocked
                 FROM signal_evaluations
-                WHERE timestamp > now() - interval '{hours} hours'
-            """))
-            result["signals"] = dict(r.mappings().first()) if r else {}
+                WHERE user_id = :user_id
+                  AND timestamp > now() - interval '{hours} hours'
+            """), params)
+            sig_row = r.mappings().first()
+            result["signals"] = dict(sig_row) if sig_row else {}
 
         return result
 
-    def _build_message(self, data: dict) -> str:
+    def _build_message(self, data: dict, role: str = "PREMIUM") -> str:
+        """Build a tier-aware summary message.
+
+        ADMIN  — full report with every diagnostic block + suggestions.
+        PREMIUM — same as ADMIN for now; kept as a separate branch so we can
+                  diverge content later (e.g. admin-only diagnostics).
+        Other roles should not reach this method (filtered upstream by
+        platform_access), but if they do, they get the minimal PnL block.
+        """
         hours = 24
         t = data.get("trades", {})
         trades = int(t.get("trades") or 0)
@@ -185,10 +215,14 @@ class TelegramSummaryService:
         lines.append(f"_{datetime.now(timezone.utc).strftime('%d/%m %H:%M')} UTC_")
         lines.append("")
 
-        # PnL
+        # PnL — shown to every role
         emoji = "🟢" if net > 0 else "🔴" if net < 0 else "⚪"
         lines.append(f"{emoji} *PnL: ${net:.4f}* (bruto: ${gross:.4f}, fees: ${fees:.4f})")
         lines.append(f"📈 Trades: {trades} ({wins}W/{losses}L) — WR: {wr}%")
+
+        # Restrict the detail blocks to tiers that pay for platform access
+        if role not in ("ADMIN", "PREMIUM"):
+            return "\n".join(lines)
 
         # Signals
         if enters + blocked > 0:
@@ -259,42 +293,55 @@ class TelegramSummaryService:
 
         return "\n".join(lines)
 
-    async def _send_telegram(self, message: str) -> None:
-        """Send summary to all users with telegram enabled (reads from bot DB)."""
-        recipients = await self._get_telegram_recipients()
-        if not recipients:
-            logger.info("telegram_summary.no_recipients")
-            return
+    async def _send_one(self, client: httpx.AsyncClient, user_id: int,
+                        bot_token: str, chat_id: str, message: str) -> None:
+        try:
+            url = TELEGRAM_API.format(token=bot_token)
+            r = await client.post(url, json={
+                "chat_id": chat_id,
+                "text": message,
+                "parse_mode": "Markdown",
+                "disable_web_page_preview": True,
+            })
+            if r.status_code == 200:
+                logger.info("telegram_summary.sent", user_id=user_id, length=len(message))
+            else:
+                logger.warning("telegram_summary.send_failed",
+                               user_id=user_id, status=r.status_code, body=r.text[:200])
+        except Exception as e:
+            logger.warning("telegram_summary.send_error", user_id=user_id, error=str(e))
 
-        async with httpx.AsyncClient(timeout=10) as client:
-            for user_id, bot_token, chat_id in recipients:
-                try:
-                    url = TELEGRAM_API.format(token=bot_token)
-                    r = await client.post(url, json={
-                        "chat_id": chat_id,
-                        "text": message,
-                        "parse_mode": "Markdown",
-                        "disable_web_page_preview": True,
-                    })
-                    if r.status_code == 200:
-                        logger.info("telegram_summary.sent", user_id=user_id, length=len(message))
-                    else:
-                        logger.warning("telegram_summary.send_failed", user_id=user_id, status=r.status_code, body=r.text[:200])
-                except Exception as e:
-                    logger.warning("telegram_summary.send_error", user_id=user_id, error=str(e))
+    async def _get_telegram_recipients(self) -> list[tuple[int, str, str, str]]:
+        """Read telegram-enabled users that hold the ``platform_access`` feature.
 
-    async def _get_telegram_recipients(self) -> list[tuple[int, str, str]]:
-        """Read all users with telegram_enabled from the bot's DB."""
+        Joins ``user_notification_settings`` with ``auth_users`` + ``tier_limits``
+        (role -> features JSONB). Only ADMIN and PREMIUM currently carry
+        platform_access; BASIC and PRO are filtered out in SQL so we never
+        even gather per-user data for them.
+        """
         import asyncpg
         try:
             conn = await asyncpg.connect(BOT_DB_URL)
             rows = await conn.fetch(
-                "SELECT user_id, telegram_bot_token, telegram_chat_id "
-                "FROM user_notification_settings "
-                "WHERE telegram_enabled = true AND telegram_bot_token IS NOT NULL AND telegram_chat_id IS NOT NULL"
+                """
+                SELECT n.user_id,
+                       u.role,
+                       n.telegram_bot_token,
+                       n.telegram_chat_id
+                FROM user_notification_settings n
+                JOIN auth_users u ON u.id = n.user_id
+                JOIN tier_limits t ON t.role = u.role
+                WHERE n.telegram_enabled = true
+                  AND n.telegram_bot_token IS NOT NULL
+                  AND n.telegram_chat_id IS NOT NULL
+                  AND COALESCE((t.features ->> 'platform_access')::boolean, false) = true
+                """
             )
             await conn.close()
-            return [(r["user_id"], r["telegram_bot_token"], r["telegram_chat_id"]) for r in rows]
+            return [
+                (r["user_id"], r["role"], r["telegram_bot_token"], r["telegram_chat_id"])
+                for r in rows
+            ]
         except Exception as e:
             logger.warning("telegram_summary.recipients_error", error=str(e))
             return []

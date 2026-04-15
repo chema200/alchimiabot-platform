@@ -20,6 +20,7 @@ class TradeOutcome(Base):
     __tablename__ = "trade_outcomes"
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, nullable=False, default=1, index=True)
     coin = Column(String(20), nullable=False, index=True)
     side = Column(String(10), nullable=False)
     entry_price = Column(Float, nullable=False)
@@ -152,6 +153,7 @@ class SignalEvaluation(Base):
     __tablename__ = "signal_evaluations"
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, nullable=False, default=1, index=True)
     coin = Column(String(20), nullable=False, index=True)
     side = Column(String(10), nullable=False)
     timestamp = Column(DateTime(timezone=True), nullable=False, index=True)

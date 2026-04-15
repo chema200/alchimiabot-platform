@@ -24,6 +24,7 @@ router = APIRouter(prefix="/api/bot", tags=["bot-integration"])
 
 
 class SignalEvalPayload(BaseModel):
+    user_id: int = 1
     coin: str
     side: str
     signal_score: float = 0
@@ -48,6 +49,7 @@ class SignalEvalPayload(BaseModel):
 
 
 class TradeOutcomePayload(BaseModel):
+    user_id: int = 1
     coin: str
     side: str
     entry_price: float
@@ -176,6 +178,7 @@ async def receive_signal(payload: SignalEvalPayload) -> dict:
             stage = None
 
     record = SignalEvaluation(
+        user_id=payload.user_id,
         coin=payload.coin,
         side=payload.side,
         timestamp=datetime.now(timezone.utc),
@@ -235,6 +238,7 @@ async def receive_signals(payloads: list[SignalEvalPayload]) -> dict:
                 stage = None
 
         records.append(SignalEvaluation(
+            user_id=p.user_id,
             coin=p.coin, side=p.side, timestamp=datetime.now(timezone.utc),
             signal_score=p.signal_score, trend_score=p.trend_score,
             micro_score=p.micro_score, momentum_score=p.momentum_score,
@@ -277,6 +281,7 @@ async def receive_trade(payload: TradeOutcomePayload) -> dict:
     exit_time = datetime.fromisoformat(payload.exit_time)
 
     record = TradeOutcome(
+        user_id=payload.user_id,
         coin=payload.coin, side=payload.side,
         entry_price=payload.entry_price, exit_price=payload.exit_price,
         size=payload.size, notional=payload.notional, leverage=payload.leverage,
@@ -315,7 +320,8 @@ async def receive_trade(payload: TradeOutcomePayload) -> dict:
                 SET trade_outcome_id = :trade_id
                 WHERE id = (
                     SELECT id FROM signal_evaluations
-                    WHERE coin = :coin
+                    WHERE user_id = :user_id
+                      AND coin = :coin
                       AND side = :side
                       AND action = 'ENTER'
                       AND trade_outcome_id IS NULL
@@ -326,6 +332,7 @@ async def receive_trade(payload: TradeOutcomePayload) -> dict:
                 RETURNING id
             """), {
                 "trade_id": trade_id,
+                "user_id": payload.user_id,
                 "coin": payload.coin,
                 "side": payload.side,
                 "entry_time": entry_time,
