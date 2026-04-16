@@ -79,17 +79,29 @@ def create_app(
         allow_credentials=True,
     )
 
-    # Auth middleware — protect all /api/ endpoints except login and bot receiver
+    # Bot receiver API key (shared secret between bot and platform)
+    _BOT_API_KEY = os.getenv("BOT_API_KEY", "")
+
+    # Auth middleware — protect all /api/ endpoints
     @app.middleware("http")
     async def auth_middleware(request: Request, call_next):
         path = request.url.path
-        # Skip auth for: login, bot receiver (internal from localhost), static files
-        if path.startswith("/api/") and path != "/api/platform/login" and not path.startswith("/api/bot/"):
-            uid = _extract_user_id(request)
-            if uid is None:
-                return JSONResponse(status_code=401, content={"error": "Unauthorized"})
-            # Store userId in request state for downstream handlers
-            request.state.user_id = uid
+        if not path.startswith("/api/") or path == "/api/platform/login":
+            return await call_next(request)
+
+        # Bot receiver endpoints: validate API key (or allow if no key configured)
+        if path.startswith("/api/bot/"):
+            if _BOT_API_KEY:
+                key = request.headers.get("X-Bot-Api-Key", "")
+                if key != _BOT_API_KEY:
+                    return JSONResponse(status_code=403, content={"error": "Invalid bot API key"})
+            return await call_next(request)
+
+        # Dashboard endpoints: validate JWT
+        uid = _extract_user_id(request)
+        if uid is None:
+            return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+        request.state.user_id = uid
         return await call_next(request)
 
     # Login endpoint — proxies to bot API for credential validation
@@ -670,17 +682,18 @@ def create_app(
                     if sig_row:
                         signal = dict(sig_row)
 
-                # 3. Get snapshots
-                # trade_snapshots.trade_id is a string key, try matching by coin+side+time range
+                # 3. Get snapshots — prefer trade_id match, fallback to coin+side+time
                 snapshots = []
                 if trade.get("entry_time") and trade.get("exit_time"):
                     r3 = await session.execute(sql_text("""
                         SELECT * FROM trade_snapshots
                         WHERE user_id = :uid AND coin = :coin AND side = :side
+                          AND trade_id = :trade_id
                           AND timestamp BETWEEN :entry_time AND :exit_time
                         ORDER BY timestamp
                     """), {
                         "uid": uid,
+                        "trade_id": str(trade_id),
                         "coin": trade["coin"],
                         "side": trade["side"],
                         "entry_time": trade["entry_time"],

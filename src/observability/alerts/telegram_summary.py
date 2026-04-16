@@ -320,6 +320,7 @@ class TelegramSummaryService:
         even gather per-user data for them.
         """
         import asyncpg
+        conn = None
         try:
             conn = await asyncpg.connect(BOT_DB_URL)
             rows = await conn.fetch(
@@ -337,7 +338,6 @@ class TelegramSummaryService:
                   AND COALESCE((t.features ->> 'platform_access')::boolean, false) = true
                 """
             )
-            await conn.close()
             return [
                 (r["user_id"], r["role"], r["telegram_bot_token"], r["telegram_chat_id"])
                 for r in rows
@@ -345,3 +345,9 @@ class TelegramSummaryService:
         except Exception as e:
             logger.warning("telegram_summary.recipients_error", error=str(e))
             return []
+        finally:
+            if conn:
+                try:
+                    await conn.close()
+                except Exception:
+                    pass
