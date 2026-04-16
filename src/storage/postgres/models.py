@@ -76,6 +76,7 @@ class TradeSnapshot(Base):
     __tablename__ = "trade_snapshots"
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, nullable=False, default=1, index=True)
     trade_id = Column(String(100), nullable=False)
     coin = Column(String(20), nullable=False)
     side = Column(String(10), nullable=False)
@@ -105,6 +106,7 @@ class TradeVerdict(Base):
     __tablename__ = "trade_verdicts"
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, nullable=False, default=1, index=True)
     trade_outcome_id = Column(BigInteger, ForeignKey("trade_outcomes.id"))
     coin = Column(String(20), nullable=False)
     side = Column(String(10), nullable=False)
@@ -239,6 +241,7 @@ class RegimeLabel(Base):
     __tablename__ = "regime_labels"
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, nullable=False, default=1, index=True)
     coin = Column(String(20), nullable=False)
     timestamp = Column(DateTime(timezone=True), nullable=False)
     regime = Column(String(30), nullable=False)
@@ -370,6 +373,7 @@ class ChangeMarker(Base):
     __tablename__ = "change_markers"
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, nullable=False, default=1, index=True)
     timestamp = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     category = Column(String(30), nullable=False)  # PRESET, PROFILE, OPTIMIZER, SHADOW, MANUAL, EVENT, MODE_CHANGE
     label = Column(String(200), nullable=False)

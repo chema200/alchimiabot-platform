@@ -24,12 +24,13 @@ class MarkerService:
         async with self._sf() as session:
             result = await session.execute(text("""
                 INSERT INTO change_markers
-                (timestamp, category, label, description, source, coin, side, mode, parameter,
+                (user_id, timestamp, category, label, description, source, coin, side, mode, parameter,
                  old_value, new_value, batch_id, batch_label, config_snapshot)
-                VALUES (NOW(), :category, :label, :description, :source, :coin, :side, :mode, :parameter,
+                VALUES (:user_id, NOW(), :category, :label, :description, :source, :coin, :side, :mode, :parameter,
                         :old_value, :new_value, :batch_id, :batch_label, CAST(:config_snapshot AS JSONB))
                 RETURNING id
             """), {
+                "user_id": kwargs.get("user_id", 1),
                 "category": kwargs.get("category", "MANUAL"),
                 "label": kwargs.get("label", ""),
                 "description": kwargs.get("description"),

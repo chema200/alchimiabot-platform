@@ -673,8 +673,10 @@ def create_app(
                     if isinstance(verdict_data.get("counterfactual"), (list, dict)):
                         verdict_data["counterfactual"] = _json.dumps(verdict_data["counterfactual"])
                     # Insert verdict
+                    # Add user_id from the trade
+                    verdict_data["user_id"] = trade.get("user_id", 1)
                     cols = [
-                        "trade_outcome_id", "coin", "side", "mode",
+                        "user_id", "trade_outcome_id", "coin", "side", "mode",
                         "entry_time", "exit_time",
                         "verdict", "verdict_reason",
                         "entry_score", "entry_quality", "entry_timing", "trend_aligned",

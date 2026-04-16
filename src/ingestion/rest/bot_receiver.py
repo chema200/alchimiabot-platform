@@ -83,6 +83,7 @@ class TradeOutcomePayload(BaseModel):
 
 
 class SnapshotPayload(BaseModel):
+    user_id: int = 1
     trade_id: str
     coin: str
     side: str
@@ -100,6 +101,7 @@ class SnapshotPayload(BaseModel):
 
 
 class MarkerPayload(BaseModel):
+    user_id: int = 1
     category: str
     label: str
     description: str | None = None
@@ -116,6 +118,7 @@ class MarkerPayload(BaseModel):
 
 
 class RegimeLabelPayload(BaseModel):
+    user_id: int = 1
     coin: str
     regime: str
     confidence: float = 0
@@ -130,6 +133,7 @@ class GateStatsPayload(BaseModel):
     Pushed periodically by the bot via PlatformBridge.sendGateStats so the
     dashboard can show which filters are bottlenecking entries.
     """
+    user_id: int = 1
     status: str | None = None
     mode: str | None = None
     started_at: str | None = None
@@ -139,16 +143,16 @@ class GateStatsPayload(BaseModel):
     sl_viability_config: dict[str, Any] = {}
 
 
-# Latest gate stats snapshot, in-memory (no DB needed for live telemetry).
+# Latest gate stats snapshot per user, in-memory (no DB needed for live telemetry).
 # Overwritten on each push from the bot.
-_latest_gate_stats: dict[str, Any] = {}
-_latest_gate_stats_at: datetime | None = None
+_latest_gate_stats: dict[int, dict[str, Any]] = {}
+_latest_gate_stats_at: dict[int, datetime] = {}
 
 
-def get_latest_gate_stats() -> dict[str, Any]:
+def get_latest_gate_stats(user_id: int = 1) -> dict[str, Any]:
     return {
-        "received_at": _latest_gate_stats_at.isoformat() if _latest_gate_stats_at else None,
-        "data": _latest_gate_stats,
+        "received_at": _latest_gate_stats_at.get(user_id, None),
+        "data": _latest_gate_stats.get(user_id, {}),
     }
 
 
@@ -358,6 +362,7 @@ async def receive_snapshot(payload: SnapshotPayload) -> dict:
         return {"ok": False, "error": "DB not ready"}
 
     record = TradeSnapshot(
+        user_id=payload.user_id,
         trade_id=payload.trade_id,
         coin=payload.coin,
         side=payload.side,
@@ -395,9 +400,9 @@ async def receive_gate_stats(payload: GateStatsPayload) -> dict:
     Stored in-memory only — this is live telemetry, not historical data.
     The dashboard polls /api/markers/gate-stats to display.
     """
-    global _latest_gate_stats, _latest_gate_stats_at
-    _latest_gate_stats = payload.model_dump()
-    _latest_gate_stats_at = datetime.now(timezone.utc)
+    uid = payload.user_id
+    _latest_gate_stats[uid] = payload.model_dump()
+    _latest_gate_stats_at[uid] = datetime.now(timezone.utc)
     return {"ok": True}
 
 
@@ -426,6 +431,7 @@ async def receive_regime(payload: RegimeLabelPayload) -> dict:
         return {"ok": False, "error": "DB not ready"}
 
     record = RegimeLabel(
+        user_id=payload.user_id,
         coin=payload.coin, timestamp=datetime.now(timezone.utc),
         regime=payload.regime, confidence=payload.confidence,
         trend_strength=payload.trend_strength,
