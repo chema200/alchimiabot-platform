@@ -90,13 +90,18 @@ def create_app(
         if not path.startswith("/api/") or path == "/api/platform/login":
             return await call_next(request)
 
-        # Bot receiver endpoints: validate API key (or allow if no key configured)
+        # Bot data endpoints: accept API key (from bot backend) OR JWT (from dashboard frontend)
         if path.startswith("/api/bot/"):
-            if _BOT_API_KEY:
-                key = request.headers.get("X-Bot-Api-Key", "")
-                if key != _BOT_API_KEY:
-                    return JSONResponse(status_code=403, content={"error": "Invalid bot API key"})
-            return await call_next(request)
+            key = request.headers.get("X-Bot-Api-Key", "")
+            uid = _extract_user_id(request)
+            if _BOT_API_KEY and key == _BOT_API_KEY:
+                return await call_next(request)  # bot backend with valid key
+            if uid is not None:
+                request.state.user_id = uid
+                return await call_next(request)  # dashboard frontend with valid JWT
+            if not _BOT_API_KEY:
+                return await call_next(request)  # no key configured, allow all
+            return JSONResponse(status_code=403, content={"error": "Invalid bot API key"})
 
         # Dashboard endpoints: validate JWT
         uid = _extract_user_id(request)
