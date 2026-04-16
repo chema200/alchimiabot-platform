@@ -47,13 +47,13 @@ class TradesEnrichedBuilder:
         self._sf = session_factory
 
     async def build(self, date_from: str | None = None, date_to: str | None = None,
-                    coins: list[str] | None = None) -> list[dict[str, Any]]:
+                    coins: list[str] | None = None, user_id: int = 1) -> list[dict[str, Any]]:
         """Build enriched trades dataset.
 
         Each row = one completed trade with full context at entry.
         """
-        filters = []
-        params: dict[str, Any] = {}
+        filters = ["t.user_id = :user_id"]
+        params: dict[str, Any] = {"user_id": user_id}
 
         df = _coerce_date(date_from)
         dt = _coerce_date(date_to)
@@ -235,17 +235,18 @@ class TradesEnrichedBuilder:
         logger.info("trades_enriched.built", count=len(enriched))
         return enriched
 
-    async def build_with_signals(self, date_from: str | None = None) -> dict[str, Any]:
+    async def build_with_signals(self, date_from: str | None = None, user_id: int = 1) -> dict[str, Any]:
         """Build enriched dataset including blocked/skipped signals."""
-        trades = await self.build(date_from=date_from)
+        trades = await self.build(date_from=date_from, user_id=user_id)
 
         # Get signal evaluations
-        params: dict[str, Any] = {}
-        where = ""
+        params: dict[str, Any] = {"user_id": user_id}
+        filters = ["user_id = :user_id"]
         df = _coerce_date(date_from)
         if df is not None:
-            where = "WHERE timestamp >= :date_from"
+            filters.append("timestamp >= :date_from")
             params["date_from"] = df
+        where = "WHERE " + " AND ".join(filters)
 
         async with self._sf() as s:
             result = await s.execute(text(f"""

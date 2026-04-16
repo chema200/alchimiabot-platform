@@ -5,57 +5,54 @@ metrics, and alerts via REST API.
 """
 
 import os
-import hashlib
-import secrets
 import time
 from pathlib import Path
 
+import jwt as pyjwt
+import httpx
 from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from typing import Any
 
-# Simple JWT-like token auth for platform dashboard
-_PLATFORM_USER = os.getenv("PLATFORM_USER", "chema200")
-_PLATFORM_PASS_HASH = os.getenv(
-    "PLATFORM_PASS_HASH",
-    hashlib.sha256(os.getenv("PLATFORM_PASSWORD", "changeme").encode()).hexdigest(),
-)
-_tokens: dict[str, float] = {}  # token -> expiry timestamp
-_TOKEN_TTL = 3600  # 1 hour
+# ── JWT Auth: same secret as the bot, validates the bot's tokens ──
+_JWT_SECRET = os.getenv("JWT_SECRET", "")
+_BOT_API_URL = os.getenv("BOT_API_URL", "http://localhost:8180")
 
 
-def _create_token() -> str:
-    token = secrets.token_hex(32)
-    _tokens[token] = time.time() + _TOKEN_TTL
-    return token
-
-
-def _cleanup_expired_tokens() -> None:
-    """Remove expired tokens to prevent memory leak."""
-    now = time.time()
-    expired = [t for t, exp in _tokens.items() if exp <= now]
-    for t in expired:
-        del _tokens[t]
-
-
-def _verify_token(request: Request) -> bool:
-    # Skip auth for login endpoint and static files
-    path = request.url.path
-    if path in ("/api/platform/login", "/", "/static") or path.startswith("/static"):
-        return True
+def _extract_user_id(request: Request) -> int | None:
+    """Extract userId from JWT in Authorization header or cookie.
+    Returns None if no valid token found."""
     auth = request.headers.get("Authorization", "")
     token = request.cookies.get("platform_token", "")
     if auth.startswith("Bearer "):
         token = auth[7:]
-    expiry = _tokens.get(token, 0)
-    if expiry > time.time():
-        return True
-    # Periodically clean up expired tokens
-    if len(_tokens) > 100:
-        _cleanup_expired_tokens()
-    return False
+    if not token:
+        return None
+    try:
+        secret = _JWT_SECRET
+        if not secret:
+            return None
+        # Pad secret to 32 bytes like the bot does
+        padded = secret if len(secret) >= 32 else (secret + secret)[:32]
+        payload = pyjwt.decode(token, padded, algorithms=["HS256"])
+        return int(payload.get("uid", 0)) or None
+    except Exception:
+        return None
+
+
+def _require_user_id(request: Request) -> int:
+    """Dependency: extract userId from JWT or raise 401."""
+    uid = _extract_user_id(request)
+    if uid is None:
+        raise HTTPException(401, "Invalid or missing token")
+    return uid
+
+
+def _uid(request: Request) -> int:
+    """Get userId from request state (set by auth middleware). Falls back to 1."""
+    return getattr(request.state, "user_id", 1)
 
 
 def create_app(
@@ -88,28 +85,43 @@ def create_app(
         path = request.url.path
         # Skip auth for: login, bot receiver (internal from localhost), static files
         if path.startswith("/api/") and path != "/api/platform/login" and not path.startswith("/api/bot/"):
-            if not _verify_token(request):
+            uid = _extract_user_id(request)
+            if uid is None:
                 return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+            # Store userId in request state for downstream handlers
+            request.state.user_id = uid
         return await call_next(request)
 
-    # Login endpoint
+    # Login endpoint — proxies to bot API for credential validation
     @app.post("/api/platform/login")
     async def platform_login(body: dict):
         username = body.get("username", "")
         password = body.get("password", "")
-        pass_hash = hashlib.sha256(password.encode()).hexdigest()
-        if username == _PLATFORM_USER and pass_hash == _PLATFORM_PASS_HASH:
-            token = _create_token()
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.post(
+                    f"{_BOT_API_URL}/api/auth/login",
+                    json={"username": username, "password": password},
+                )
+            if resp.status_code != 200:
+                raise HTTPException(401, "Invalid credentials")
+            data = resp.json()
+            token = data.get("token", "")
+            if not token:
+                raise HTTPException(401, "Invalid credentials")
+            # Return the bot's JWT — platform validates it with the same secret
             response = JSONResponse({"token": token, "username": username})
-            response.set_cookie("platform_token", token, max_age=_TOKEN_TTL, httponly=False, samesite="lax")
+            response.set_cookie("platform_token", token, max_age=3600, httponly=False, samesite="lax")
             return response
-        raise HTTPException(401, "Invalid credentials")
+        except httpx.RequestError:
+            raise HTTPException(502, "Bot API unreachable")
 
     @app.get("/api/platform/me")
     async def platform_me(request: Request) -> dict:
-        if _verify_token(request):
-            return {"username": _PLATFORM_USER}
-        raise HTTPException(401, "Unauthorized")
+        uid = _extract_user_id(request)
+        if uid is None:
+            raise HTTPException(401, "Unauthorized")
+        return {"user_id": uid, "username": "user"}
 
     @app.get("/api/status")
     def status() -> dict[str, Any]:
@@ -366,35 +378,35 @@ def create_app(
         _decision_engine = DecisionEngine()
 
         @app.get("/api/quant/dataset")
-        async def quant_dataset(date_from: str | None = None) -> dict:
-            data = await _enriched_builder.build_with_signals(date_from=date_from)
+        async def quant_dataset(request: Request, date_from: str | None = None) -> dict:
+            data = await _enriched_builder.build_with_signals(date_from=date_from, user_id=_uid(request))
             return {"trades": len(data["trades"]), "signals": data["signals"]}
 
         @app.get("/api/quant/metrics")
-        async def quant_metrics(date_from: str | None = None) -> dict:
-            trades = await _enriched_builder.build(date_from=date_from)
+        async def quant_metrics(request: Request, date_from: str | None = None) -> dict:
+            trades = await _enriched_builder.build(date_from=date_from, user_id=_uid(request))
             return _metrics_engine.compute(trades)
 
         @app.post("/api/quant/experiment")
-        async def quant_experiment(config: dict) -> dict:
-            trades = await _enriched_builder.build()
+        async def quant_experiment(config: dict, request: Request) -> dict:
+            trades = await _enriched_builder.build(user_id=_uid(request))
             exp_config = ExperimentConfig(**config)
             result = _experiment_engine.run(trades, exp_config)
             return result.to_dict()
 
         @app.get("/api/quant/analysis")
-        async def quant_analysis(date_from: str | None = None) -> dict:
-            data = await _enriched_builder.build_with_signals(date_from=date_from)
+        async def quant_analysis(request: Request, date_from: str | None = None) -> dict:
+            data = await _enriched_builder.build_with_signals(date_from=date_from, user_id=_uid(request))
             return _analysis_engine.analyze(data["trades"], data["signals"])
 
         @app.get("/api/quant/feature-importance")
-        async def quant_feature_importance() -> dict:
-            trades = await _enriched_builder.build()
+        async def quant_feature_importance(request: Request) -> dict:
+            trades = await _enriched_builder.build(user_id=_uid(request))
             return _feature_analyzer.analyze(trades)
 
         @app.get("/api/quant/decisions")
-        async def quant_decisions(date_from: str | None = None) -> list[dict]:
-            data = await _enriched_builder.build_with_signals(date_from=date_from)
+        async def quant_decisions(request: Request, date_from: str | None = None) -> list[dict]:
+            data = await _enriched_builder.build_with_signals(date_from=date_from, user_id=_uid(request))
             trades = data["trades"]
             metrics = _metrics_engine.compute(trades)
             analysis = _analysis_engine.analyze(trades, data["signals"])
@@ -402,9 +414,9 @@ def create_app(
             return [d.to_dict() for d in decisions]
 
         @app.get("/api/quant/full")
-        async def quant_full(date_from: str | None = None) -> dict:
+        async def quant_full(request: Request, date_from: str | None = None) -> dict:
             """Complete quant report: metrics + analysis + decisions in one call."""
-            data = await _enriched_builder.build_with_signals(date_from=date_from)
+            data = await _enriched_builder.build_with_signals(date_from=date_from, user_id=_uid(request))
             trades = data["trades"]
             metrics = _metrics_engine.compute(trades)
             analysis = _analysis_engine.analyze(trades, data["signals"])
@@ -418,16 +430,16 @@ def create_app(
             }
 
         @app.get("/api/quant/entry-quality")
-        async def quant_entry_quality(date_from: str | None = None) -> dict:
+        async def quant_entry_quality(request: Request, date_from: str | None = None) -> dict:
             from ..quant.analysis.entry_quality import EntryQualityAnalyzer
-            trades = await _enriched_builder.build(date_from=date_from)
+            trades = await _enriched_builder.build(date_from=date_from, user_id=_uid(request))
             analyzer = EntryQualityAnalyzer()
             return analyzer.analyze(trades)
 
         @app.get("/api/quant/config-analysis")
-        async def quant_config_analysis(date_from: str | None = None) -> dict:
+        async def quant_config_analysis(request: Request, date_from: str | None = None) -> dict:
             from ..quant.analysis.config_analysis import ConfigAnalyzer
-            trades = await _enriched_builder.build(date_from=date_from)
+            trades = await _enriched_builder.build(date_from=date_from, user_id=_uid(request))
             analyzer = ConfigAnalyzer()
             return analyzer.analyze(trades)
 
@@ -570,15 +582,15 @@ def create_app(
         _trade_analyzer = TradeAnalyzer()
 
         @app.delete("/api/trades/snapshots/cleanup")
-        async def cleanup_old_snapshots(days: int = 7) -> dict:
+        async def cleanup_old_snapshots(request: Request, days: int = 7) -> dict:
             """Delete snapshots older than N days to save disk."""
             if days < 1:
                 raise HTTPException(400, "days must be >= 1")
             from sqlalchemy import text as sql_text
             async with session_factory() as session:
                 result = await session.execute(sql_text(
-                    "DELETE FROM trade_snapshots WHERE user_id = 1 AND timestamp < NOW() - :days * interval '1 day' RETURNING id"
-                ), {"days": days})
+                    "DELETE FROM trade_snapshots WHERE user_id = :uid AND timestamp < NOW() - :days * interval '1 day' RETURNING id"
+                ), {"uid": _uid(request), "days": days})
                 deleted = len(result.fetchall())
                 await session.commit()
                 return {"deleted": deleted, "days": days}
@@ -618,15 +630,16 @@ def create_app(
                 return [dict(r) for r in rows]
 
         @app.get("/api/trades/{trade_id}")
-        async def get_trade_detail(trade_id: int):
+        async def get_trade_detail(trade_id: int, request: Request):
             """Full trade detail with snapshots, signal, verdict."""
             from sqlalchemy import text as sql_text
             from fastapi.encoders import jsonable_encoder
             async with session_factory() as session:
-                # 1. Get trade outcome (scoped by user_id=1 for now)
+                # 1. Get trade outcome (scoped by user_id)
+                uid = _uid(request)
                 r = await session.execute(
-                    sql_text("SELECT * FROM trade_outcomes WHERE id = :id AND user_id = 1"),
-                    {"id": trade_id},
+                    sql_text("SELECT * FROM trade_outcomes WHERE id = :id AND user_id = :uid"),
+                    {"id": trade_id, "uid": uid},
                 )
                 trade_row = r.mappings().first()
                 if not trade_row:
@@ -640,12 +653,13 @@ def create_app(
                     et = trade["entry_time"]
                     r2 = await session.execute(sql_text("""
                         SELECT * FROM signal_evaluations
-                        WHERE user_id = 1 AND coin = :coin AND side = :side
+                        WHERE user_id = :uid AND coin = :coin AND side = :side
                           AND action = 'ENTER'
                           AND timestamp BETWEEN :t_from AND :t_to
                         ORDER BY ABS(EXTRACT(EPOCH FROM (timestamp - :entry_time)))
                         LIMIT 1
                     """), {
+                        "uid": uid,
                         "coin": trade["coin"],
                         "side": trade["side"],
                         "entry_time": et,
@@ -662,10 +676,11 @@ def create_app(
                 if trade.get("entry_time") and trade.get("exit_time"):
                     r3 = await session.execute(sql_text("""
                         SELECT * FROM trade_snapshots
-                        WHERE user_id = 1 AND coin = :coin AND side = :side
+                        WHERE user_id = :uid AND coin = :coin AND side = :side
                           AND timestamp BETWEEN :entry_time AND :exit_time
                         ORDER BY timestamp
                     """), {
+                        "uid": uid,
                         "coin": trade["coin"],
                         "side": trade["side"],
                         "entry_time": trade["entry_time"],
@@ -730,8 +745,8 @@ def create_app(
         _score_parity_analyzer = ScoreParityAnalyzer(session_factory)
 
         @app.get("/api/quant/executive-summary")
-        async def executive_summary() -> dict:
-            return await _summary_builder.build()
+        async def executive_summary(request: Request) -> dict:
+            return await _summary_builder.build(user_id=_uid(request))
 
         @app.get("/api/quant/score-parity")
         async def score_parity() -> dict:
@@ -741,7 +756,7 @@ def create_app(
     # ── Validation Runner ──
     if session_factory:
         @app.get("/api/quant/validation")
-        async def quant_validation(date_from: str | None = None, date_to: str | None = None,
+        async def quant_validation(request: Request, date_from: str | None = None, date_to: str | None = None,
                                    mode: str = "live_trades", coin: str | None = None) -> dict:
             from ..quant.validation.runner import ValidationRunner
             runner = ValidationRunner()
@@ -750,14 +765,14 @@ def create_app(
                 report = runner.run_full_validation([], mode="replay_historical",
                                                      date_from=date_from, date_to=date_to, coins=coins)
             else:
-                trades = await _enriched_builder.build(date_from=date_from)
+                trades = await _enriched_builder.build(date_from=date_from, user_id=_uid(request))
                 report = runner.run_full_validation(trades, mode="live_trades")
             return report.to_dict()
 
         @app.get("/api/quant/validation/{batch_name}")
-        async def quant_validation_batch(batch_name: str, date_from: str | None = None) -> dict:
+        async def quant_validation_batch(request: Request, batch_name: str, date_from: str | None = None) -> dict:
             from ..quant.validation.runner import ValidationRunner
-            trades = await _enriched_builder.build(date_from=date_from)
+            trades = await _enriched_builder.build(date_from=date_from, user_id=_uid(request))
             runner = ValidationRunner()
             result = runner.run_single_batch(trades, batch_name)
             return result.to_dict()

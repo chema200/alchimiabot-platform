@@ -28,10 +28,10 @@ class ExecutiveSummaryBuilder:
         self._decision_engine = DecisionEngine()
         self._score_parity = ScoreParityAnalyzer(session_factory)
 
-    async def build(self) -> dict[str, Any]:
+    async def build(self, user_id: int = 1) -> dict[str, Any]:
         """Build the complete executive summary."""
         # Gather all data
-        data = await self._enriched_builder.build_with_signals()
+        data = await self._enriched_builder.build_with_signals(user_id=user_id)
         trades = data["trades"]
         signals = data["signals"]
 
