@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import structlog
 
@@ -169,7 +170,7 @@ def set_session_factory(factory):
 async def receive_signal(payload: SignalEvalPayload) -> dict:
     """Receive a signal evaluation from agentbot-live."""
     if not _session_factory:
-        return {"ok": False, "error": "DB not ready"}
+        return JSONResponse(status_code=503, content={"ok": False, "error": "DB not ready"})
 
     # Infer decision_stage from action if not provided (backward compat)
     stage = payload.decision_stage
@@ -220,14 +221,14 @@ async def receive_signal(payload: SignalEvalPayload) -> dict:
         return {"ok": True}
     except Exception as e:
         logger.warning("bot_receiver.signal_error", error=str(e))
-        return {"ok": False, "error": str(e)}
+        return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
 
 
 @router.post("/signals")
 async def receive_signals(payloads: list[SignalEvalPayload]) -> dict:
     """Receive a batch of signal evaluations."""
     if not _session_factory:
-        return {"ok": False, "error": "DB not ready"}
+        return JSONResponse(status_code=503, content={"ok": False, "error": "DB not ready"})
 
     records = []
     for p in payloads:
@@ -267,7 +268,7 @@ async def receive_signals(payloads: list[SignalEvalPayload]) -> dict:
         return {"ok": True, "count": len(records)}
     except Exception as e:
         logger.warning("bot_receiver.signals_error", error=str(e))
-        return {"ok": False, "error": str(e)}
+        return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
 
 
 @router.post("/trade")
@@ -279,7 +280,7 @@ async def receive_trade(payload: TradeOutcomePayload) -> dict:
     decision_trace queryable per-trade for ratio/quality analysis.
     """
     if not _session_factory:
-        return {"ok": False, "error": "DB not ready"}
+        return JSONResponse(status_code=503, content={"ok": False, "error": "DB not ready"})
 
     entry_time = datetime.fromisoformat(payload.entry_time)
     exit_time = datetime.fromisoformat(payload.exit_time)
@@ -352,14 +353,14 @@ async def receive_trade(payload: TradeOutcomePayload) -> dict:
         return {"ok": True, "trade_id": trade_id, "linked_signal_id": linked_signal_id}
     except Exception as e:
         logger.warning("bot_receiver.trade_error", error=str(e))
-        return {"ok": False, "error": str(e)}
+        return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
 
 
 @router.post("/snapshot")
 async def receive_snapshot(payload: SnapshotPayload) -> dict:
     """Receive a position snapshot from agentbot-live (~30s intervals)."""
     if not _session_factory:
-        return {"ok": False, "error": "DB not ready"}
+        return JSONResponse(status_code=503, content={"ok": False, "error": "DB not ready"})
 
     record = TradeSnapshot(
         user_id=payload.user_id,
@@ -390,7 +391,7 @@ async def receive_snapshot(payload: SnapshotPayload) -> dict:
         return {"ok": True}
     except Exception as e:
         logger.warning("bot_receiver.snapshot_error", error=str(e))
-        return {"ok": False, "error": str(e)}
+        return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
 
 
 @router.post("/gate-stats")
@@ -410,7 +411,7 @@ async def receive_gate_stats(payload: GateStatsPayload) -> dict:
 async def receive_marker(payload: MarkerPayload) -> dict:
     """Receive a change marker from agentbot-live."""
     if not _session_factory:
-        return {"ok": False, "error": "DB not ready"}
+        return JSONResponse(status_code=503, content={"ok": False, "error": "DB not ready"})
 
     try:
         from ...quant.markers.marker_service import MarkerService
@@ -421,14 +422,14 @@ async def receive_marker(payload: MarkerPayload) -> dict:
         return {"ok": True, "id": marker_id}
     except Exception as e:
         logger.warning("bot_receiver.marker_error", error=str(e))
-        return {"ok": False, "error": str(e)}
+        return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
 
 
 @router.post("/regime")
 async def receive_regime(payload: RegimeLabelPayload) -> dict:
     """Receive regime classification from agentbot-live."""
     if not _session_factory:
-        return {"ok": False, "error": "DB not ready"}
+        return JSONResponse(status_code=503, content={"ok": False, "error": "DB not ready"})
 
     record = RegimeLabel(
         user_id=payload.user_id,
@@ -445,4 +446,4 @@ async def receive_regime(payload: RegimeLabelPayload) -> dict:
             await session.commit()
         return {"ok": True}
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})

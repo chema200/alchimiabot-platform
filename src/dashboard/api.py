@@ -17,8 +17,11 @@ from fastapi.staticfiles import StaticFiles
 from typing import Any
 
 # Simple JWT-like token auth for platform dashboard
-_PLATFORM_USER = "chema200"
-_PLATFORM_PASS_HASH = hashlib.sha256("iotron4321".encode()).hexdigest()
+_PLATFORM_USER = os.getenv("PLATFORM_USER", "chema200")
+_PLATFORM_PASS_HASH = os.getenv(
+    "PLATFORM_PASS_HASH",
+    hashlib.sha256(os.getenv("PLATFORM_PASSWORD", "changeme").encode()).hexdigest(),
+)
 _tokens: dict[str, float] = {}  # token -> expiry timestamp
 _TOKEN_TTL = 3600  # 1 hour
 
@@ -27,6 +30,14 @@ def _create_token() -> str:
     token = secrets.token_hex(32)
     _tokens[token] = time.time() + _TOKEN_TTL
     return token
+
+
+def _cleanup_expired_tokens() -> None:
+    """Remove expired tokens to prevent memory leak."""
+    now = time.time()
+    expired = [t for t, exp in _tokens.items() if exp <= now]
+    for t in expired:
+        del _tokens[t]
 
 
 def _verify_token(request: Request) -> bool:
@@ -41,6 +52,9 @@ def _verify_token(request: Request) -> bool:
     expiry = _tokens.get(token, 0)
     if expiry > time.time():
         return True
+    # Periodically clean up expired tokens
+    if len(_tokens) > 100:
+        _cleanup_expired_tokens()
     return False
 
 
@@ -59,9 +73,10 @@ def create_app(
 ) -> FastAPI:
     app = FastAPI(title="AgentBot Platform", version="0.1.0")
 
+    _allowed_origins = os.getenv("CORS_ORIGINS", "https://bot-v2.alchimiabot.com,https://platform-v2.alchimiabot.com,http://localhost:3001,http://localhost:8190").split(",")
     app.add_middleware(
         CORSMiddleware,
-        allow_origin_regex=r"https?://.*",
+        allow_origins=_allowed_origins,
         allow_methods=["*"],
         allow_headers=["*"],
         allow_credentials=True,
@@ -557,10 +572,12 @@ def create_app(
         @app.delete("/api/trades/snapshots/cleanup")
         async def cleanup_old_snapshots(days: int = 7) -> dict:
             """Delete snapshots older than N days to save disk."""
+            if days < 1:
+                raise HTTPException(400, "days must be >= 1")
             from sqlalchemy import text as sql_text
             async with session_factory() as session:
                 result = await session.execute(sql_text(
-                    "DELETE FROM trade_snapshots WHERE timestamp < NOW() - :days * interval '1 day' RETURNING id"
+                    "DELETE FROM trade_snapshots WHERE user_id = 1 AND timestamp < NOW() - :days * interval '1 day' RETURNING id"
                 ), {"days": days})
                 deleted = len(result.fetchall())
                 await session.commit()
@@ -754,8 +771,16 @@ def create_app(
         async def full_report() -> dict:
             return await reports.full_report()
 
+        _ALLOWED_REPORTS = {
+            "wr_by_coin", "wr_by_side", "wr_by_hour", "pnl_by_mode", "pnl_by_tag",
+            "pnl_by_exit_reason", "fee_analysis", "poison_coins", "rescuable_coins",
+            "signal_blocked_vs_entered", "daily_summary",
+        }
+
         @app.get("/api/reports/{name}")
         async def get_report(name: str) -> Any:
+            if name not in _ALLOWED_REPORTS:
+                raise HTTPException(404, f"Report '{name}' not found")
             method = getattr(reports, name, None)
             if not method:
                 raise HTTPException(404, f"Report '{name}' not found")

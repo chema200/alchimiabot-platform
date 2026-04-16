@@ -49,7 +49,7 @@ class MetricsEngine:
 
         gross_profit = sum(wins)
         gross_loss = abs(sum(losses))
-        profit_factor = gross_profit / gross_loss if gross_loss > 0 else float("inf")
+        profit_factor = gross_profit / gross_loss if gross_loss > 0 else None
 
         total_pnl = sum(pnls)
         total_fees = sum(t.get("fee", 0) or 0 for t in trades)
