@@ -34,9 +34,10 @@ def _extract_user_id(request: Request) -> int | None:
         secret = _JWT_SECRET
         if not secret:
             return None
-        # Pad secret to 32 bytes like the bot does
-        padded = secret if len(secret) >= 32 else (secret + secret)[:32]
-        payload = pyjwt.decode(token, padded, algorithms=["HS256"])
+        # Bot uses Keys.hmacShaKeyFor(secret.getBytes(UTF-8)) — raw bytes, not hex
+        # Key length determines algorithm: >=64 bytes = HS512, >=48 = HS384, >=32 = HS256
+        key_bytes = secret.encode("utf-8")
+        payload = pyjwt.decode(token, key_bytes, algorithms=["HS256", "HS384", "HS512"])
         return int(payload.get("uid", 0)) or None
     except Exception:
         return None
