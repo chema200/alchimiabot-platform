@@ -623,9 +623,9 @@ def create_app(
             from sqlalchemy import text as sql_text
             from fastapi.encoders import jsonable_encoder
             async with session_factory() as session:
-                # 1. Get trade outcome
+                # 1. Get trade outcome (scoped by user_id=1 for now)
                 r = await session.execute(
-                    sql_text("SELECT * FROM trade_outcomes WHERE id = :id"),
+                    sql_text("SELECT * FROM trade_outcomes WHERE id = :id AND user_id = 1"),
                     {"id": trade_id},
                 )
                 trade_row = r.mappings().first()
@@ -640,7 +640,7 @@ def create_app(
                     et = trade["entry_time"]
                     r2 = await session.execute(sql_text("""
                         SELECT * FROM signal_evaluations
-                        WHERE coin = :coin AND side = :side
+                        WHERE user_id = 1 AND coin = :coin AND side = :side
                           AND action = 'ENTER'
                           AND timestamp BETWEEN :t_from AND :t_to
                         ORDER BY ABS(EXTRACT(EPOCH FROM (timestamp - :entry_time)))
@@ -662,7 +662,7 @@ def create_app(
                 if trade.get("entry_time") and trade.get("exit_time"):
                     r3 = await session.execute(sql_text("""
                         SELECT * FROM trade_snapshots
-                        WHERE coin = :coin AND side = :side
+                        WHERE user_id = 1 AND coin = :coin AND side = :side
                           AND timestamp BETWEEN :entry_time AND :exit_time
                         ORDER BY timestamp
                     """), {
