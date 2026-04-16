@@ -62,7 +62,7 @@ class MetricsEngine:
             "avg_win": round(avg_win, 4),
             "avg_loss": round(avg_loss, 4),
             "expectancy": round(expectancy, 4),
-            "profit_factor": round(profit_factor, 4),
+            "profit_factor": round(profit_factor, 4) if profit_factor is not None else None,
             "total_pnl": round(total_pnl, 4),
             "total_fees": round(total_fees, 4),
             "net_pnl": round(total_pnl, 4),
