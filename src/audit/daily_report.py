@@ -25,7 +25,7 @@ class DailyReportGenerator:
         self._sf = session_factory
         self._bot_url = bot_url
 
-    async def generate(self, report_date: date | None = None) -> dict[str, Any]:
+    async def generate(self, report_date: date | None = None, user_id: int | None = None) -> dict[str, Any]:
         """Generate full daily report for a given date (default: today)."""
         d = report_date or date.today()
         start = datetime(d.year, d.month, d.day, tzinfo=timezone.utc)
@@ -65,7 +65,7 @@ class DailyReportGenerator:
 
         return report
 
-    async def _general_info(self, start: datetime, end: datetime) -> dict:
+    async def _general_info(self, start: datetime, end: datetime, user_id: int | None = None) -> dict:
         """Section 1: General info — mode, trades, PnL."""
         result = {"mode": "?", "hours_operating": 0, "trades": 0,
                   "total_pnl": 0, "total_fees": 0, "net_pnl": 0}
@@ -78,10 +78,9 @@ class DailyReportGenerator:
                        coalesce(sum(fee), 0) as fees,
                        coalesce(sum(net_pnl), 0) as net,
                        mode
-                FROM trade_outcomes
-                WHERE exit_time >= :start AND exit_time < :end
+                FROM trade_outcomes WHERE (user_id = :uid OR :uid IS NULL) AND exit_time >= :start AND exit_time < :end
                 GROUP BY mode ORDER BY count(*) DESC LIMIT 1
-            """), {"start": start, "end": end})
+            """), {"start": start, "end": end, "uid": user_id})
             row = r.mappings().first()
             if row:
                 result["trades"] = int(row["trades"])
@@ -96,9 +95,8 @@ class DailyReportGenerator:
                        coalesce(sum(gross_pnl), 0) as gross,
                        coalesce(sum(fee), 0) as fees,
                        coalesce(sum(net_pnl), 0) as net
-                FROM trade_outcomes
-                WHERE exit_time >= :start AND exit_time < :end
-            """), {"start": start, "end": end})
+                FROM trade_outcomes WHERE (user_id = :uid OR :uid IS NULL) AND exit_time >= :start AND exit_time < :end
+            """), {"start": start, "end": end, "uid": user_id})
             row2 = r2.mappings().first()
             if row2:
                 result["trades"] = int(row2["total"])
@@ -142,7 +140,7 @@ class DailyReportGenerator:
 
         return result
 
-    async def _integration(self, start: datetime, end: datetime) -> dict:
+    async def _integration(self, start: datetime, end: datetime, user_id: int | None = None) -> dict:
         """Section 3: Integration live → platform."""
         result = {"bot_trades": 0, "platform_trades": 0, "diff_trades": 0,
                   "signals_received": 0, "duplicates": 0, "issues": []}
@@ -150,19 +148,18 @@ class DailyReportGenerator:
         # Platform trades
         async with self._sf() as s:
             r = await s.execute(text(
-                "SELECT count(*) FROM trade_outcomes WHERE exit_time >= :s AND exit_time < :e"),
+                "SELECT count(*) FROM trade_outcomes WHERE (user_id = :uid OR :uid IS NULL) AND exit_time >= :s AND exit_time < :e"),
                 {"s": start, "e": end})
             result["platform_trades"] = r.scalar() or 0
 
             r = await s.execute(text(
-                "SELECT count(*) FROM signal_evaluations WHERE timestamp >= :s AND timestamp < :e"),
+                "SELECT count(*) FROM signal_evaluations WHERE (user_id = :uid OR :uid IS NULL) AND timestamp >= :s AND timestamp < :e"),
                 {"s": start, "e": end})
             result["signals_received"] = r.scalar() or 0
 
             r = await s.execute(text("""
                 SELECT count(*) FROM (
-                    SELECT coin, exit_time FROM trade_outcomes
-                    WHERE exit_time >= :s AND exit_time < :e
+                    SELECT coin, exit_time FROM trade_outcomes WHERE (user_id = :uid OR :uid IS NULL) AND exit_time >= :s AND exit_time < :e
                     GROUP BY coin, exit_time HAVING count(*) > 1
                 ) d"""), {"s": start, "e": end})
             result["duplicates"] = r.scalar() or 0
@@ -193,7 +190,7 @@ class DailyReportGenerator:
 
         return result
 
-    async def _pnl_consistency(self, start: datetime, end: datetime) -> dict:
+    async def _pnl_consistency(self, start: datetime, end: datetime, user_id: int | None = None) -> dict:
         """Section 4: PnL and consistency."""
         result = {"wins": 0, "losses": 0, "win_rate": 0, "profit_factor": 0,
                   "expectancy": 0, "avg_win": 0, "avg_loss": 0, "issues": []}
@@ -209,8 +206,7 @@ class DailyReportGenerator:
                     coalesce(sum(case when net_pnl > 0 then net_pnl else 0 end), 0) as total_wins,
                     coalesce(sum(case when net_pnl < 0 then net_pnl else 0 end), 0) as total_losses,
                     sum(case when gross_pnl > 0 and net_pnl <= 0 then 1 else 0 end) as fee_killed
-                FROM trade_outcomes
-                WHERE exit_time >= :s AND exit_time < :e
+                FROM trade_outcomes WHERE (user_id = :uid OR :uid IS NULL) AND exit_time >= :s AND exit_time < :e
             """), {"s": start, "e": end})
             row = r.mappings().first()
             if row and row["total"] > 0:
@@ -233,15 +229,14 @@ class DailyReportGenerator:
 
         return result
 
-    async def _signals(self, start: datetime, end: datetime) -> dict:
+    async def _signals(self, start: datetime, end: datetime, user_id: int | None = None) -> dict:
         """Section 5: Signal evaluations."""
         result = {"enter": 0, "skip": 0, "blocked": 0, "issues": []}
 
         async with self._sf() as s:
             r = await s.execute(text("""
                 SELECT action, count(*) as cnt
-                FROM signal_evaluations
-                WHERE timestamp >= :s AND timestamp < :e
+                FROM signal_evaluations WHERE (user_id = :uid OR :uid IS NULL) AND timestamp >= :s AND timestamp < :e
                 GROUP BY action
             """), {"s": start, "e": end})
             for row in r.mappings().all():
@@ -322,7 +317,7 @@ class DailyReportGenerator:
 
         return result
 
-    async def _trading_analysis(self, start: datetime, end: datetime) -> dict:
+    async def _trading_analysis(self, start: datetime, end: datetime, user_id: int | None = None) -> dict:
         """Section 9: Trading analysis — best/worst coins, hours."""
         result = {"best_coins": [], "worst_coins": [], "best_hours": [], "worst_hours": [], "by_exit_reason": []}
 
@@ -332,7 +327,7 @@ class DailyReportGenerator:
                 SELECT coin, count(*) as trades,
                     round(sum(net_pnl)::numeric, 4) as pnl,
                     round(sum(case when net_pnl > 0 then 1.0 else 0 end) / count(*)::numeric * 100, 0) as wr
-                FROM trade_outcomes WHERE exit_time >= :s AND exit_time < :e
+                FROM trade_outcomes WHERE (user_id = :uid OR :uid IS NULL) AND exit_time >= :s AND exit_time < :e
                 GROUP BY coin HAVING count(*) >= 2 ORDER BY pnl DESC
             """), {"s": start, "e": end})
             rows = [dict(r) for r in r.mappings().all()]
@@ -344,7 +339,7 @@ class DailyReportGenerator:
                 SELECT extract(hour from entry_time)::int as hour,
                     count(*) as trades,
                     round(sum(net_pnl)::numeric, 4) as pnl
-                FROM trade_outcomes WHERE exit_time >= :s AND exit_time < :e
+                FROM trade_outcomes WHERE (user_id = :uid OR :uid IS NULL) AND exit_time >= :s AND exit_time < :e
                 GROUP BY hour ORDER BY pnl DESC
             """), {"s": start, "e": end})
             hours = [dict(r) for r in r.mappings().all()]
@@ -355,14 +350,14 @@ class DailyReportGenerator:
             r = await s.execute(text("""
                 SELECT exit_reason, count(*) as trades,
                     round(sum(net_pnl)::numeric, 4) as pnl
-                FROM trade_outcomes WHERE exit_time >= :s AND exit_time < :e
+                FROM trade_outcomes WHERE (user_id = :uid OR :uid IS NULL) AND exit_time >= :s AND exit_time < :e
                 GROUP BY exit_reason ORDER BY trades DESC
             """), {"s": start, "e": end})
             result["by_exit_reason"] = [dict(r) for r in r.mappings().all()]
 
         return result
 
-    async def _problems(self, start: datetime, end: datetime) -> dict:
+    async def _problems(self, start: datetime, end: datetime, user_id: int | None = None) -> dict:
         """Section 10: Aggregate all problems from all sections."""
         # This is filled after all sections are generated
         return {"note": "See issues in each section"}
@@ -428,7 +423,7 @@ class DailyReportGenerator:
         except Exception:
             logger.exception("daily_report.persist_error")
 
-    async def get_history(self, days: int = 14) -> list[dict]:
+    async def get_history(self, days: int = 14, user_id: int | None = None) -> list[dict]:
         """Get recent daily reports."""
         async with self._sf() as s:
             r = await s.execute(text("""

@@ -16,9 +16,13 @@ class ScoreParityAnalyzer:
     def __init__(self, session_factory) -> None:
         self._sf = session_factory
 
-    async def analyze(self) -> dict[str, Any]:
-        """Run full score parity analysis."""
+    async def analyze(self, user_id: int | None = None) -> dict[str, Any]:
+        """Run full score parity analysis, scoped to user_id if provided."""
         from sqlalchemy import text
+
+        # Build user filter clause
+        uf = f"AND user_id = {user_id}" if user_id else ""
+        uf_where = f"WHERE user_id = {user_id}" if user_id else ""
 
         result: dict[str, Any] = {
             "trade_scores": {},
@@ -48,7 +52,7 @@ class ScoreParityAnalyzer:
                     count(CASE WHEN signal_score IS NOT NULL AND signal_score > 0
                                 AND trend_score IS NOT NULL AND trend_score > 0
                                 AND micro_score IS NOT NULL AND micro_score > 0 THEN 1 END) as all_present
-                FROM trade_outcomes
+                FROM trade_outcomes {uf_where}
             """))
             trade_row = trade_result.mappings().first()
 
@@ -89,8 +93,7 @@ class ScoreParityAnalyzer:
                                 AND trend_score IS NOT NULL
                                 AND micro_score IS NOT NULL THEN 1 END) as all_present
                 FROM signal_evaluations
-                WHERE action = 'ENTER'
-                   OR reason LIKE 'MICRO_BLOCK%'
+                WHERE (action = 'ENTER' OR reason LIKE 'MICRO_BLOCK%') {uf}
             """))
             signal_row = signal_result.mappings().first()
 
@@ -122,7 +125,7 @@ class ScoreParityAnalyzer:
                                 AND trend_score IS NOT NULL AND trend_score > 0
                                 AND micro_score IS NOT NULL AND micro_score > 0 THEN 1 END) as all_present
                 FROM trade_outcomes
-                WHERE entry_quality_label IS NOT NULL
+                WHERE entry_quality_label IS NOT NULL {uf}
             """))
             pd_trade_row = pd_trade_result.mappings().first()
 
@@ -139,18 +142,18 @@ class ScoreParityAnalyzer:
                                 AND micro_score IS NOT NULL THEN 1 END) as all_present
                 FROM signal_evaluations
                 WHERE entry_quality_label IS NOT NULL
-                  AND (action = 'ENTER' OR reason LIKE 'MICRO_BLOCK%')
+                  AND (action = 'ENTER' OR reason LIKE 'MICRO_BLOCK%') {uf}
             """))
             pd_signal_row = pd_signal_result.mappings().first()
 
             # ── Legacy counts ──
             legacy_trade_result = await session.execute(text("""
-                SELECT count(*) as total FROM trade_outcomes WHERE entry_quality_label IS NULL
+                SELECT count(*) as total FROM trade_outcomes WHERE entry_quality_label IS NULL {uf}
             """))
             legacy_trade_row = legacy_trade_result.mappings().first()
 
             legacy_signal_result = await session.execute(text("""
-                SELECT count(*) as total FROM signal_evaluations WHERE entry_quality_label IS NULL
+                SELECT count(*) as total FROM signal_evaluations WHERE entry_quality_label IS NULL {uf}
             """))
             legacy_signal_row = legacy_signal_result.mappings().first()
 

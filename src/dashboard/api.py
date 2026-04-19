@@ -52,8 +52,11 @@ def _require_user_id(request: Request) -> int:
 
 
 def _uid(request: Request) -> int:
-    """Get userId from request state (set by auth middleware). Falls back to 1."""
-    return getattr(request.state, "user_id", 1)
+    """Get userId from request state (set by auth middleware). Raises 401 if missing."""
+    uid = getattr(request.state, "user_id", None)
+    if uid is None:
+        raise HTTPException(401, "User not authenticated")
+    return uid
 
 
 def create_app(
@@ -276,20 +279,23 @@ def create_app(
     # ── Bot Live Data ──
 
     @app.get("/api/bot/trades")
-    async def get_bot_trades() -> list[dict]:
+    async def get_bot_trades(request: Request) -> list[dict]:
         if not session_factory:
             return []
+        uid = _uid(request)
         from sqlalchemy import text
         async with session_factory() as session:
             result = await session.execute(
-                text("SELECT * FROM trade_outcomes ORDER BY exit_time DESC LIMIT 100"))
+                text("SELECT * FROM trade_outcomes WHERE user_id = :uid ORDER BY exit_time DESC LIMIT 100"),
+                {"uid": uid})
             rows = result.mappings().all()
             return [dict(r) for r in rows]
 
     @app.get("/api/bot/trades/stats")
-    async def get_bot_trade_stats() -> dict:
+    async def get_bot_trade_stats(request: Request) -> dict:
         if not session_factory:
             return {}
+        uid = _uid(request)
         from sqlalchemy import text
         async with session_factory() as session:
             result = await session.execute(text("""
@@ -303,8 +309,8 @@ def create_app(
                     round(avg(case when net_pnl > 0 then net_pnl end)::numeric, 4) as avg_win,
                     round(avg(case when net_pnl <= 0 then net_pnl end)::numeric, 4) as avg_loss,
                     round(avg(hold_seconds)::numeric, 0) as avg_hold
-                FROM trade_outcomes
-            """))
+                FROM trade_outcomes WHERE user_id = :uid
+            """), {"uid": uid})
             row = result.mappings().first()
             if not row or row["total_trades"] == 0:
                 return {"total_trades": 0}
@@ -314,43 +320,47 @@ def create_app(
             return d
 
     @app.get("/api/bot/signals")
-    async def get_bot_signals() -> list[dict]:
+    async def get_bot_signals(request: Request) -> list[dict]:
         if not session_factory:
             return []
+        uid = _uid(request)
         from sqlalchemy import text
         async with session_factory() as session:
             result = await session.execute(
-                text("SELECT * FROM signal_evaluations ORDER BY timestamp DESC LIMIT 200"))
+                text("SELECT * FROM signal_evaluations WHERE user_id = :uid ORDER BY timestamp DESC LIMIT 200"),
+                {"uid": uid})
             rows = result.mappings().all()
             return [dict(r) for r in rows]
 
     @app.get("/api/bot/signals/stats")
-    async def get_bot_signal_stats() -> dict:
+    async def get_bot_signal_stats(request: Request) -> dict:
         if not session_factory:
             return {}
+        uid = _uid(request)
         from sqlalchemy import text
         async with session_factory() as session:
             result = await session.execute(text("""
                 SELECT action, count(*) as total,
                        round(avg(signal_score)::numeric, 4) as avg_score
-                FROM signal_evaluations
+                FROM signal_evaluations WHERE user_id = :uid
                 GROUP BY action ORDER BY total DESC
-            """))
+            """), {"uid": uid})
             rows = result.mappings().all()
             return {"actions": [dict(r) for r in rows]}
 
     @app.get("/api/bot/regimes")
-    async def get_bot_regimes() -> list[dict]:
+    async def get_bot_regimes(request: Request) -> list[dict]:
         if not session_factory:
             return []
+        uid = _uid(request)
         from sqlalchemy import text
         async with session_factory() as session:
             result = await session.execute(text("""
                 SELECT coin, regime, confidence, trend_strength, volatility_level, timestamp
                 FROM regime_labels
-                WHERE timestamp > now() - interval '1 hour'
+                WHERE user_id = :uid AND timestamp > now() - interval '1 hour'
                 ORDER BY timestamp DESC
-            """))
+            """), {"uid": uid})
             rows = result.mappings().all()
             return [dict(r) for r in rows]
 
@@ -462,15 +472,20 @@ def create_app(
             return analyzer.analyze(trades)
 
         @app.get("/api/quant/counterfactual")
-        async def quant_counterfactual(date_from: str | None = None) -> dict:
+        async def quant_counterfactual(request: Request, date_from: str | None = None) -> dict:
             """Counterfactual analysis: what-if at different score thresholds."""
+            uid = _uid(request)
             from sqlalchemy import text as sql_text
             from ..quant.datasets.trades_enriched import _coerce_date
             df = _coerce_date(date_from)
             signals = []
             async with session_factory() as s:
-                where = "WHERE timestamp >= :date_from" if df is not None else ""
-                params = {"date_from": df} if df is not None else {}
+                where_parts = ["user_id = :uid"]
+                params: dict = {"uid": uid}
+                if df is not None:
+                    where_parts.append("timestamp >= :date_from")
+                    params["date_from"] = df
+                where = "WHERE " + " AND ".join(where_parts)
                 result = await s.execute(sql_text(f"""
                     SELECT coin, side, signal_score, action, reason, mode,
                            score_min_applied, config_version
@@ -481,14 +496,15 @@ def create_app(
             return _counterfactual_analyzer.analyze(signals)
 
         @app.get("/api/quant/diagnostic")
-        async def quant_diagnostic(date_from: str | None = None) -> dict:
+        async def quant_diagnostic(request: Request, date_from: str | None = None) -> dict:
             """Diagnostic trace analysis: evaluate ALL filters pass rates."""
+            uid = _uid(request)
             from sqlalchemy import text as sql_text
             from ..quant.datasets.trades_enriched import _coerce_date
             df = _coerce_date(date_from)
             async with session_factory() as s:
-                where_parts = ["diagnostic_trace IS NOT NULL"]
-                params: dict = {}
+                where_parts = ["diagnostic_trace IS NOT NULL", "user_id = :uid"]
+                params: dict = {"uid": uid}
                 if df is not None:
                     where_parts.append("timestamp >= :d")
                     params["d"] = df
@@ -535,11 +551,12 @@ def create_app(
             }
 
         @app.get("/api/quant/rejections")
-        async def quant_rejections(date_from: str | None = None) -> dict:
+        async def quant_rejections(request: Request, date_from: str | None = None) -> dict:
             """Rejection breakdown from signal evaluations with decision_stage."""
+            uid = _uid(request)
             from sqlalchemy import text as sql_text
-            params: dict = {}
-            where_parts = ["action = 'BLOCKED'"]
+            params: dict = {"uid": uid}
+            where_parts = ["action = 'BLOCKED'", "user_id = :uid"]
             if date_from:
                 where_parts.append("timestamp >= :date_from")
                 params["date_from"] = date_from
@@ -558,11 +575,11 @@ def create_app(
                 by_reason = [dict(r) for r in result.mappings().all()]
 
                 # Totals by action
+                totals_where = "WHERE user_id = :uid" + (" AND timestamp >= :date_from" if date_from else "")
                 result2 = await s.execute(sql_text(f"""
                     SELECT action, count(*) as cnt,
                            round(avg(signal_score)::numeric, 2) as avg_score
-                    FROM signal_evaluations
-                    {"WHERE timestamp >= :date_from" if date_from else ""}
+                    FROM signal_evaluations {totals_where}
                     GROUP BY action
                 """), params)
                 totals = {r["action"]: dict(r) for r in result2.mappings().all()}
@@ -571,14 +588,13 @@ def create_app(
                 result3 = await s.execute(sql_text(f"""
                     SELECT decision_stage, count(*) as cnt,
                            round(avg(signal_score)::numeric, 2) as avg_score
-                    FROM signal_evaluations
-                    {"WHERE timestamp >= :date_from" if date_from else ""}
+                    FROM signal_evaluations {totals_where}
                     GROUP BY decision_stage
                 """), params)
                 by_stage = {(r["decision_stage"] or "LEGACY"): dict(r) for r in result3.mappings().all()}
 
                 # Near misses: PRE_CANDIDATE_REJECT where score was within 5 of threshold
-                nm_where_parts = ["decision_stage = 'PRE_CANDIDATE_REJECT'"]
+                nm_where_parts = ["decision_stage = 'PRE_CANDIDATE_REJECT'", "user_id = :uid"]
                 if date_from:
                     nm_where_parts.append("timestamp >= :date_from")
                 nm_where = "WHERE " + " AND ".join(nm_where_parts)
@@ -614,23 +630,24 @@ def create_app(
                 return {"deleted": deleted, "days": days}
 
         @app.get("/api/trades/snapshots/stats")
-        async def snapshots_stats() -> dict:
-            """How much disk are snapshots using."""
+        async def snapshots_stats(request: Request) -> dict:
+            """How much disk are snapshots using (per user)."""
+            uid = _uid(request)
             from sqlalchemy import text as sql_text
             async with session_factory() as session:
                 r = await session.execute(sql_text("""
                     SELECT count(*) as total,
                            min(timestamp) as oldest,
-                           max(timestamp) as newest,
-                           pg_size_pretty(pg_total_relation_size('trade_snapshots')) as disk_size
-                    FROM trade_snapshots
-                """))
+                           max(timestamp) as newest
+                    FROM trade_snapshots WHERE user_id = :uid
+                """), {"uid": uid})
                 row = r.mappings().first()
                 return dict(row) if row else {}
 
         @app.get("/api/trades")
-        async def list_trades(limit: int = 50, offset: int = 0) -> list[dict]:
-            """List all trades with verdict info, paginated."""
+        async def list_trades(request: Request, limit: int = 50, offset: int = 0) -> list[dict]:
+            """List trades with verdict info, paginated, per user."""
+            uid = _uid(request)
             from sqlalchemy import text as sql_text
             async with session_factory() as session:
                 result = await session.execute(sql_text("""
@@ -641,9 +658,10 @@ def create_app(
                            v.time_in_profit_pct AS verdict_time_in_profit
                     FROM trade_outcomes t
                     LEFT JOIN trade_verdicts v ON v.trade_outcome_id = t.id
+                    WHERE t.user_id = :uid
                     ORDER BY t.entry_time DESC
                     LIMIT :limit OFFSET :offset
-                """), {"limit": limit, "offset": offset})
+                """), {"uid": uid, "limit": limit, "offset": offset})
                 rows = result.mappings().all()
                 return [dict(r) for r in rows]
 
@@ -768,8 +786,8 @@ def create_app(
             return await _summary_builder.build(user_id=_uid(request))
 
         @app.get("/api/quant/score-parity")
-        async def score_parity() -> dict:
-            return await _score_parity_analyzer.analyze()
+        async def score_parity(request: Request) -> dict:
+            return await _score_parity_analyzer.analyze(user_id=_uid(request))
 
     # ── Operational Reports ──
     # ── Validation Runner ──
@@ -802,8 +820,8 @@ def create_app(
         reports = OperationalReports(session_factory)
 
         @app.get("/api/reports/full")
-        async def full_report() -> dict:
-            return await reports.full_report()
+        async def full_report(request: Request) -> dict:
+            return await reports.full_report(user_id=_uid(request))
 
         _ALLOWED_REPORTS = {
             "wr_by_coin", "wr_by_side", "wr_by_hour", "pnl_by_mode", "pnl_by_tag",
@@ -812,13 +830,13 @@ def create_app(
         }
 
         @app.get("/api/reports/{name}")
-        async def get_report(name: str) -> Any:
+        async def get_report(request: Request, name: str) -> Any:
             if name not in _ALLOWED_REPORTS:
                 raise HTTPException(404, f"Report '{name}' not found")
             method = getattr(reports, name, None)
             if not method:
                 raise HTTPException(404, f"Report '{name}' not found")
-            return await method()
+            return await method(user_id=_uid(request))
 
     # ── Audit System ──
     if audit_runner:
@@ -851,18 +869,18 @@ def create_app(
         daily_gen = DailyReportGenerator(session_factory)
 
         @app.get("/api/daily-report")
-        async def get_daily_report() -> dict:
-            return await daily_gen.generate()
+        async def get_daily_report(request: Request) -> dict:
+            return await daily_gen.generate(user_id=_uid(request))
 
         @app.get("/api/daily-report/{date_str}")
-        async def get_daily_report_date(date_str: str) -> dict:
+        async def get_daily_report_date(request: Request, date_str: str) -> dict:
             from datetime import date as d
             report_date = d.fromisoformat(date_str)
-            return await daily_gen.generate(report_date)
+            return await daily_gen.generate(report_date, user_id=_uid(request))
 
         @app.get("/api/daily-report/history/list")
-        async def daily_report_history() -> list[dict]:
-            return await daily_gen.get_history()
+        async def daily_report_history(request: Request) -> list[dict]:
+            return await daily_gen.get_history(user_id=_uid(request))
 
     # ── Change Markers ──
     if session_factory:
@@ -870,26 +888,26 @@ def create_app(
         _marker_service = MarkerService(session_factory)
 
         @app.get("/api/markers")
-        async def list_markers(limit: int = 50, days: int = 90) -> list[dict]:
+        async def list_markers(request: Request, limit: int = 50, days: int = 90) -> list[dict]:
             from fastapi.encoders import jsonable_encoder
-            return jsonable_encoder(await _marker_service.get_markers(limit=limit, days=days))
+            return jsonable_encoder(await _marker_service.get_markers(limit=limit, days=days, user_id=_uid(request)))
 
         @app.get("/api/markers/recent-impacts")
-        async def recent_impacts(limit: int = 10) -> list[dict]:
+        async def recent_impacts(request: Request, limit: int = 10) -> list[dict]:
             from fastapi.encoders import jsonable_encoder
-            return jsonable_encoder(await _marker_service.get_recent_with_impact(limit=limit))
+            return jsonable_encoder(await _marker_service.get_recent_with_impact(limit=limit, user_id=_uid(request)))
 
         @app.get("/api/markers/{marker_id}")
-        async def get_marker_detail(marker_id: int) -> dict:
+        async def get_marker_detail(request: Request, marker_id: int) -> dict:
             from fastapi.encoders import jsonable_encoder
-            m = await _marker_service.get_marker(marker_id)
+            m = await _marker_service.get_marker(marker_id, user_id=_uid(request))
             if not m:
                 raise HTTPException(404, "Marker not found")
             return jsonable_encoder(m)
 
         @app.post("/api/markers/{marker_id}/recalculate")
-        async def recalculate_marker(marker_id: int) -> dict:
-            return await _marker_service.calculate_impact(marker_id, force=True)
+        async def recalculate_marker(request: Request, marker_id: int) -> dict:
+            return await _marker_service.calculate_impact(marker_id, force=True, user_id=_uid(request))
 
         @app.post("/api/markers")
         async def create_marker_manual(payload: dict) -> dict:

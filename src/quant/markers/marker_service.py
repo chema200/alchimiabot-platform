@@ -55,35 +55,35 @@ class MarkerService:
             )
             return marker_id
 
-    async def get_markers(self, limit: int = 50, days: int = 90) -> list[dict]:
+    async def get_markers(self, limit: int = 50, days: int = 90, user_id: int | None = None) -> list[dict]:
         """Get markers, optionally filtered by recent days."""
         async with self._sf() as session:
             cutoff = datetime.now(timezone.utc) - timedelta(days=days)
             result = await session.execute(text("""
                 SELECT * FROM change_markers
-                WHERE timestamp >= :cutoff
+                WHERE timestamp >= :cutoff AND (user_id = :uid OR :uid IS NULL)
                 ORDER BY timestamp DESC
                 LIMIT :limit
-            """), {"cutoff": cutoff, "limit": limit})
+            """), {"cutoff": cutoff, "limit": limit, "uid": user_id})
             return [dict(r._mapping) for r in result]
 
-    async def get_marker(self, marker_id: int) -> Optional[dict]:
+    async def get_marker(self, marker_id: int, user_id: int | None = None) -> Optional[dict]:
         async with self._sf() as session:
             r = await session.execute(
-                text("SELECT * FROM change_markers WHERE id = :id"),
-                {"id": marker_id},
+                text("SELECT * FROM change_markers WHERE id = :id AND (user_id = :uid OR :uid IS NULL)"),
+                {"id": marker_id, "uid": user_id},
             )
             row = r.mappings().first()
             return dict(row) if row else None
 
-    async def calculate_impact(self, marker_id: int, force: bool = False) -> dict:
+    async def calculate_impact(self, marker_id: int, force: bool = False, user_id: int | None = None) -> dict:
         """Calculate before/after impact for a marker.
 
         Window: 20 trades before / 20 trades after.
         Fallback: 6 hours before / 6 hours after if not enough trades.
         Filter by context: if marker has coin/side/mode, only those trades.
         """
-        marker = await self.get_marker(marker_id)
+        marker = await self.get_marker(marker_id, user_id=user_id)
         if not marker:
             return {"error": "Marker not found"}
 
@@ -216,9 +216,9 @@ class MarkerService:
 
             return {"status": status, "impact": impact_data}
 
-    async def get_recent_with_impact(self, limit: int = 10) -> list[dict]:
+    async def get_recent_with_impact(self, limit: int = 10, user_id: int | None = None) -> list[dict]:
         """Get recent markers with their impact pre-calculated (or calculate on-demand)."""
-        markers = await self.get_markers(limit=limit, days=30)
+        markers = await self.get_markers(limit=limit, days=30, user_id=user_id)
         result = []
         for m in markers:
             # If no impact yet and marker is older than 30min, try to calculate
@@ -229,7 +229,7 @@ class MarkerService:
                         ts = ts.replace(tzinfo=timezone.utc)
                     age = (datetime.now(timezone.utc) - ts).total_seconds()
                     if age > 1800:  # 30 min
-                        impact = await self.calculate_impact(m["id"])
+                        impact = await self.calculate_impact(m["id"], user_id=user_id)
                         m["impact_status"] = impact.get("status")
                         m["impact_data"] = impact.get("impact")
             result.append(m)
