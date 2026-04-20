@@ -72,7 +72,7 @@ class DailyReportGenerator:
 
         # From platform DB
         async with self._sf() as s:
-            r = await s.execute(text("""
+            r = await s.execute(text(f"""
                 SELECT count(*) as trades,
                        coalesce(sum(gross_pnl), 0) as gross,
                        coalesce(sum(fee), 0) as fees,
@@ -90,7 +90,7 @@ class DailyReportGenerator:
                 result["mode"] = row["mode"] or "?"
 
             # Total trades (all modes)
-            r2 = await s.execute(text("""
+            r2 = await s.execute(text(f"""
                 SELECT count(*) as total,
                        coalesce(sum(gross_pnl), 0) as gross,
                        coalesce(sum(fee), 0) as fees,
@@ -157,7 +157,7 @@ class DailyReportGenerator:
                 {"s": start, "e": end})
             result["signals_received"] = r.scalar() or 0
 
-            r = await s.execute(text("""
+            r = await s.execute(text(f"""
                 SELECT count(*) FROM (
                     SELECT coin, exit_time FROM trade_outcomes WHERE (user_id = :uid OR :uid IS NULL) AND exit_time >= :s AND exit_time < :e
                     GROUP BY coin, exit_time HAVING count(*) > 1
@@ -196,7 +196,7 @@ class DailyReportGenerator:
                   "expectancy": 0, "avg_win": 0, "avg_loss": 0, "issues": []}
 
         async with self._sf() as s:
-            r = await s.execute(text("""
+            r = await s.execute(text(f"""
                 SELECT
                     count(*) as total,
                     sum(case when net_pnl > 0 then 1 else 0 end) as wins,
@@ -234,7 +234,7 @@ class DailyReportGenerator:
         result = {"enter": 0, "skip": 0, "blocked": 0, "issues": []}
 
         async with self._sf() as s:
-            r = await s.execute(text("""
+            r = await s.execute(text(f"""
                 SELECT action, count(*) as cnt
                 FROM signal_evaluations WHERE (user_id = :uid OR :uid IS NULL) AND timestamp >= :s AND timestamp < :e
                 GROUP BY action
@@ -277,7 +277,7 @@ class DailyReportGenerator:
         result = {"dominant_regime": "?", "regime_changes": 0, "issues": []}
 
         async with self._sf() as s:
-            r = await s.execute(text("""
+            r = await s.execute(text(f"""
                 SELECT regime, count(*) as cnt
                 FROM regime_labels
                 WHERE timestamp > now() - interval '24 hours'
@@ -323,7 +323,7 @@ class DailyReportGenerator:
 
         async with self._sf() as s:
             # Best/worst coins
-            r = await s.execute(text("""
+            r = await s.execute(text(f"""
                 SELECT coin, count(*) as trades,
                     round(sum(net_pnl)::numeric, 4) as pnl,
                     round(sum(case when net_pnl > 0 then 1.0 else 0 end) / count(*)::numeric * 100, 0) as wr
@@ -335,7 +335,7 @@ class DailyReportGenerator:
             result["worst_coins"] = rows[-5:] if len(rows) > 5 else []
 
             # Best/worst hours
-            r = await s.execute(text("""
+            r = await s.execute(text(f"""
                 SELECT extract(hour from entry_time)::int as hour,
                     count(*) as trades,
                     round(sum(net_pnl)::numeric, 4) as pnl
@@ -347,7 +347,7 @@ class DailyReportGenerator:
             result["worst_hours"] = hours[-3:] if len(hours) > 3 else []
 
             # By exit reason
-            r = await s.execute(text("""
+            r = await s.execute(text(f"""
                 SELECT exit_reason, count(*) as trades,
                     round(sum(net_pnl)::numeric, 4) as pnl
                 FROM trade_outcomes WHERE (user_id = :uid OR :uid IS NULL) AND exit_time >= :s AND exit_time < :e
@@ -408,7 +408,7 @@ class DailyReportGenerator:
         """Save report to DB."""
         try:
             async with self._sf() as s:
-                await s.execute(text("""
+                await s.execute(text(f"""
                     INSERT INTO audit_runs (audit_type, status, score, started_at, finished_at, summary, details, metrics)
                     VALUES ('daily_report', :status, :score, :started, now(), :summary, :details, :metrics)
                 """), {
@@ -426,7 +426,7 @@ class DailyReportGenerator:
     async def get_history(self, days: int = 14, user_id: int | None = None) -> list[dict]:
         """Get recent daily reports."""
         async with self._sf() as s:
-            r = await s.execute(text("""
+            r = await s.execute(text(f"""
                 SELECT started_at, score, status, summary, details
                 FROM audit_runs
                 WHERE audit_type = 'daily_report'

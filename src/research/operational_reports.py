@@ -22,7 +22,7 @@ class OperationalReports:
     async def wr_by_coin(self, user_id: int | None = None) -> list[dict]:
         uf_where = f"WHERE user_id = {user_id}" if user_id else ""
         async with self._sf() as s:
-            r = await s.execute(text("""
+            r = await s.execute(text(f"""
                 SELECT coin, count(*) as trades,
                     sum(case when net_pnl > 0 then 1 else 0 end) as wins,
                     round(sum(case when net_pnl > 0 then 1.0 else 0 end) / count(*)::numeric * 100, 1) as wr,
@@ -36,7 +36,7 @@ class OperationalReports:
     async def wr_by_side(self, user_id: int | None = None) -> list[dict]:
         uf_where = f"WHERE user_id = {user_id}" if user_id else ""
         async with self._sf() as s:
-            r = await s.execute(text("""
+            r = await s.execute(text(f"""
                 SELECT side, count(*) as trades,
                     sum(case when net_pnl > 0 then 1 else 0 end) as wins,
                     round(sum(case when net_pnl > 0 then 1.0 else 0 end) / count(*)::numeric * 100, 1) as wr,
@@ -49,7 +49,7 @@ class OperationalReports:
     async def wr_by_hour(self, user_id: int | None = None) -> list[dict]:
         uf_where = f"WHERE user_id = {user_id}" if user_id else ""
         async with self._sf() as s:
-            r = await s.execute(text("""
+            r = await s.execute(text(f"""
                 SELECT extract(hour from entry_time) as hour,
                     count(*) as trades,
                     sum(case when net_pnl > 0 then 1 else 0 end) as wins,
@@ -62,7 +62,7 @@ class OperationalReports:
     async def pnl_by_mode(self, user_id: int | None = None) -> list[dict]:
         uf_where = f"WHERE user_id = {user_id}" if user_id else ""
         async with self._sf() as s:
-            r = await s.execute(text("""
+            r = await s.execute(text(f"""
                 SELECT mode, count(*) as trades,
                     sum(case when net_pnl > 0 then 1 else 0 end) as wins,
                     round(sum(case when net_pnl > 0 then 1.0 else 0 end) / count(*)::numeric * 100, 1) as wr,
@@ -78,7 +78,7 @@ class OperationalReports:
     async def pnl_by_tag(self, user_id: int | None = None) -> list[dict]:
         uf_where = f"WHERE user_id = {user_id}" if user_id else ""
         async with self._sf() as s:
-            r = await s.execute(text("""
+            r = await s.execute(text(f"""
                 SELECT entry_tag, count(*) as trades,
                     sum(case when net_pnl > 0 then 1 else 0 end) as wins,
                     round(sum(case when net_pnl > 0 then 1.0 else 0 end) / count(*)::numeric * 100, 1) as wr,
@@ -92,7 +92,7 @@ class OperationalReports:
     async def pnl_by_exit_reason(self, user_id: int | None = None) -> list[dict]:
         uf_where = f"WHERE user_id = {user_id}" if user_id else ""
         async with self._sf() as s:
-            r = await s.execute(text("""
+            r = await s.execute(text(f"""
                 SELECT exit_reason, count(*) as trades,
                     sum(case when net_pnl > 0 then 1 else 0 end) as wins,
                     round(sum(net_pnl)::numeric, 4) as total_pnl,
@@ -106,7 +106,7 @@ class OperationalReports:
     async def fee_analysis(self, user_id: int | None = None) -> list[dict]:
         uf_where = f"WHERE user_id = {user_id}" if user_id else ""
         async with self._sf() as s:
-            r = await s.execute(text("""
+            r = await s.execute(text(f"""
                 SELECT coin, count(*) as trades,
                     round(sum(fee)::numeric, 4) as total_fees,
                     round(sum(gross_pnl)::numeric, 4) as total_gross,
@@ -120,7 +120,7 @@ class OperationalReports:
         """Coins with worst performance — candidates for blocking."""
         uf_where = f"WHERE user_id = {user_id}" if user_id else ""
         async with self._sf() as s:
-            r = await s.execute(text("""
+            r = await s.execute(text(f"""
                 SELECT coin, side, count(*) as trades,
                     round(sum(net_pnl)::numeric, 4) as total_pnl,
                     round(avg(net_pnl)::numeric, 4) as avg_pnl,
@@ -136,7 +136,7 @@ class OperationalReports:
         """Coins with best performance — candidates for more allocation."""
         uf_where = f"WHERE user_id = {user_id}" if user_id else ""
         async with self._sf() as s:
-            r = await s.execute(text("""
+            r = await s.execute(text(f"""
                 SELECT coin, side, count(*) as trades,
                     round(sum(net_pnl)::numeric, 4) as total_pnl,
                     round(avg(net_pnl)::numeric, 4) as avg_pnl,
@@ -151,7 +151,7 @@ class OperationalReports:
     async def signal_blocked_vs_entered(self, user_id: int | None = None) -> list[dict]:
         uf_where = f"WHERE user_id = {user_id}" if user_id else ""
         async with self._sf() as s:
-            r = await s.execute(text("""
+            r = await s.execute(text(f"""
                 SELECT action, count(*) as total,
                     round(avg(signal_score)::numeric, 4) as avg_score,
                     round(avg(trend_score)::numeric, 4) as avg_trend,
@@ -164,7 +164,7 @@ class OperationalReports:
     async def daily_summary(self, user_id: int | None = None) -> list[dict]:
         uf_where = f"WHERE user_id = {user_id}" if user_id else ""
         async with self._sf() as s:
-            r = await s.execute(text("""
+            r = await s.execute(text(f"""
                 SELECT date(entry_time) as day,
                     count(*) as trades,
                     sum(case when net_pnl > 0 then 1 else 0 end) as wins,

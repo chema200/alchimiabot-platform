@@ -40,7 +40,7 @@ class ScoreParityAnalyzer:
 
         async with self._sf() as session:
             # ── Global trade outcomes score coverage (all rows) ──
-            trade_result = await session.execute(text("""
+            trade_result = await session.execute(text(f"""
                 SELECT
                     count(*) as total,
                     count(CASE WHEN signal_score IS NOT NULL AND signal_score > 0 THEN 1 END) as has_signal_score,
@@ -80,7 +80,7 @@ class ScoreParityAnalyzer:
             # decision_stage: ENTER or BLOCKED_POST_CANDIDATE = micro was evaluated.
             # micro_score = 0 is a legitimate value (when all micro checks fail hard).
             # We only flag as "missing" when NULL, not when 0. Same for signal/trend.
-            signal_result = await session.execute(text("""
+            signal_result = await session.execute(text(f"""
                 SELECT
                     count(*) as total,
                     count(CASE WHEN signal_score IS NOT NULL THEN 1 END) as has_signal_score,
@@ -114,7 +114,7 @@ class ScoreParityAnalyzer:
                 }
 
             # ── Post-diagnostics trades (entry_quality_label IS NOT NULL) ──
-            pd_trade_result = await session.execute(text("""
+            pd_trade_result = await session.execute(text(f"""
                 SELECT
                     count(*) as total,
                     count(CASE WHEN signal_score IS NOT NULL AND signal_score > 0 THEN 1 END) as has_signal_score,
@@ -131,7 +131,7 @@ class ScoreParityAnalyzer:
 
             # ── Post-diagnostics signals ──
             # micro_score = 0 is legitimate (all hard-fail); use IS NOT NULL for truthiness.
-            pd_signal_result = await session.execute(text("""
+            pd_signal_result = await session.execute(text(f"""
                 SELECT
                     count(*) as total,
                     count(CASE WHEN signal_score IS NOT NULL THEN 1 END) as has_signal_score,
@@ -147,12 +147,12 @@ class ScoreParityAnalyzer:
             pd_signal_row = pd_signal_result.mappings().first()
 
             # ── Legacy counts ──
-            legacy_trade_result = await session.execute(text("""
+            legacy_trade_result = await session.execute(text(f"""
                 SELECT count(*) as total FROM trade_outcomes WHERE entry_quality_label IS NULL {uf}
             """))
             legacy_trade_row = legacy_trade_result.mappings().first()
 
-            legacy_signal_result = await session.execute(text("""
+            legacy_signal_result = await session.execute(text(f"""
                 SELECT count(*) as total FROM signal_evaluations WHERE entry_quality_label IS NULL {uf}
             """))
             legacy_signal_row = legacy_signal_result.mappings().first()
