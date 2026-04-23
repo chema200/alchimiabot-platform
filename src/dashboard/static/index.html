@@ -23,40 +23,43 @@
    ═══════════════════════════════════════════════════════════════════════ */
 
 :root {
-  /* Surfaces — graphite, deeper & cooler than before */
-  --bg-base:        #05080c;
-  --bg-page:        #070a10;
-  --bg-surface:     #0b1018;
-  --bg-elevated:    #10161f;
-  --bg-glass:       rgba(13, 19, 28, 0.58);
-  --bg-glass-hi:    rgba(15, 22, 32, 0.80);
+  /* Surfaces — Navy tinted dark (like the Light Blue admin template).
+     Darker than midnight blue, warmer than pure black. */
+  --bg-base:        #131a2d;
+  --bg-page:        #161d33;
+  --bg-surface:     #1c253f;
+  --bg-elevated:    #222c4a;
+  --bg-sidebar:     #101627;
+  --bg-glass:       rgba(28, 37, 63, 0.85);
+  --bg-glass-hi:    rgba(34, 44, 74, 0.92);
 
-  /* Borders — cooler, more subtle */
-  --border-subtle:  rgba(200, 220, 240, 0.045);
-  --border-default: rgba(200, 220, 240, 0.085);
-  --border-hi:      rgba(200, 220, 240, 0.16);
+  /* Borders — visible but soft */
+  --border-subtle:  rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.10);
+  --border-hi:      rgba(255, 255, 255, 0.16);
 
   /* Text */
-  --text:           #eaf2fb;
-  --text-dim:       rgba(234, 242, 251, 0.66);
-  --text-muted:     rgba(234, 242, 251, 0.42);
-  --text-soft:      rgba(234, 242, 251, 0.22);
+  --text:           #f1f5ff;
+  --text-dim:       rgba(241, 245, 255, 0.70);
+  --text-muted:     rgba(241, 245, 255, 0.48);
+  --text-soft:      rgba(241, 245, 255, 0.28);
 
-  /* Accents — CYAN primary (was blue), TEAL+GOLD secondaries (replace purple) */
-  --accent:         #00d4ff;       /* vivid cyan — new primary */
-  --accent-hi:      #5ee6ff;
-  --accent-cyan:    #00d4ff;
-  --accent-teal:    #2dd4bf;
-  --accent-violet:  #a78bfa;
-  --accent-mint:    #6ee7b7;
-  --accent-gold:    #facc15;
-  --accent-soft:    rgba(0, 212, 255, 0.12);
+  /* Accents — SOFT BLUE primary + pastel greens/oranges.
+     Classic admin dashboard palette. */
+  --accent:         #6b8be9;        /* soft blue primary */
+  --accent-hi:      #8ea6f1;
+  --accent-soft:    rgba(107, 139, 233, 0.16);
+  --accent-cyan:    #4fc3f7;
+  --accent-teal:    #4db6ac;
+  --accent-violet:  #9575cd;
+  --accent-mint:    #66bb6a;
+  --accent-gold:    #ffca28;
 
-  /* Semantic */
-  --success:        #34d399;
-  --warning:        #fbbf24;
-  --danger:         #f87171;
-  --gold:           #facc15;
+  /* Semantic — pastel, used as dots and small accents */
+  --success:        #66bb6a;
+  --warning:        #ffa726;
+  --danger:         #ef5350;
+  --gold:           #ffca28;
 
   /* Radii */
   --r-sm: 8px;
@@ -99,27 +102,11 @@ body {
   max-width: 100vw;
 }
 
-/* Ambient: graphite with cyan/teal spill + faint grid — cockpit vibe */
-body::before {
-  content: '';
-  position: fixed; inset: 0;
+/* Navy ambient — very soft blue spill from the top, subtle warmth */
+body {
   background:
-    radial-gradient(ellipse 1000px 600px at 80% -10%, rgba(0,212,255,0.09), transparent 60%),
-    radial-gradient(ellipse 800px 500px at 0% 110%, rgba(45,212,191,0.07), transparent 60%),
-    linear-gradient(180deg, var(--bg-base) 0%, var(--bg-page) 100%);
-  pointer-events: none; z-index: 0;
-}
-/* Subtle grid overlay — evokes HUD / trading cockpit */
-body::after {
-  content: '';
-  position: fixed; inset: 0;
-  background-image:
-    linear-gradient(rgba(0,212,255,0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0,212,255,0.025) 1px, transparent 1px);
-  background-size: 48px 48px;
-  mask-image: radial-gradient(ellipse 60% 60% at 50% 50%, black, transparent 90%);
-  -webkit-mask-image: radial-gradient(ellipse 60% 60% at 50% 50%, black, transparent 90%);
-  pointer-events: none; z-index: 0; opacity: 0.55;
+    radial-gradient(ellipse 1200px 600px at 50% -20%, rgba(107,139,233,0.08), transparent 60%),
+    var(--bg-base);
 }
 
 /* ── App shell ──────────────────────────────────────────────────── */
@@ -130,18 +117,10 @@ body::after {
 
 .sidebar {
   width: 220px;
-  background: linear-gradient(180deg, rgba(8,12,18,0.94) 0%, rgba(5,8,12,0.98) 100%);
+  background: var(--bg-sidebar);
   border-right: 1px solid var(--border-subtle);
   position: fixed; top: 0; left: 0; bottom: 0;
   overflow-y: auto; z-index: 40;
-  backdrop-filter: blur(30px) saturate(1.3);
-  -webkit-backdrop-filter: blur(30px) saturate(1.3);
-}
-/* cyan edge-glow stripe */
-.sidebar::after {
-  content: ''; position: absolute; top: 0; right: 0; bottom: 0; width: 1px;
-  background: linear-gradient(180deg, transparent 5%, rgba(0,212,255,0.30) 35%, rgba(45,212,191,0.20) 65%, transparent 95%);
-  pointer-events: none;
 }
 .sidebar-header {
   padding: 20px 18px;
@@ -150,82 +129,82 @@ body::after {
   position: relative;
 }
 .sidebar-header .logo {
-  width: 28px; height: 28px; border-radius: 6px;
-  background: var(--accent);
+  width: 32px; height: 32px; border-radius: 8px;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-violet) 100%);
   display: flex; align-items: center; justify-content: center;
-  color: #04080c; font-weight: 800; font-size: 11px; flex-shrink: 0;
+  color: white; font-weight: 700; font-size: 12px; flex-shrink: 0;
   letter-spacing: -0.3px;
-  box-shadow: 0 0 0 1px rgba(0,212,255,0.25);
+  box-shadow: 0 4px 12px rgba(107,139,233,0.25);
 }
 .sidebar-header h1 {
-  font-size: 13px; font-weight: 600; letter-spacing: -0.1px; color: var(--text);
+  font-size: 14px; font-weight: 600; letter-spacing: -0.1px; color: var(--text);
 }
-.sidebar-header .sub { font-size: 8.5px; color: var(--accent-cyan); letter-spacing: 1.4px; text-transform: uppercase; font-weight: 600; margin-top: 2px; opacity: 0.75; font-family: var(--font-mono); }
+.sidebar-header .sub { font-size: 10px; color: var(--text-muted); letter-spacing: 0.6px; font-weight: 500; margin-top: 2px; font-family: var(--font-sans); }
 .sidebar-group { padding: 18px 0 4px; }
 .sidebar-group-label {
-  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.8px;
-  padding: 0 24px 10px; color: var(--text-soft);
+  font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.2px;
+  padding: 14px 22px 8px; color: var(--text-soft);
 }
 .sidebar-item {
-  display: flex; align-items: center; gap: 12px; padding: 10px 24px;
-  font-size: 12.5px; color: var(--text-dim); cursor: pointer;
-  transition: color 0.2s var(--ease), background 0.2s var(--ease);
-  border-left: 2px solid transparent;
-  margin: 2px 0;
+  display: flex; align-items: center; gap: 11px; padding: 9px 22px;
+  font-size: 13px; color: var(--text-dim); cursor: pointer;
+  transition: color 0.15s var(--ease), background 0.15s var(--ease);
+  margin: 1px 8px; border-radius: 6px;
   position: relative;
   font-weight: 500;
 }
-.sidebar-item:hover { color: var(--text); background: rgba(0,212,255,0.03); }
+.sidebar-item:hover { color: var(--text); background: rgba(255,255,255,0.04); }
 .sidebar-item.active {
-  color: var(--accent-hi);
-  background: linear-gradient(90deg, rgba(0,212,255,0.14) 0%, rgba(0,212,255,0.02) 70%, transparent 100%);
-  font-weight: 700;
+  color: var(--text);
+  background: var(--accent-soft);
+  font-weight: 600;
 }
-.sidebar-item.active::before {
-  content: ''; position: absolute; left: 0; top: 6px; bottom: 6px; width: 3px;
-  background: linear-gradient(180deg, var(--accent), var(--accent-teal));
-  border-radius: 0 2px 2px 0;
-  box-shadow: 0 0 12px var(--accent);
+.sidebar-item.active::after {
+  content: ''; position: absolute; right: 10px; top: 50%;
+  transform: translateY(-50%);
+  width: 4px; height: 4px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
 }
 .sidebar-item.active-gold {
   color: var(--gold);
-  background: linear-gradient(90deg, rgba(250,204,21,0.14) 0%, rgba(250,204,21,0.02) 70%, transparent 100%);
-  font-weight: 700;
+  background: rgba(255,202,40,0.10);
+  font-weight: 600;
 }
-.sidebar-item.active-gold::before {
-  content: ''; position: absolute; left: 0; top: 6px; bottom: 6px; width: 3px;
-  background: linear-gradient(180deg, var(--gold), #f59e0b);
-  border-radius: 0 2px 2px 0;
-  box-shadow: 0 0 12px var(--gold);
+.sidebar-item.active-gold::after {
+  content: ''; position: absolute; right: 10px; top: 50%;
+  transform: translateY(-50%);
+  width: 4px; height: 4px; border-radius: 50%;
+  background: var(--gold);
 }
 
 /* ── Main area / topbar ─────────────────────────────────────────── */
 
 .main-content { margin-left: 232px; flex: 1; min-width: 0; max-width: calc(100vw - 232px); overflow-x: hidden; }
 .topbar {
-  height: 48px;
+  height: 56px;
   background: var(--bg-page);
   border-bottom: 1px solid var(--border-subtle);
   display: flex; align-items: center; justify-content: flex-end;
-  padding: 0 24px;
+  padding: 0 28px;
   position: sticky; top: 0; z-index: 30;
 }
 .topbar-user { display: flex; align-items: center; gap: 14px; font-size: 12px; color: var(--text-dim); }
 .topbar-user .avatar {
-  width: 26px; height: 26px; border-radius: 4px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-default);
+  width: 32px; height: 32px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-violet) 100%);
   display: flex; align-items: center; justify-content: center;
-  color: var(--accent); font-weight: 700; font-size: 11px;
-  font-family: var(--font-mono);
+  color: white; font-weight: 600; font-size: 12px;
+  font-family: var(--font-sans);
+  box-shadow: 0 2px 6px rgba(107,139,233,0.25);
 }
 .topbar-user .logout-btn {
-  font-size: 11px; color: var(--text-muted); cursor: pointer;
-  padding: 5px 12px; border-radius: 4px;
+  font-size: 12px; color: var(--text-dim); cursor: pointer;
+  padding: 6px 14px; border-radius: 6px;
   border: 1px solid var(--border-subtle);
   background: transparent;
   transition: all 0.15s var(--ease);
-  font-family: var(--font-mono); letter-spacing: 0.5px; text-transform: uppercase;
+  font-family: var(--font-sans); font-weight: 500;
 }
 .topbar-user .logout-btn:hover {
   color: var(--danger); border-color: rgba(239,68,68,0.4);
@@ -234,54 +213,60 @@ body::after {
 
 .content-area { padding: 28px 32px; animation: fadeIn 0.35s var(--ease-out); min-width: 0; max-width: 100%; overflow-x: hidden; }
 
-/* ── Cards — FLAT solid surfaces. No glass, no specular highlight.
-   Inspired by Linear/Radix: surface + hairline + accent on hover only. ── */
+/* ── Cards — admin dashboard style (Light Blue-ish)
+   Navy surface + thin border + small shadow. Not glass, not flat.
+   Clear separation between cards with visible-but-soft frames. ── */
 
 .card {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  padding: 16px 18px;
-  transition: border-color 0.18s var(--ease), background 0.18s var(--ease);
+  border-radius: 12px;
+  padding: 20px 22px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  transition: box-shadow 0.15s var(--ease), border-color 0.15s var(--ease), transform 0.15s var(--ease);
   position: relative;
   max-width: 100%;
 }
 .card:hover {
-  border-color: rgba(0,212,255,0.22);
-  background: var(--bg-elevated);
+  border-color: var(--border-default);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
 }
-/* When JSX supplies an inline borderColor (Conclusions / Validation
-   decorate cards with semantic color: red=bad, green=good, yellow=warn),
-   convert the full-rectangle colored frame into a thin TOP accent bar.
-   Rule: inline borderColor sets all 4 sides — we force the 3 non-top
-   sides back to the neutral hairline, so only the top keeps the inline
-   color at 2px. Looks like a cockpit status strip instead of a pastel
-   Bootstrap box. */
+
+/* KILL all inline colored borders → show a small color dot top-right
+   instead. Rectangle chrome goes away entirely. */
 .card[style*="borderColor"] {
-  border-width: 2px 1px 1px 1px !important;
-  border-left-color:   var(--border-subtle) !important;
-  border-right-color:  var(--border-subtle) !important;
-  border-bottom-color: var(--border-subtle) !important;
+  border-color: var(--border-subtle) !important;
   background: var(--bg-surface) !important;
-  border-radius: 6px !important;
+  border-radius: 12px !important;
+  padding: 20px 22px !important;
 }
+.card[style*="borderColor"]::before {
+  content: ''; position: absolute; top: 14px; right: 14px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 10px currentColor;
+}
+
 .card .label {
-  font-size: 10px; color: var(--text-muted); text-transform: uppercase;
-  letter-spacing: 1.2px; margin-bottom: 10px; font-weight: 600;
-  font-family: var(--font-mono);
+  font-size: 11px; color: var(--text-muted);
+  letter-spacing: 0.4px; margin-bottom: 10px; font-weight: 500;
+  text-transform: uppercase;
+  font-family: var(--font-sans);
 }
 .card .value {
-  font-size: 22px; font-weight: 600; font-family: var(--font-mono);
-  letter-spacing: -0.3px; line-height: 1; font-variant-numeric: tabular-nums;
+  font-size: 26px; font-weight: 600; font-family: var(--font-sans);
+  letter-spacing: -0.4px; line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
 }
-.card .sub { font-size: 11px; color: var(--text-soft); margin-top: 8px; font-family: var(--font-sans); }
+.card .sub { font-size: 12px; color: var(--text-muted); margin-top: 6px; font-family: var(--font-sans); }
 
 /* ── Grid ───────────────────────────────────────────────────────── */
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 16px; margin-bottom: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px; margin-bottom: 24px;
 }
 
 /* ── Color utilities + KPI glow ─────────────────────────────────── */
@@ -301,22 +286,28 @@ body::after {
 .value.purple { text-shadow: 0 0 22px rgba(168,85,247,0.22); }
 .value.blue   { text-shadow: 0 0 22px rgba(59,130,246,0.22); }
 
-/* ── Tables — more air, subtler separators ─────────────────────── */
+/* ── Tables — dashboard flat, thin dividers, subtle hover ── */
 
-table { width: 100%; border-collapse: collapse; font-size: 11.5px; table-layout: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: auto; }
 th {
-  text-align: left; padding: 10px 12px;
-  color: var(--text-muted); border-bottom: 1px solid var(--border-subtle);
-  font-weight: 600; font-size: 10px; text-transform: uppercase;
-  letter-spacing: 0.7px;
+  text-align: left; padding: 10px 14px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-subtle);
+  font-weight: 500; font-size: 11px;
+  letter-spacing: 0.1px; text-transform: none;
+  font-family: var(--font-sans);
 }
 td {
-  padding: 11px 12px; border-bottom: 1px solid rgba(255,255,255,0.035);
-  font-family: var(--font-mono); font-size: 11.5px; vertical-align: top;
-  word-break: break-word; overflow-wrap: anywhere; white-space: normal;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  font-family: var(--font-sans); font-size: 12.5px; vertical-align: middle;
+  word-break: normal; overflow-wrap: normal; white-space: normal;
+  color: var(--text);
 }
+/* Numeric columns keep monospace + tabular for alignment */
+td:where([align="right"], .num), td.num, th.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
 tbody tr { transition: background 0.15s var(--ease); }
-tbody tr:hover { background: rgba(59,130,246,0.045); }
+tbody tr:hover { background: rgba(255,255,255,0.03); }
 tbody tr:last-child td { border-bottom: none; }
 
 /* ── Tags / pills — flat, colored text only, no colored backgrounds ── */
@@ -352,21 +343,18 @@ tbody tr:last-child td { border-bottom: none; }
   display: flex; align-items: center; gap: 8px;
 }
 .page-title {
-  font-size: 18px; font-weight: 600; margin-bottom: 20px; padding-bottom: 14px;
-  border-bottom: 1px solid var(--border-subtle);
-  letter-spacing: -0.2px;
+  font-size: 24px; font-weight: 600; margin-bottom: 6px; padding-bottom: 0;
+  border-bottom: none;
+  letter-spacing: -0.4px;
   color: var(--text);
 }
-.page-title::before {
-  /* small cyan accent dash before title — cockpit indicator style */
-  content: ''; display: inline-block; width: 4px; height: 14px; background: var(--accent);
-  vertical-align: middle; margin-right: 10px; margin-top: -3px; border-radius: 1px;
-}
 .page-title .page-sub {
-  font-size: 12px; color: var(--text-dim); font-weight: 400;
-  margin-top: 6px; letter-spacing: 0; line-height: 1.5;
+  font-size: 13.5px; color: var(--text-muted); font-weight: 400;
+  margin-top: 2px; letter-spacing: 0; line-height: 1.5;
+  display: block;
 }
-.page-title .page-sub::before { content: none; }
+/* Breathe under the title */
+.page-title + * { margin-top: 24px; }
 
 /* ── Utils ─────────────────────────────────────────────────────── */
 
@@ -383,22 +371,22 @@ tbody tr:last-child td { border-bottom: none; }
 
 /* ── Tabs / buttons (inside content) ───────────────────────────── */
 
-/* Tabs: underline indicator, no pills, no background tint */
+/* Tabs: soft pills (Vercel/Stripe), 1px hairline on hover, filled on active */
 .tab {
-  padding: 8px 2px; margin-right: 20px; font-size: 12px; font-weight: 500;
-  cursor: pointer; border: none; background: transparent; color: var(--text-muted);
-  transition: color 0.15s var(--ease); display: inline-flex; align-items: center; gap: 6px;
-  font-family: var(--font-sans);
-  position: relative; border-bottom: 2px solid transparent;
+  padding: 7px 14px; font-size: 12.5px; font-weight: 500;
+  cursor: pointer; border: 1px solid transparent;
+  background: transparent; color: var(--text-muted);
+  transition: all 0.15s var(--ease); display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-sans); border-radius: 8px; margin-right: 4px;
 }
-.tab:hover { color: var(--text); }
+.tab:hover { color: var(--text); background: rgba(255,255,255,0.03); }
 .tab.active {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
+  color: var(--text); background: rgba(255,255,255,0.06);
+  border-color: var(--border-subtle);
 }
 .tab.active-gold {
-  color: var(--gold);
-  border-bottom-color: var(--gold);
+  color: var(--gold); background: rgba(250,204,21,0.08);
+  border-color: rgba(250,204,21,0.18);
 }
 
 /* ── LOGIN — "reactor core" animated background ─────────────────── */
@@ -407,12 +395,10 @@ tbody tr:last-child td { border-bottom: none; }
   display: flex; align-items: center; justify-content: center;
   min-height: 100vh; position: relative; overflow: hidden;
   background:
-    radial-gradient(ellipse 600px 400px at 50% 50%, rgba(0,212,255,0.10), transparent 60%),
-    radial-gradient(ellipse 500px 300px at 30% 80%, rgba(45,212,191,0.08), transparent 60%),
+    radial-gradient(ellipse 700px 500px at 50% 50%, rgba(107,139,233,0.14), transparent 60%),
+    radial-gradient(ellipse 500px 300px at 20% 80%, rgba(149,117,205,0.10), transparent 60%),
     var(--bg-base);
 }
-/* Rotating reactor rings — counter-rotating + pulsing core. Keeps the
-   mobile-friendly sizing via media queries (see Tiny phones block). */
 .login-page::before,
 .login-page::after {
   content: ''; position: absolute; top: 50%; left: 50%;
@@ -420,14 +406,14 @@ tbody tr:last-child td { border-bottom: none; }
 }
 .login-page::before {
   width: min(820px, 140vw); height: min(820px, 140vw);
-  border: 1px solid rgba(0,212,255,0.18);
-  background: radial-gradient(circle at 50% 50%, transparent 38%, rgba(0,212,255,0.05) 62%, transparent 78%);
+  border: 1px solid rgba(107,139,233,0.20);
+  background: radial-gradient(circle at 50% 50%, transparent 38%, rgba(107,139,233,0.06) 62%, transparent 78%);
   animation: reactor-spin 60s linear infinite;
-  box-shadow: 0 0 120px rgba(0,212,255,0.12) inset;
+  box-shadow: 0 0 140px rgba(107,139,233,0.12) inset;
 }
 .login-page::after {
   width: min(540px, 95vw); height: min(540px, 95vw);
-  border: 1px dashed rgba(45,212,191,0.22);
+  border: 1px dashed rgba(149,117,205,0.25);
   animation: reactor-spin 40s linear infinite reverse;
 }
 .login-core {
@@ -435,73 +421,73 @@ tbody tr:last-child td { border-bottom: none; }
   width: min(260px, 50vw); height: min(260px, 50vw);
   transform: translate(-50%, -50%);
   border-radius: 50%; pointer-events: none;
-  border: 1px solid rgba(167,139,250,0.28);
-  background: radial-gradient(circle at 50% 50%, rgba(167,139,250,0.15), transparent 62%);
+  border: 1px solid rgba(149,117,205,0.30);
+  background: radial-gradient(circle at 50% 50%, rgba(149,117,205,0.16), transparent 62%);
   animation: reactor-pulse 6s ease-in-out infinite, reactor-spin 100s linear infinite;
 }
 @keyframes reactor-spin { from { transform: translate(-50%, -50%) rotate(0); } to { transform: translate(-50%, -50%) rotate(360deg); } }
 @keyframes reactor-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
 
 .login-box {
-  width: 380px; padding: 36px 34px 38px;
+  width: 400px; padding: 42px 42px 40px;
   background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  box-shadow:
+    0 24px 60px rgba(0,0,0,0.4),
+    0 0 0 1px rgba(107,139,233,0.08);
   position: relative; z-index: 5;
 }
-.login-box::before {
-  content: ''; position: absolute; top: -1px; left: 18px; right: 18px; height: 2px;
-  background: var(--accent);
-  box-shadow: 0 0 10px var(--accent);
-}
 .login-box .brand {
-  display: flex; flex-direction: column; align-items: center; gap: 12px;
-  margin-bottom: 24px;
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  margin-bottom: 28px;
 }
 .login-box .brand-logo {
-  width: 40px; height: 40px; border-radius: 6px;
-  background: var(--accent);
+  width: 52px; height: 52px; border-radius: 12px;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-violet) 100%);
   display: flex; align-items: center; justify-content: center;
-  color: #04080c; font-weight: 800; font-size: 15px; letter-spacing: -0.3px;
+  color: white; font-weight: 700; font-size: 18px; letter-spacing: -0.4px;
+  box-shadow: 0 8px 24px rgba(107,139,233,0.35);
   position: relative;
 }
 .login-box h1 {
-  font-size: 18px; font-weight: 600; text-align: center; letter-spacing: -0.2px;
+  font-size: 22px; font-weight: 600; text-align: center; letter-spacing: -0.4px;
   color: var(--text);
 }
 .login-box .sub {
-  font-size: 10.5px; color: var(--accent-cyan); text-align: center;
-  letter-spacing: 1.8px; text-transform: uppercase; font-weight: 600;
-  font-family: var(--font-mono); opacity: 0.8;
+  font-size: 12px; color: var(--text-muted); text-align: center;
+  letter-spacing: 0.3px; font-weight: 400;
+  font-family: var(--font-sans);
 }
 .login-box input {
-  width: 100%; padding: 13px 16px; border-radius: var(--r-md);
-  background: rgba(255,255,255,0.03); border: 1px solid var(--border-default);
-  color: var(--text); font-size: 13.5px; margin-bottom: 14px; outline: none;
-  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease), background 0.2s var(--ease);
+  width: 100%; padding: 13px 16px; border-radius: 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  color: var(--text); font-size: 14px; margin-bottom: 14px; outline: none;
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
   font-family: var(--font-sans);
 }
 .login-box input::placeholder { color: var(--text-soft); }
 .login-box input:focus {
-  border-color: rgba(59,130,246,0.55);
-  background: rgba(59,130,246,0.04);
-  box-shadow: 0 0 0 3px rgba(59,130,246,0.12);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 .login-box button {
-  width: 100%; padding: 13px; border-radius: var(--r-md);
+  width: 100%; padding: 13px; border-radius: 8px;
   background: linear-gradient(135deg, var(--accent) 0%, var(--accent-violet) 100%);
   color: white; font-weight: 600; font-size: 14px; border: none; cursor: pointer;
-  transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
-  box-shadow: 0 8px 24px rgba(59,130,246,0.32), 0 0 0 1px rgba(255,255,255,0.1) inset;
-  letter-spacing: 0.2px;
+  transition: transform 0.15s var(--ease), box-shadow 0.15s var(--ease);
+  box-shadow: 0 4px 14px rgba(107,139,233,0.30);
+  letter-spacing: 0.1px;
+  margin-top: 6px;
 }
-.login-box button:hover { transform: translateY(-1px); box-shadow: 0 12px 32px rgba(59,130,246,0.42), 0 0 0 1px rgba(255,255,255,0.14) inset; }
+.login-box button:hover { transform: translateY(-1px); box-shadow: 0 8px 22px rgba(107,139,233,0.42); }
 .login-box button:active { transform: translateY(0); }
 .login-box button:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
 .login-box .err {
-  margin-top: 14px; padding: 10px 12px; border-radius: var(--r-sm);
-  background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.26);
-  color: #fca5a5; font-size: 11.5px; text-align: center;
+  margin-top: 14px; padding: 10px 12px; border-radius: 6px;
+  background: rgba(239,83,80,0.08); border: 1px solid rgba(239,83,80,0.26);
+  color: #fca5a5; font-size: 12px; text-align: center;
 }
 
 /* ── Scrollbar ─────────────────────────────────────────────────── */
