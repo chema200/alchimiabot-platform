@@ -1,6 +1,6 @@
 """Dashboard API: FastAPI endpoints for all platform data.
 
-Exposes live status, features, regimes, positions, experiments,
+Exposes live status, features, regimes, positions, validation runs,
 metrics, and alerts via REST API.
 """
 
@@ -62,12 +62,6 @@ def _uid(request: Request) -> int:
 def create_app(
     feature_store=None,
     regime_detector=None,
-    position_manager=None,
-    policy_engine=None,
-    risk_manager=None,
-    metrics_collector=None,
-    alert_manager=None,
-    experiment_tracker=None,
     system_monitor=None,
     session_factory=None,
     audit_runner=None,
@@ -149,11 +143,6 @@ def create_app(
         result: dict[str, Any] = {"status": "running"}
         if feature_store:
             result["features"] = feature_store.stats
-        if position_manager:
-            result["positions"] = len(position_manager.open_positions)
-            result["exposure_usd"] = position_manager.total_exposure_usd
-        if metrics_collector:
-            result["metrics_keys"] = len(metrics_collector.snapshot().get("gauges", {}))
         return result
 
     @app.get("/api/features/{coin}")
@@ -208,75 +197,12 @@ def create_app(
                 }
             return out
 
-    @app.get("/api/positions")
-    def get_positions() -> list[dict]:
-        if not position_manager:
-            return []
-        return [p.to_dict() for p in position_manager.open_positions]
-
-    @app.get("/api/positions/closed")
-    def get_closed_positions() -> list[dict]:
-        if not position_manager:
-            return []
-        return [p.to_dict() for p in position_manager.closed_positions[-50:]]
-
-    @app.get("/api/policy")
-    def get_policy_state() -> dict[str, Any]:
-        if not policy_engine:
-            return {}
-        return policy_engine.state
-
-    @app.get("/api/risk")
-    def get_risk_state() -> dict[str, Any]:
-        if not risk_manager:
-            return {}
-        return risk_manager.state
-
-    @app.get("/api/metrics")
-    def get_metrics() -> dict[str, Any]:
-        if not metrics_collector:
-            return {}
-        return metrics_collector.snapshot()
-
-    @app.get("/api/metrics/{name}")
-    def get_metric_timeseries(name: str, last_sec: int = 300) -> list[dict]:
-        if not metrics_collector:
-            return []
-        return metrics_collector.get_timeseries(name, last_sec=last_sec)
-
-    @app.get("/api/alerts")
-    def get_alerts() -> list[dict]:
-        if not alert_manager:
-            return []
-        return alert_manager.recent_alerts
-
-    @app.get("/api/experiments")
-    def list_experiments(status: str | None = None) -> list[dict]:
-        if not experiment_tracker:
-            return []
-        return [e.to_dict() for e in experiment_tracker.list_experiments(status)]
-
-    @app.get("/api/experiments/{name}")
-    def get_experiment(name: str) -> dict[str, Any]:
-        if not experiment_tracker:
-            raise HTTPException(503, "Experiment tracker not available")
-        try:
-            exps = experiment_tracker.list_experiments()
-            for e in exps:
-                if e.name == name:
-                    return e.to_dict()
-            raise HTTPException(404, f"Experiment '{name}' not found")
-        except KeyError:
-            raise HTTPException(404, f"Experiment '{name}' not found")
-
-    @app.get("/api/experiments/{name}/compare")
-    def compare_experiment(name: str) -> dict[str, Any]:
-        if not experiment_tracker:
-            raise HTTPException(503, "Experiment tracker not available")
-        result = experiment_tracker.compare(name)
-        if not result:
-            raise HTTPException(404, "No results to compare")
-        return result
+    # NOTE: /api/positions, /api/policy, /api/risk, /api/metrics, /api/alerts
+    # were removed 2026-04-23 — their collaborators (position_manager,
+    # policy_engine, risk_manager, metrics_collector, alert_manager) were
+    # never wired into PlatformRunner, so every call returned an empty dict
+    # or list. Dashboard positions come from /api/bot/* (bot receiver) and
+    # metrics from the dedicated endpoints under /api/system/*.
 
     # ── System Health ──
 
@@ -403,12 +329,9 @@ def create_app(
         errors = validate_snapshot(snap.features)
         return {"coin": coin, "valid": len(errors) == 0, "errors": errors}
 
-    # ── Research ──
-
-    @app.get("/api/research/queries")
-    def list_queries() -> list[str]:
-        from ..research.queries import QUERIES
-        return list(QUERIES.keys())
+    # NOTE: /api/research/queries removed 2026-04-23 — dashboard never called
+    # it. The underlying `src/research/queries.py` module is still used for
+    # offline analysis scripts and stays as-is.
 
     # ── Quant Layer ──
     if session_factory:
@@ -901,9 +824,9 @@ def create_app(
             report_date = d.fromisoformat(date_str)
             return await daily_gen.generate(report_date, user_id=_uid(request))
 
-        @app.get("/api/daily-report/history/list")
-        async def daily_report_history(request: Request) -> list[dict]:
-            return await daily_gen.get_history(user_id=_uid(request))
+        # NOTE: /api/daily-report/history/list removed 2026-04-23 — the UI
+        # fetches specific dates via /api/daily-report/{date_str}, never the
+        # full history list.
 
     # ── Change Markers ──
     if session_factory:
@@ -1014,6 +937,19 @@ def create_app(
     @app.get("/api/shadow/summary")
     async def shadow_summary(request: Request):
         return await _shadow_proxy("GET", "/api/admin/shadow/summary", request)
+
+    @app.get("/api/shadow/exits")
+    async def shadow_exits(request: Request):
+        # Forward query string (variant, limit) so the bot filters identically.
+        qs = request.url.query
+        suffix = f"?{qs}" if qs else ""
+        return await _shadow_proxy("GET", f"/api/admin/shadow/exits{suffix}", request)
+
+    @app.get("/api/shadow/exits/summary")
+    async def shadow_exits_summary(request: Request):
+        qs = request.url.query
+        suffix = f"?{qs}" if qs else ""
+        return await _shadow_proxy("GET", f"/api/admin/shadow/exits/summary{suffix}", request)
 
     # ── Serve frontend ──
     _static = Path(os.path.dirname(os.path.abspath(__file__))) / "static"

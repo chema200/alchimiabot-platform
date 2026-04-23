@@ -4,9 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Alchimia Platform</title>
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- React + Babel bundled locally so /platform-v2 works without external
+       CDN connectivity. Incognito sessions lacking the unpkg.com cache
+       would otherwise hang forever on script fetch. -->
+  <script src="/static/vendor/react.production.min.js"></script>
+  <script src="/static/vendor/react-dom.production.min.js"></script>
+  <script src="/static/vendor/babel.min.js"></script>
   <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -400,13 +403,22 @@ function Tip({ text }) {
 
 // Patch fetch globally to add auth token
 const _origFetch = window.fetch;
+// URLs that, when returning 401, mean the user's SESSION itself is dead and
+// we should force a re-login. Previously the interceptor treated any 401
+// from /api/* (excluding /platform/) as a dead session, which kicked users
+// out whenever a proxied bot endpoint returned 401 for unrelated reasons
+// (bot restarting, JWT rejected by a stale bot deployment, rate-limit).
+// Now we only honor 401s from the platform's own auth endpoints.
+const _AUTH_URLS = ["/api/platform/me", "/api/platform/refresh"];
+const _isAuthUrl = (u) => typeof u === "string" && _AUTH_URLS.some(a => u === a || u.startsWith(a + "?"));
+
 window.fetch = function(url, opts = {}) {
   const token = localStorage.getItem("platform_token");
   if (token && typeof url === "string" && url.startsWith("/api/") && !url.includes("/platform/login")) {
     opts.headers = { ...(opts.headers || {}), "Authorization": "Bearer " + token };
   }
   return _origFetch(url, opts).then(r => {
-    if (r.status === 401 && typeof url === "string" && !url.includes("/platform/")) {
+    if (r.status === 401 && _isAuthUrl(url)) {
       localStorage.removeItem("platform_token");
       window.location.reload();
     }
@@ -2718,7 +2730,12 @@ const SIDE_OPTIONS      = ["LONG", "SHORT"];
 const MODE_OPTIONS      = ["SCALP", "NORMAL", "SWING"];
 
 function EMPTY_FORM() {
-  return { name: "", lateRisks: [], labels: [], sides: [], modes: [], coins: "", minScore: "0", collateral: "0", blockExhausted: false };
+  return {
+    name: "", lateRisks: [], labels: [], sides: [], modes: [], coins: "",
+    minScore: "0", collateral: "0", blockExhausted: false,
+    // Exit overrides — "" means inherit prod preset
+    roiTable: "", slPct: "", tpPct: "", maxHold: ""
+  };
 }
 
 // Predefined one-click templates — each derived from an audit hypothesis.
@@ -2737,12 +2754,19 @@ const SHADOW_TEMPLATES = [
     apply: (f) => ({ ...f, name: f.name || "score-62", minScore: "62" }) },
   { id: "agotada-block",    icon: "⏸", label: "AGOTADA block",         desc: "Bloquea si el movimiento de 30min supero 0.20% en la direccion de la senal pero el de 5min es flojo (<0.05%) o reversing (r1m<0). Es el bucket toxico del audit.",
     apply: (f) => ({ ...f, name: f.name || "agotada-block", blockExhausted: true }) },
+  { id: "roi-patient",      icon: "🐢", label: "ROI paciente",          desc: "ROI mas laxo: 0.4% 0-5m, 0.25% 5-15m, 0.12% 15-30m, 0.05% >30m. Hipotesis: el ROI actual corta ganadoras demasiado pronto.",
+    apply: (f) => ({ ...f, name: f.name || "roi-patient", roiTable: "0:0.4,5:0.25,15:0.12,30:0.05" }) },
+  { id: "tp-wider",         icon: "🎯", label: "TP 1.2%",               desc: "TP mas ancho (1.2% vs prod). Prueba si los movimientos medios se capturan mejor sin ROI fino.",
+    apply: (f) => ({ ...f, name: f.name || "tp-wider", tpPct: "1.2" }) },
 ];
 
 function ShadowModeTab() {
   const [variants, setVariants] = useState([]);
   const [evaluations, setEvaluations] = useState([]);
   const [summary, setSummary] = useState({variants: [], totalEvaluations: 0, hours: 24});
+  const [exits, setExits] = useState([]);
+  const [exitsSummary, setExitsSummary] = useState({variants: [], totalExits: 0, hours: 168});
+  const [exitsHours, setExitsHours] = useState(168);
   const [hours, setHours] = useState(24);
   const [filterVariant, setFilterVariant] = useState("");
   const [err, setErr] = useState(null);
@@ -2755,20 +2779,37 @@ function ShadowModeTab() {
     setLoading(true); setErr(null);
     try {
       const qs = filterVariant ? ("?variant=" + encodeURIComponent(filterVariant)) : "";
-      const [vResp, eResp, sResp] = await Promise.all([
+      const [vResp, eResp, sResp, xResp, xsResp] = await Promise.all([
         fetch(API + "/api/shadow/variants", {credentials:"include"}),
         fetch(API + "/api/shadow/evaluations" + qs, {credentials:"include"}),
         fetch(API + "/api/shadow/summary?hours=" + hours, {credentials:"include"}),
+        fetch(API + "/api/shadow/exits" + qs, {credentials:"include"}),
+        fetch(API + "/api/shadow/exits/summary?hours=" + exitsHours, {credentials:"include"}),
       ]);
-      if (vResp.status === 403 || eResp.status === 403 || sResp.status === 403) {
+      if (vResp.status === 403 || eResp.status === 403 || sResp.status === 403
+          || xResp.status === 403 || xsResp.status === 403) {
         throw new Error("Acceso denegado — requiere rol ADMIN");
       }
-      setVariants(await vResp.json());
-      setEvaluations(await eResp.json());
-      setSummary(await sResp.json());
+      // Defensive parsing: endpoint can be missing (404) while the bot /
+      // platform is mid-deploy. Fall back to safe defaults so the tab still
+      // renders the old sections rather than crashing the whole app.
+      const jsonOrDefault = async (resp, fallback) => {
+        if (!resp.ok) return fallback;
+        try { return await resp.json(); } catch { return fallback; }
+      };
+      const vData  = await jsonOrDefault(vResp, []);
+      const eData  = await jsonOrDefault(eResp, []);
+      const sData  = await jsonOrDefault(sResp, {variants: [], totalEvaluations: 0, hours});
+      const xData  = await jsonOrDefault(xResp, []);
+      const xsData = await jsonOrDefault(xsResp, {variants: [], totalExits: 0, hours: exitsHours});
+      setVariants(Array.isArray(vData) ? vData : []);
+      setEvaluations(Array.isArray(eData) ? eData : []);
+      setSummary(sData && typeof sData === "object" && Array.isArray(sData.variants) ? sData : {variants: [], totalEvaluations: 0, hours});
+      setExits(Array.isArray(xData) ? xData : []);
+      setExitsSummary(xsData && typeof xsData === "object" && Array.isArray(xsData.variants) ? xsData : {variants: [], totalExits: 0, hours: exitsHours});
     } catch (e) { setErr(e.message || String(e)); }
     setLoading(false);
-  }, [hours, filterVariant]);
+  }, [hours, filterVariant, exitsHours]);
 
   useEffect(() => { refresh(); const t = setInterval(refresh, 15000); return () => clearInterval(t); }, [refresh]);
 
@@ -2784,7 +2825,11 @@ function ShadowModeTab() {
     return form.lateRisks.length > 0 || form.labels.length > 0 || form.sides.length > 0
         || form.modes.length > 0 || form.coins.trim().length > 0
         || Number(form.minScore) > 0 || Number(form.collateral) > 0
-        || form.blockExhausted;
+        || form.blockExhausted
+        || form.roiTable.trim().length > 0
+        || form.slPct.toString().trim().length > 0
+        || form.tpPct.toString().trim().length > 0
+        || form.maxHold.toString().trim().length > 0;
   };
 
   const submitVariant = async () => {
@@ -2802,7 +2847,12 @@ function ShadowModeTab() {
         blockCoins:          coinList,
         minScoreOverride:    Number(form.minScore) || 0,
         collateralOverrideUsd: Number(form.collateral) || 0,
-        blockImpulseExhausted: !!form.blockExhausted
+        blockImpulseExhausted: !!form.blockExhausted,
+        // Exit overrides — send only if set, else null → inherit prod
+        roiTableOverride:        form.roiTable.trim() || null,
+        slPctOverride:           form.slPct.toString().trim() === ""    ? null : Number(form.slPct),
+        tpPctOverride:           form.tpPct.toString().trim() === ""    ? null : Number(form.tpPct),
+        maxHoldMinutesOverride:  form.maxHold.toString().trim() === ""  ? null : Math.trunc(Number(form.maxHold))
       };
       const r = await fetch(API + "/api/shadow/variants", {
         method: "POST", credentials: "include",
@@ -2864,11 +2914,17 @@ function ShadowModeTab() {
             <th>Min score</th>
             <th>Colat override</th>
             <th>Exhausted</th>
+            <th>Exit overrides</th>
             <th></th>
           </tr></thead>
           <tbody>
             {variants.map(v => {
               const setStr = (s) => (s && s.length > 0 ? (Array.isArray(s) ? s : Array.from(s)).join(", ") : null);
+              const exitChips = [];
+              if (v.roiTableOverride)         exitChips.push("ROI=" + v.roiTableOverride);
+              if (v.slPctOverride != null)    exitChips.push("SL=" + v.slPctOverride + "%");
+              if (v.tpPctOverride != null)    exitChips.push("TP=" + v.tpPctOverride + "%");
+              if (v.maxHoldMinutesOverride)   exitChips.push("max=" + v.maxHoldMinutesOverride + "m");
               return (
                 <tr key={v.name} style={{borderBottom:"1px solid #181828"}}>
                   <td style={{padding:"6px 4px", fontWeight:600, color:"#e0e0e8"}}>{v.name}</td>
@@ -2880,6 +2936,7 @@ function ShadowModeTab() {
                   <td style={{color:"#aaa"}}>{v.minScoreOverride > 0 ? v.minScoreOverride : <span style={{color:"#555"}}>—</span>}</td>
                   <td style={{color:"#aaa"}}>{v.collateralOverrideUsd > 0 ? ("$" + v.collateralOverrideUsd) : <span style={{color:"#555"}}>prod</span>}</td>
                   <td style={{color: v.blockImpulseExhausted ? "#f59e0b" : "#555"}}>{v.blockImpulseExhausted ? "ON" : "off"}</td>
+                  <td style={{color:"#22d3ee", fontSize:10}}>{exitChips.length > 0 ? exitChips.join(" · ") : <span style={{color:"#555"}}>—</span>}</td>
                   <td style={{textAlign:"right"}}>
                     <button onClick={() => unregisterVariant(v.name)} style={{padding:"3px 10px", fontSize:10, background:"#1a1a2e", border:"1px solid #444", borderRadius:4, color:"#ef4444", cursor:"pointer"}}>Quitar</button>
                   </td>
@@ -2983,6 +3040,38 @@ function ShadowModeTab() {
         </label>
       </div>
 
+      {/* ── Exit overrides ───────────────────────────────────── */}
+      <div style={{marginBottom:12, padding:10, background:"#0a0a13", border:"1px solid #2a2a40", borderRadius:6}}>
+        <div style={{fontSize:11, fontWeight:600, color:"#9aa4d0", marginBottom:8}}>
+          Overrides de salida <Tip text="Dejalos vacios para heredar el preset de prod. Solo los que rellenes se aplican. Requieren el simulador de salidas (Fase 2/3) para producir datos comparativos." />
+        </div>
+
+        <label style={{fontSize:10, color:"#888", display:"block", marginBottom:8}}>
+          ROI table override <Tip text="Formato 'min:pct,min:pct' — p.ej. '0:0.4,5:0.25,15:0.12,30:0.05' significa ROI=0.4% para 0-5min, 0.25% para 5-15min, etc. Vacio = usa el ROI del preset." />
+          <input type="text" value={form.roiTable} onChange={e => setForm({...form, roiTable: e.target.value})}
+            placeholder="e.g. 0:0.4,5:0.25,15:0.12,30:0.05"
+            style={{width:"100%", marginTop:3, padding:6, fontSize:12, background:"#0f0f1a", border:"1px solid #333", color:"#e0e0e8", borderRadius:4, fontFamily:"monospace"}} />
+        </label>
+
+        <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10}}>
+          <label style={{fontSize:10, color:"#888"}}>
+            SL % override <Tip text="Stop-loss alternativo. Vacio = preset." />
+            <input type="number" value={form.slPct} onChange={e => setForm({...form, slPct: e.target.value})} step="0.01" placeholder="vacio = preset"
+              style={{width:"100%", marginTop:3, padding:6, fontSize:12, background:"#0f0f1a", border:"1px solid #333", color:"#e0e0e8", borderRadius:4}} />
+          </label>
+          <label style={{fontSize:10, color:"#888"}}>
+            TP % override <Tip text="Take-profit alternativo. Vacio = preset." />
+            <input type="number" value={form.tpPct} onChange={e => setForm({...form, tpPct: e.target.value})} step="0.01" placeholder="vacio = preset"
+              style={{width:"100%", marginTop:3, padding:6, fontSize:12, background:"#0f0f1a", border:"1px solid #333", color:"#e0e0e8", borderRadius:4}} />
+          </label>
+          <label style={{fontSize:10, color:"#888"}}>
+            Max hold (min) <Tip text="Timeout maximo alternativo en minutos. Vacio = preset." />
+            <input type="number" value={form.maxHold} onChange={e => setForm({...form, maxHold: e.target.value})} step="1" min="1" placeholder="vacio = preset"
+              style={{width:"100%", marginTop:3, padding:6, fontSize:12, background:"#0f0f1a", border:"1px solid #333", color:"#e0e0e8", borderRadius:4}} />
+          </label>
+        </div>
+      </div>
+
       {/* Submit */}
       <div style={{display:"flex", alignItems:"center", gap:12}}>
         <button onClick={submitVariant} disabled={!form.name.trim() || !hasAnyFilter()}
@@ -3081,6 +3170,121 @@ function ShadowModeTab() {
                   <td style={{color:"#aaa"}}>${r.simCollateralUsd}</td>
                 </tr>
               ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+
+    {/* ── Shadow Exits — resumen por variante ── */}
+    <h3 className="section-title">Comparativa de salidas
+      <select value={exitsHours} onChange={e => setExitsHours(Number(e.target.value))} style={{marginLeft:10, padding:"2px 6px", fontSize:10, background:"#0a0a13", border:"1px solid #333", color:"#ccc", borderRadius:3}}>
+        <option value={24}>24h</option>
+        <option value={72}>72h</option>
+        <option value={168}>7d</option>
+        <option value={336}>14d</option>
+        <option value={720}>30d</option>
+      </select>
+      <Tip text="Cada variante con overrides de salida (ROI/SL/TP/maxHold) genera una fila 'hipotetica' por cada entrada real. Cuando ambos lados (variante y real) estan evaluados se calcula delta. winRate = %% de trades donde la variante hubiera cerrado mejor que prod." />
+    </h3>
+    <div className="card" style={{marginBottom:12, padding:8}}>
+      <div style={{fontSize:10, color:"#666", marginBottom:6}}>Total simulaciones en {exitsSummary.hours}h: <span style={{color:"#e0e0e8", fontWeight:600}}>{exitsSummary.totalExits || 0}</span></div>
+      {(!exitsSummary.variants || exitsSummary.variants.length === 0) ? (
+        <div style={{color:"#666", fontSize:11, padding:8}}>Sin simulaciones aun. Crea una variante con overrides de salida (ROI paciente, TP alternativo, etc.) y espera la proxima entrada del bot.</div>
+      ) : (
+        <table style={{width:"100%", fontSize:11}}>
+          <thead><tr style={{textAlign:"left", color:"#888", borderBottom:"1px solid #222"}}>
+            <th style={{padding:"6px 4px"}}>Variante</th>
+            <th>Total</th>
+            <th>Pending</th>
+            <th>Variant first</th>
+            <th>Real first</th>
+            <th>Both eval</th>
+            <th>Win rate</th>
+            <th>Σ ΔPnL ($)</th>
+          </tr></thead>
+          <tbody>
+            {exitsSummary.variants.map(s => (
+              <tr key={s.variant} style={{borderBottom:"1px solid #181828"}}>
+                <td style={{padding:"6px 4px", fontWeight:600, color:"#e0e0e8"}}>{s.variant}</td>
+                <td style={{color:"#aaa"}}>{s.total}</td>
+                <td style={{color:"#888"}}>{s.pending}</td>
+                <td style={{color:"#22d3ee"}}>{s.variantFirst}</td>
+                <td style={{color:"#f59e0b"}}>{s.realFirst}</td>
+                <td style={{color:"#ccc"}}>{s.bothEvaluated}</td>
+                <td style={{color: s.winRate > 50 ? "#22c55e" : s.winRate > 0 ? "#f59e0b" : "#888", fontWeight:600}}>
+                  {s.comparable > 0 ? s.winRate + "%" : "—"}
+                  {s.comparable > 0 && <span style={{color:"#555", marginLeft:4, fontSize:9}}>({s.variantWins}/{s.comparable})</span>}
+                </td>
+                <td style={{color: s.sumDeltaPnlUsd > 0 ? "#22c55e" : s.sumDeltaPnlUsd < 0 ? "#ef4444" : "#888", fontWeight:600}}>
+                  ${s.sumDeltaPnlUsd}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+
+    {/* ── Shadow Exits — filas recientes ── */}
+    <h3 className="section-title">Salidas hipoteticas recientes
+      <Tip text="PENDING = variante aun no ha cerrado. VARIANT_FIRST = variante cerro antes que prod (sim lleno). REAL_FIRST = prod cerro antes (Fase 3 rellenara sim con precio post-cierre). BOTH_EVALUATED = hay delta comparable." />
+    </h3>
+    <div className="card" style={{padding:8}}>
+      {(!exits || exits.length === 0) ? (
+        <div style={{color:"#666", fontSize:11, padding:8}}>{loading ? "Cargando..." : "Sin filas. Las variantes con overrides de salida se materializan al entrar el bot en una posicion."}</div>
+      ) : (
+        <div style={{maxHeight:500, overflowY:"auto"}}>
+          <table style={{width:"100%", fontSize:10}}>
+            <thead style={{position:"sticky", top:0, background:"#0d0d17"}}><tr style={{textAlign:"left", color:"#888", borderBottom:"1px solid #222"}}>
+              <th style={{padding:"4px 6px"}}>Entrada</th>
+              <th>Variante</th>
+              <th>Coin</th>
+              <th>Side</th>
+              <th>Status</th>
+              <th>Sim reason</th>
+              <th>Sim hold</th>
+              <th>Sim PnL</th>
+              <th>Real reason</th>
+              <th>Real hold</th>
+              <th>Real PnL</th>
+              <th>ΔPnL ($)</th>
+            </tr></thead>
+            <tbody>
+              {exits.map(r => {
+                const statusColor = r.status === "VARIANT_FIRST" ? "#22d3ee"
+                  : r.status === "REAL_FIRST" ? "#f59e0b"
+                  : r.status === "BOTH_EVALUATED" ? "#22c55e"
+                  : "#666";
+                const deltaColor = r.deltaPnlUsd == null ? "#555"
+                  : Number(r.deltaPnlUsd) > 0 ? "#22c55e"
+                  : Number(r.deltaPnlUsd) < 0 ? "#ef4444" : "#888";
+                const fmtHold = (s) => s == null ? "—"
+                  : (s >= 3600 ? (s/3600).toFixed(1) + "h"
+                     : s >= 60 ? Math.round(s/60) + "m" : s + "s");
+                return (
+                  <tr key={r.id} style={{borderBottom:"1px solid #181828"}}>
+                    <td style={{padding:"3px 6px", color:"#888", fontFamily:"monospace"}}>{r.entryTime ? r.entryTime.substring(5, 16).replace("T", " ") : ""}</td>
+                    <td style={{color:"#e0e0e8"}}>{r.variantName}</td>
+                    <td style={{color:"#ccc", fontWeight:600}}>{r.coin}</td>
+                    <td style={{color: r.side === "LONG" ? "#22c55e" : "#ef4444"}}>{r.side}</td>
+                    <td style={{color: statusColor, fontWeight:600, fontSize:9}}>{r.status}</td>
+                    <td style={{color:"#22d3ee", fontSize:9}}>{r.simExitReason || "—"}</td>
+                    <td style={{color:"#aaa"}}>{fmtHold(r.simHoldSeconds)}</td>
+                    <td style={{color: r.simPnlUsd == null ? "#555" : Number(r.simPnlUsd) >= 0 ? "#22c55e" : "#ef4444"}}>
+                      {r.simPnlUsd != null ? "$" + Number(r.simPnlUsd).toFixed(2) : "—"}
+                    </td>
+                    <td style={{color:"#f59e0b", fontSize:9}}>{r.realExitReason || "—"}</td>
+                    <td style={{color:"#aaa"}}>{fmtHold(r.realHoldSeconds)}</td>
+                    <td style={{color: r.realPnlUsd == null ? "#555" : Number(r.realPnlUsd) >= 0 ? "#22c55e" : "#ef4444"}}>
+                      {r.realPnlUsd != null ? "$" + Number(r.realPnlUsd).toFixed(2) : "—"}
+                    </td>
+                    <td style={{color: deltaColor, fontWeight:600}}>
+                      {r.deltaPnlUsd != null ? (Number(r.deltaPnlUsd) > 0 ? "+" : "") + "$" + Number(r.deltaPnlUsd).toFixed(2) : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
