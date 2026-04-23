@@ -2726,7 +2726,7 @@ const SIDE_OPTIONS      = ["LONG", "SHORT"];
 const MODE_OPTIONS      = ["SCALP", "NORMAL", "SWING"];
 
 function EMPTY_FORM() {
-  return { name: "", lateRisks: [], labels: [], sides: [], modes: [], coins: "", minScore: "0", collateral: "0" };
+  return { name: "", lateRisks: [], labels: [], sides: [], modes: [], coins: "", minScore: "0", collateral: "0", blockExhausted: false };
 }
 
 // Predefined one-click templates — each derived from an audit hypothesis.
@@ -2743,6 +2743,8 @@ const SHADOW_TEMPLATES = [
     apply: (f) => ({ ...f, name: f.name || "short-only-allow", sides: ["LONG"] }) },
   { id: "score-62",         icon: "📈", label: "Score >= 62",           desc: "Umbral de score mas estricto (prod = 58)",
     apply: (f) => ({ ...f, name: f.name || "score-62", minScore: "62" }) },
+  { id: "agotada-block",    icon: "⏸", label: "AGOTADA block",         desc: "Bloquea si el movimiento de 30min supero 0.20% en la direccion de la senal pero el de 5min es flojo (<0.05%) o reversing (r1m<0). Es el bucket toxico del audit.",
+    apply: (f) => ({ ...f, name: f.name || "agotada-block", blockExhausted: true }) },
 ];
 
 function ShadowModeTab() {
@@ -2789,7 +2791,8 @@ function ShadowModeTab() {
   const hasAnyFilter = () => {
     return form.lateRisks.length > 0 || form.labels.length > 0 || form.sides.length > 0
         || form.modes.length > 0 || form.coins.trim().length > 0
-        || Number(form.minScore) > 0 || Number(form.collateral) > 0;
+        || Number(form.minScore) > 0 || Number(form.collateral) > 0
+        || form.blockExhausted;
   };
 
   const submitVariant = async () => {
@@ -2806,7 +2809,8 @@ function ShadowModeTab() {
         blockModes:          form.modes,
         blockCoins:          coinList,
         minScoreOverride:    Number(form.minScore) || 0,
-        collateralOverrideUsd: Number(form.collateral) || 0
+        collateralOverrideUsd: Number(form.collateral) || 0,
+        blockImpulseExhausted: !!form.blockExhausted
       };
       const r = await fetch(API + "/api/shadow/variants", {
         method: "POST", credentials: "include",
@@ -2867,6 +2871,7 @@ function ShadowModeTab() {
             <th>Coins</th>
             <th>Min score</th>
             <th>Colat override</th>
+            <th>Exhausted</th>
             <th></th>
           </tr></thead>
           <tbody>
@@ -2882,6 +2887,7 @@ function ShadowModeTab() {
                   <td style={{color:"#f59e0b"}}>{setStr(v.blockCoins) || <span style={{color:"#555"}}>—</span>}</td>
                   <td style={{color:"#aaa"}}>{v.minScoreOverride > 0 ? v.minScoreOverride : <span style={{color:"#555"}}>—</span>}</td>
                   <td style={{color:"#aaa"}}>{v.collateralOverrideUsd > 0 ? ("$" + v.collateralOverrideUsd) : <span style={{color:"#555"}}>prod</span>}</td>
+                  <td style={{color: v.blockImpulseExhausted ? "#f59e0b" : "#555"}}>{v.blockImpulseExhausted ? "ON" : "off"}</td>
                   <td style={{textAlign:"right"}}>
                     <button onClick={() => unregisterVariant(v.name)} style={{padding:"3px 10px", fontSize:10, background:"#1a1a2e", border:"1px solid #444", borderRadius:4, color:"#ef4444", cursor:"pointer"}}>Quitar</button>
                   </td>
@@ -2961,6 +2967,15 @@ function ShadowModeTab() {
           placeholder="e.g. BTC, ETH, WIF"
           style={{width:"100%", marginTop:3, padding:6, fontSize:12, background:"#0a0a13", border:"1px solid #333", color:"#e0e0e8", borderRadius:4}} />
       </label>
+
+      {/* AGOTADA / impulse exhausted toggle */}
+      <div style={{marginBottom:10}}>
+        <label style={{fontSize:11, color:"#ccc", cursor:"pointer"}}>
+          <input type="checkbox" checked={form.blockExhausted} onChange={e => setForm({...form, blockExhausted: e.target.checked})} style={{marginRight:6}} />
+          Bloquear si <code style={{color:"#ccc"}}>impulse_exhausted</code> (AGOTADA)
+          <Tip text="Bloquea cuando el movimiento de 30min en la direccion de la senal supero 0.20% pero el de 5min esta flojo (<0.05%) o el de 1min reversing (<0). Es el bucket que el audit 2026-04-22 marco como mas toxico." />
+        </label>
+      </div>
 
       {/* Numeric overrides */}
       <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12}}>
