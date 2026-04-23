@@ -923,6 +923,75 @@ def create_app(
         from ..ingestion.rest.bot_receiver import get_latest_gate_stats
         return get_latest_gate_stats()
 
+    # ── Engine Shadow Mode ──
+    # Proxies admin endpoints on the bot (/api/admin/shadow/*). Platform
+    # does not store variants nor evaluations itself — the bot owns both.
+    # Every call forwards the caller's JWT so the bot's own admin gate
+    # applies (Role.ADMIN only).
+
+    def _extract_bot_token(request: Request) -> str | None:
+        auth = request.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            return auth[7:]
+        tok = request.cookies.get("platform_token", "")
+        return tok or None
+
+    async def _shadow_proxy(method: str, path: str, request: Request, body: dict | None = None):
+        token = _extract_bot_token(request)
+        if not token:
+            raise HTTPException(401, "No token to forward to bot")
+        headers = {"Authorization": f"Bearer {token}"}
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                if method == "GET":
+                    resp = await client.get(
+                        f"{_BOT_API_URL}{path}",
+                        headers=headers,
+                        params=dict(request.query_params),
+                    )
+                elif method == "POST":
+                    resp = await client.post(
+                        f"{_BOT_API_URL}{path}",
+                        headers=headers,
+                        json=body or {},
+                    )
+                elif method == "DELETE":
+                    resp = await client.delete(
+                        f"{_BOT_API_URL}{path}",
+                        headers=headers,
+                    )
+                else:
+                    raise HTTPException(500, f"Unsupported method {method}")
+        except httpx.RequestError as exc:
+            raise HTTPException(502, f"Bot API unreachable: {exc}")
+        if resp.status_code >= 400:
+            try:
+                detail = resp.json()
+            except Exception:
+                detail = resp.text
+            raise HTTPException(resp.status_code, detail)
+        return resp.json()
+
+    @app.get("/api/shadow/variants")
+    async def shadow_list_variants(request: Request):
+        return await _shadow_proxy("GET", "/api/admin/shadow/variants", request)
+
+    @app.post("/api/shadow/variants")
+    async def shadow_register_variant(body: dict, request: Request):
+        return await _shadow_proxy("POST", "/api/admin/shadow/variants", request, body=body)
+
+    @app.delete("/api/shadow/variants/{name}")
+    async def shadow_unregister_variant(name: str, request: Request):
+        return await _shadow_proxy("DELETE", f"/api/admin/shadow/variants/{name}", request)
+
+    @app.get("/api/shadow/evaluations")
+    async def shadow_evaluations(request: Request):
+        return await _shadow_proxy("GET", "/api/admin/shadow/evaluations", request)
+
+    @app.get("/api/shadow/summary")
+    async def shadow_summary(request: Request):
+        return await _shadow_proxy("GET", "/api/admin/shadow/summary", request)
+
     # ── Serve frontend ──
     _static = Path(os.path.dirname(os.path.abspath(__file__))) / "static"
     if _static.exists():
