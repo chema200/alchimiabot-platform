@@ -2710,6 +2710,41 @@ function BotLiveTab() {
 // Live view + CRUD for engine-level Shadow Mode (A/B evaluation). Proxied to
 // the bot's /api/admin/shadow/* endpoints, admin-only. Variants registered
 // here start producing rows in hl_shadow_evaluations on the next prod entry.
+//
+// Six filter types supported:
+//   1. blockLateEntryRisks   — set of "HIGH" / "MEDIUM"
+//   2. blockQualityLabels    — set of entry_quality_label values
+//   3. blockSides            — set of "LONG" / "SHORT"
+//   4. blockModes            — set of "SCALP" / "NORMAL" / "SWING"
+//   5. blockCoins            — set of coin tickers (blacklist)
+//   6. minScoreOverride      — absolute totalScore threshold (0 = none)
+// Plus collateralOverrideUsd for the sim sizing (0 = use prod).
+
+const LATE_RISK_OPTIONS = ["HIGH", "MEDIUM"];
+const QUALITY_OPTIONS   = ["A_PLUS", "A", "B_PLUS", "B", "C_PLUS", "C", "D", "WEAK"];
+const SIDE_OPTIONS      = ["LONG", "SHORT"];
+const MODE_OPTIONS      = ["SCALP", "NORMAL", "SWING"];
+
+function EMPTY_FORM() {
+  return { name: "", lateRisks: [], labels: [], sides: [], modes: [], coins: "", minScore: "0", collateral: "0" };
+}
+
+// Predefined one-click templates — each derived from an audit hypothesis.
+const SHADOW_TEMPLATES = [
+  { id: "late-high-block",  icon: "🛑", label: "Solo late HIGH",        desc: "Bloquea si late_entry_risk = HIGH",
+    apply: (f) => ({ ...f, name: f.name || "late-high-block", lateRisks: ["HIGH"] }) },
+  { id: "aplus-block",      icon: "🛑", label: "Solo A_PLUS",           desc: "Bloquea entry_quality_label = A_PLUS (audit: -12.91 USD / 36 trades)",
+    apply: (f) => ({ ...f, name: f.name || "aplus-block", labels: ["A_PLUS"] }) },
+  { id: "strict-combo",     icon: "🛑", label: "Strict combo",          desc: "late HIGH + A_PLUS juntos",
+    apply: (f) => ({ ...f, name: f.name || "strict-combo", lateRisks: ["HIGH"], labels: ["A_PLUS"] }) },
+  { id: "collateral-25",    icon: "💰", label: "Colateral 25$",         desc: "Sim con colateral 25$ (= 75$ notional a leverage 3x, el valor del audit)",
+    apply: (f) => ({ ...f, name: f.name || "collateral-25", collateral: "25" }) },
+  { id: "short-only-allow", icon: "🔒", label: "Solo SHORTs permitidos",desc: "Bloquea todos los LONG",
+    apply: (f) => ({ ...f, name: f.name || "short-only-allow", sides: ["LONG"] }) },
+  { id: "score-62",         icon: "📈", label: "Score >= 62",           desc: "Umbral de score mas estricto (prod = 58)",
+    apply: (f) => ({ ...f, name: f.name || "score-62", minScore: "62" }) },
+];
+
 function ShadowModeTab() {
   const [variants, setVariants] = useState([]);
   const [evaluations, setEvaluations] = useState([]);
@@ -2719,11 +2754,7 @@ function ShadowModeTab() {
   const [err, setErr] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // New variant form
-  const [newName, setNewName] = useState("");
-  const [newBlockLate, setNewBlockLate] = useState(false);
-  const [newBlockLabels, setNewBlockLabels] = useState("");
-  const [newCollat, setNewCollat] = useState("0");
+  const [form, setForm] = useState(EMPTY_FORM());
   const [submitMsg, setSubmitMsg] = useState("");
 
   const refresh = useCallback(async () => {
@@ -2747,15 +2778,35 @@ function ShadowModeTab() {
 
   useEffect(() => { refresh(); const t = setInterval(refresh, 15000); return () => clearInterval(t); }, [refresh]);
 
+  const toggleMulti = (field, value) => {
+    setForm(prev => {
+      const arr = prev[field];
+      const next = arr.includes(value) ? arr.filter(x => x !== value) : [...arr, value];
+      return { ...prev, [field]: next };
+    });
+  };
+
+  const hasAnyFilter = () => {
+    return form.lateRisks.length > 0 || form.labels.length > 0 || form.sides.length > 0
+        || form.modes.length > 0 || form.coins.trim().length > 0
+        || Number(form.minScore) > 0 || Number(form.collateral) > 0;
+  };
+
   const submitVariant = async () => {
     setSubmitMsg("");
+    if (!form.name.trim()) { setSubmitMsg("✗ Falta nombre"); return; }
+    if (!hasAnyFilter())   { setSubmitMsg("✗ Activa al menos un filtro o un override"); return; }
     try {
-      const labels = newBlockLabels.split(",").map(s => s.trim()).filter(Boolean);
+      const coinList = form.coins.split(",").map(s => s.trim().toUpperCase()).filter(Boolean);
       const body = {
-        name: newName.trim(),
-        blockLateEntryHigh: newBlockLate,
-        blockQualityLabels: labels,
-        collateralOverrideUsd: Number(newCollat) || 0
+        name: form.name.trim(),
+        blockLateEntryRisks: form.lateRisks,
+        blockQualityLabels:  form.labels,
+        blockSides:          form.sides,
+        blockModes:          form.modes,
+        blockCoins:          coinList,
+        minScoreOverride:    Number(form.minScore) || 0,
+        collateralOverrideUsd: Number(form.collateral) || 0
       };
       const r = await fetch(API + "/api/shadow/variants", {
         method: "POST", credentials: "include",
@@ -2765,7 +2816,7 @@ function ShadowModeTab() {
       const data = await r.json();
       if (data.success) {
         setSubmitMsg("✓ Variante guardada");
-        setNewName(""); setNewBlockLate(false); setNewBlockLabels(""); setNewCollat("0");
+        setForm(EMPTY_FORM());
         refresh();
       } else {
         setSubmitMsg("✗ " + (data.error || "error"));
@@ -2781,6 +2832,18 @@ function ShadowModeTab() {
     refresh();
   };
 
+  const Chip = ({ active, onClick, children, title }) => (
+    <button type="button" onClick={onClick} title={title || ""}
+      style={{
+        padding:"3px 10px", fontSize:10, borderRadius:12, cursor:"pointer",
+        border: "1px solid " + (active ? "#3b82f6" : "#333"),
+        background: active ? "#1e3a8a" : "#0a0a13",
+        color: active ? "#e0e0e8" : "#888",
+        fontWeight: active ? 600 : 400,
+        marginRight:6, marginBottom:6
+      }}>{children}</button>
+  );
+
   return (<>
     <div className="page-title">Shadow Mode
       <div className="page-sub">Variantes de config evaluadas en paralelo al motor real. Cero ordenes, solo observacion y log.</div>
@@ -2788,59 +2851,141 @@ function ShadowModeTab() {
 
     {err && <div style={{padding:12, background:"#2a1010", border:"1px solid #ef4444", borderRadius:6, color:"#ef4444", marginBottom:12, fontSize:12}}>{err}</div>}
 
-    {/* ── Variants ── */}
-    <h3 className="section-title">Variantes activas ({variants.length}) <Tip text="Variantes registradas en el motor. Cada una evalua en paralelo cada candidato de entrada y guarda su decision en hl_shadow_evaluations." /></h3>
+    {/* ── Active variants ── */}
+    <h3 className="section-title">Variantes activas ({variants.length}) <Tip text="Cada variante evalua en paralelo cada candidato de entrada y guarda su decision en hl_shadow_evaluations. Cero impacto sobre prod." /></h3>
     <div className="card" style={{marginBottom:12}}>
       {variants.length === 0 ? (
-        <div style={{color:"#666", fontSize:11, padding:8}}>Sin variantes. Anade una abajo para empezar a capturar decisiones.</div>
+        <div style={{color:"#666", fontSize:11, padding:8}}>Sin variantes. Usa un template abajo o rellena el formulario.</div>
       ) : (
         <table style={{width:"100%", fontSize:11}}>
           <thead><tr style={{textAlign:"left", color:"#888", borderBottom:"1px solid #222"}}>
             <th style={{padding:"6px 4px"}}>Nombre</th>
-            <th>Block Late HIGH</th>
-            <th>Block Labels</th>
-            <th>Colateral override ($)</th>
+            <th>Late risks</th>
+            <th>Labels</th>
+            <th>Sides</th>
+            <th>Modes</th>
+            <th>Coins</th>
+            <th>Min score</th>
+            <th>Colat override</th>
             <th></th>
           </tr></thead>
           <tbody>
-            {variants.map(v => (
-              <tr key={v.name} style={{borderBottom:"1px solid #181828"}}>
-                <td style={{padding:"6px 4px", fontWeight:600, color:"#e0e0e8"}}>{v.name}</td>
-                <td style={{color: v.blockLateEntryHigh ? "#f59e0b" : "#555"}}>{v.blockLateEntryHigh ? "ON" : "off"}</td>
-                <td style={{color:"#aaa"}}>{(v.blockQualityLabels && v.blockQualityLabels.length > 0) ? v.blockQualityLabels.join(", ") : <span style={{color:"#555"}}>—</span>}</td>
-                <td style={{color:"#aaa"}}>{v.collateralOverrideUsd > 0 ? ("$" + v.collateralOverrideUsd) : <span style={{color:"#555"}}>prod</span>}</td>
-                <td style={{textAlign:"right"}}>
-                  <button onClick={() => unregisterVariant(v.name)} style={{padding:"3px 10px", fontSize:10, background:"#1a1a2e", border:"1px solid #444", borderRadius:4, color:"#ef4444", cursor:"pointer"}}>Quitar</button>
-                </td>
-              </tr>
-            ))}
+            {variants.map(v => {
+              const setStr = (s) => (s && s.length > 0 ? (Array.isArray(s) ? s : Array.from(s)).join(", ") : null);
+              return (
+                <tr key={v.name} style={{borderBottom:"1px solid #181828"}}>
+                  <td style={{padding:"6px 4px", fontWeight:600, color:"#e0e0e8"}}>{v.name}</td>
+                  <td style={{color:"#f59e0b"}}>{setStr(v.blockLateEntryRisks) || <span style={{color:"#555"}}>—</span>}</td>
+                  <td style={{color:"#f59e0b"}}>{setStr(v.blockQualityLabels) || <span style={{color:"#555"}}>—</span>}</td>
+                  <td style={{color:"#f59e0b"}}>{setStr(v.blockSides) || <span style={{color:"#555"}}>—</span>}</td>
+                  <td style={{color:"#f59e0b"}}>{setStr(v.blockModes) || <span style={{color:"#555"}}>—</span>}</td>
+                  <td style={{color:"#f59e0b"}}>{setStr(v.blockCoins) || <span style={{color:"#555"}}>—</span>}</td>
+                  <td style={{color:"#aaa"}}>{v.minScoreOverride > 0 ? v.minScoreOverride : <span style={{color:"#555"}}>—</span>}</td>
+                  <td style={{color:"#aaa"}}>{v.collateralOverrideUsd > 0 ? ("$" + v.collateralOverrideUsd) : <span style={{color:"#555"}}>prod</span>}</td>
+                  <td style={{textAlign:"right"}}>
+                    <button onClick={() => unregisterVariant(v.name)} style={{padding:"3px 10px", fontSize:10, background:"#1a1a2e", border:"1px solid #444", borderRadius:4, color:"#ef4444", cursor:"pointer"}}>Quitar</button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}
     </div>
 
-    {/* ── Add / update variant ── */}
-    <h3 className="section-title">Nueva variante <Tip text="Si el nombre coincide con uno existente, se reemplaza. Los valores admitidos por ahora: blockLateEntryHigh (bloquea late_entry_risk=HIGH), blockQualityLabels (set de entry_quality_label a bloquear, e.g. A_PLUS), collateralOverrideUsd (sim con este colateral fijo; 0 = usa el prod)." /></h3>
+    {/* ── Templates ── */}
+    <h3 className="section-title">Templates rapidos <Tip text="Click en un template para pre-rellenar el formulario. Despues puedes ajustar los valores antes de guardar." /></h3>
     <div className="card" style={{marginBottom:12, padding:12}}>
-      <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:8}}>
-        <label style={{fontSize:10, color:"#888"}}>Nombre
-          <input type="text" value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. late-high-block" style={{width:"100%", marginTop:3, padding:5, fontSize:11, background:"#0a0a13", border:"1px solid #333", color:"#e0e0e8", borderRadius:4}} />
+      <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(220px, 1fr))", gap:8}}>
+        {SHADOW_TEMPLATES.map(t => (
+          <button key={t.id} type="button"
+            onClick={() => { setForm(t.apply(EMPTY_FORM())); setSubmitMsg(""); }}
+            title={t.desc}
+            style={{padding:"8px 10px", textAlign:"left", background:"#0a0a13", border:"1px solid #333", borderRadius:6, color:"#ccc", cursor:"pointer", fontSize:11}}>
+            <div style={{fontWeight:600, color:"#e0e0e8", marginBottom:2}}>{t.icon} {t.label}</div>
+            <div style={{fontSize:10, color:"#666", lineHeight:1.3}}>{t.desc}</div>
+          </button>
+        ))}
+      </div>
+    </div>
+
+    {/* ── New variant form ── */}
+    <h3 className="section-title">Nueva variante <Tip text="Si el nombre coincide con una existente se reemplaza. Al menos UN filtro o un override debe estar activo para guardar." /></h3>
+    <div className="card" style={{marginBottom:12, padding:12}}>
+
+      {/* Nombre */}
+      <label style={{fontSize:10, color:"#888", display:"block", marginBottom:10}}>Nombre (unico)
+        <input type="text" value={form.name} onChange={e => setForm({...form, name: e.target.value})}
+          placeholder="e.g. late-high-block"
+          style={{width:"100%", marginTop:3, padding:6, fontSize:12, background:"#0a0a13", border:"1px solid #333", color:"#e0e0e8", borderRadius:4}} />
+      </label>
+
+      {/* Late entry risk */}
+      <div style={{marginBottom:10}}>
+        <div style={{fontSize:10, color:"#888", marginBottom:4}}>
+          Bloquear <code style={{color:"#ccc"}}>late_entry_risk</code>
+          <Tip text="LOW nunca tiene sentido bloquearlo. HIGH es el patron mas claramente perdedor del audit." />
+        </div>
+        {LATE_RISK_OPTIONS.map(o =>
+          <Chip key={o} active={form.lateRisks.includes(o)} onClick={() => toggleMulti("lateRisks", o)}>{o}</Chip>)}
+      </div>
+
+      {/* Quality labels */}
+      <div style={{marginBottom:10}}>
+        <div style={{fontSize:10, color:"#888", marginBottom:4}}>
+          Bloquear <code style={{color:"#ccc"}}>entry_quality_label</code>
+          <Tip text="El audit mostro que A_PLUS correlaciona con perdidas (scoring invertido) — buena candidata para testear." />
+        </div>
+        {QUALITY_OPTIONS.map(o =>
+          <Chip key={o} active={form.labels.includes(o)} onClick={() => toggleMulti("labels", o)}>{o}</Chip>)}
+      </div>
+
+      {/* Side */}
+      <div style={{marginBottom:10}}>
+        <div style={{fontSize:10, color:"#888", marginBottom:4}}>Bloquear side</div>
+        {SIDE_OPTIONS.map(o =>
+          <Chip key={o} active={form.sides.includes(o)} onClick={() => toggleMulti("sides", o)}>{o}</Chip>)}
+      </div>
+
+      {/* Mode */}
+      <div style={{marginBottom:10}}>
+        <div style={{fontSize:10, color:"#888", marginBottom:4}}>Bloquear mode</div>
+        {MODE_OPTIONS.map(o =>
+          <Chip key={o} active={form.modes.includes(o)} onClick={() => toggleMulti("modes", o)}>{o}</Chip>)}
+      </div>
+
+      {/* Coins */}
+      <label style={{fontSize:10, color:"#888", display:"block", marginBottom:10}}>
+        Bloquear coins (coma-separado, vacio = ninguna)
+        <input type="text" value={form.coins} onChange={e => setForm({...form, coins: e.target.value})}
+          placeholder="e.g. BTC, ETH, WIF"
+          style={{width:"100%", marginTop:3, padding:6, fontSize:12, background:"#0a0a13", border:"1px solid #333", color:"#e0e0e8", borderRadius:4}} />
+      </label>
+
+      {/* Numeric overrides */}
+      <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12}}>
+        <label style={{fontSize:10, color:"#888"}}>
+          Min score override <Tip text="Umbral absoluto totalScore. 0 = sin override (usa el de prod)." />
+          <input type="number" value={form.minScore} onChange={e => setForm({...form, minScore: e.target.value})} min="0" step="1"
+            style={{width:"100%", marginTop:3, padding:6, fontSize:12, background:"#0a0a13", border:"1px solid #333", color:"#e0e0e8", borderRadius:4}} />
         </label>
-        <label style={{fontSize:10, color:"#888"}}>Colateral override ($) — 0 = usa prod
-          <input type="number" value={newCollat} onChange={e => setNewCollat(e.target.value)} min="0" step="1" style={{width:"100%", marginTop:3, padding:5, fontSize:11, background:"#0a0a13", border:"1px solid #333", color:"#e0e0e8", borderRadius:4}} />
+        <label style={{fontSize:10, color:"#888"}}>
+          Colateral override ($) <Tip text="USD de colateral para el sim. 0 = usa el de prod." />
+          <input type="number" value={form.collateral} onChange={e => setForm({...form, collateral: e.target.value})} min="0" step="1"
+            style={{width:"100%", marginTop:3, padding:6, fontSize:12, background:"#0a0a13", border:"1px solid #333", color:"#e0e0e8", borderRadius:4}} />
         </label>
       </div>
-      <div style={{display:"grid", gridTemplateColumns:"auto 1fr", gap:12, alignItems:"center", marginBottom:10}}>
-        <label style={{fontSize:11, color:"#ccc"}}>
-          <input type="checkbox" checked={newBlockLate} onChange={e => setNewBlockLate(e.target.checked)} style={{marginRight:6}} />
-          Bloquear si late_entry_risk = HIGH
-        </label>
-        <label style={{fontSize:10, color:"#888"}}>Bloquear labels (coma)
-          <input type="text" value={newBlockLabels} onChange={e => setNewBlockLabels(e.target.value)} placeholder="e.g. A_PLUS, C" style={{width:"100%", marginTop:3, padding:5, fontSize:11, background:"#0a0a13", border:"1px solid #333", color:"#e0e0e8", borderRadius:4}} />
-        </label>
-      </div>
+
+      {/* Submit */}
       <div style={{display:"flex", alignItems:"center", gap:12}}>
-        <button onClick={submitVariant} disabled={!newName.trim()} style={{padding:"6px 16px", fontSize:11, background: newName.trim() ? "#3b82f6" : "#222", border:"none", borderRadius:4, color:"white", cursor: newName.trim() ? "pointer" : "not-allowed"}}>Guardar variante</button>
+        <button onClick={submitVariant} disabled={!form.name.trim() || !hasAnyFilter()}
+          style={{padding:"7px 18px", fontSize:12, background: (form.name.trim() && hasAnyFilter()) ? "#3b82f6" : "#222", border:"none", borderRadius:4, color:"white", cursor: (form.name.trim() && hasAnyFilter()) ? "pointer" : "not-allowed", fontWeight:600}}>
+          Guardar variante
+        </button>
+        <button type="button" onClick={() => { setForm(EMPTY_FORM()); setSubmitMsg(""); }}
+          style={{padding:"7px 14px", fontSize:11, background:"#1a1a2e", border:"1px solid #333", borderRadius:4, color:"#888", cursor:"pointer"}}>
+          Limpiar
+        </button>
         {submitMsg && <span style={{fontSize:11, color: submitMsg.startsWith("✓") ? "#22c55e" : "#ef4444"}}>{submitMsg}</span>}
       </div>
     </div>
