@@ -494,6 +494,187 @@ tbody tr:last-child td { border-bottom: none; }
   0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(34,197,94,0.5); }
   50%      { opacity: 0.6; box-shadow: 0 0 0 6px rgba(34,197,94,0); }
 }
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   PASS 2 — Component polish + responsive refinement + utilities
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Button system (drop-in utilities, old buttons keep their inline styles) ── */
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 8px 16px; border-radius: var(--r-md); font-size: 12px; font-weight: 600;
+  font-family: var(--font-sans); letter-spacing: 0.1px; border: 1px solid transparent;
+  cursor: pointer; transition: all 0.2s var(--ease); white-space: nowrap;
+}
+.btn:disabled { cursor: not-allowed; opacity: 0.5; }
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-violet) 100%);
+  color: white;
+  box-shadow: 0 4px 14px rgba(59,130,246,0.25), 0 0 0 1px rgba(255,255,255,0.08) inset;
+}
+.btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 8px 22px rgba(59,130,246,0.35), 0 0 0 1px rgba(255,255,255,0.12) inset; }
+.btn-ghost {
+  background: rgba(255,255,255,0.03); border-color: var(--border-default); color: var(--text-dim);
+}
+.btn-ghost:hover:not(:disabled) { background: rgba(255,255,255,0.06); color: var(--text); border-color: var(--border-hi); }
+.btn-danger {
+  background: rgba(239,68,68,0.10); border-color: rgba(239,68,68,0.30); color: #fca5a5;
+}
+.btn-danger:hover:not(:disabled) { background: rgba(239,68,68,0.18); border-color: rgba(239,68,68,0.55); color: #fee2e2; }
+.btn-sm { padding: 5px 11px; font-size: 11px; border-radius: var(--r-sm); }
+
+/* ── Form inputs (drop-in utilities) ── */
+
+.input, .select {
+  width: 100%; padding: 9px 12px; border-radius: var(--r-sm);
+  background: rgba(255,255,255,0.03); border: 1px solid var(--border-default);
+  color: var(--text); font-size: 12.5px; font-family: var(--font-sans);
+  outline: none; transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease), background 0.2s var(--ease);
+}
+.input:focus, .select:focus {
+  border-color: rgba(59,130,246,0.5);
+  background: rgba(59,130,246,0.04);
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.12);
+}
+.input::placeholder { color: var(--text-soft); }
+
+/* Universal input/select polish — applies to any existing form without
+   needing class changes in the JSX. */
+input:not(.login-box input):not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+textarea, select {
+  font-family: var(--font-sans);
+  color: var(--text);
+}
+input:focus, textarea:focus, select:focus { outline: none; }
+
+/* ── Tables — subtle zebra stripes ── */
+
+tbody tr:nth-child(even) { background: rgba(255,255,255,0.012); }
+tbody tr:nth-child(even):hover { background: rgba(59,130,246,0.06); }
+/* Numeric / monospaced cells get right-align aesthetic */
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ── KPI card — optional richer styling via .kpi class ── */
+
+.card.kpi { padding: 22px 20px 20px; }
+.card.kpi .label { font-size: 10.5px; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; }
+.card.kpi .label .trend {
+  font-family: var(--font-sans); font-weight: 600; font-size: 10px;
+  padding: 2px 8px; border-radius: var(--r-pill);
+}
+.card.kpi .value { font-size: 30px; letter-spacing: -0.8px; line-height: 1; }
+.card.kpi .sub { margin-top: 10px; font-size: 11px; color: var(--text-muted); }
+
+/* ── Modal refinement (works alongside the inline Modal component) ── */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(3,4,10,0.78); z-index: 1000;
+  display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  animation: fadeIn 0.2s var(--ease-out);
+}
+
+/* ── Code blocks / mono blocks ── */
+code, pre {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  background: rgba(255,255,255,0.04); color: #fbbf24;
+  padding: 1px 6px; border-radius: 4px;
+}
+pre {
+  padding: 14px 16px; line-height: 1.55;
+  background: rgba(10,12,20,0.65); color: #d4d4d8;
+  border: 1px solid var(--border-subtle); border-radius: var(--r-sm);
+  overflow-x: auto; white-space: pre;
+}
+pre code { background: transparent; color: inherit; padding: 0; }
+
+/* ── Sidebar — emoji icons get a tiny opacity boost on hover + alignment ── */
+.sidebar-item {
+  font-variant-numeric: tabular-nums;
+}
+.sidebar-item > span:first-child {
+  width: 22px; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 13px; opacity: 0.75; transition: opacity 0.2s var(--ease), transform 0.2s var(--ease);
+}
+.sidebar-item:hover > span:first-child { opacity: 1; transform: scale(1.08); }
+.sidebar-item.active > span:first-child,
+.sidebar-item.active-gold > span:first-child { opacity: 1; }
+
+/* ── Responsive refinement ────────────────────────────────────── */
+
+/* Desktop wide (1440+) — breathing room */
+@media (min-width: 1440px) {
+  .content-area { padding: 36px 44px; max-width: 1680px; margin: 0 auto; }
+  .grid { gap: 18px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+}
+
+/* Tablet (768–1024) — refine from previous block */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .content-area { padding: 22px 24px; }
+  .card { padding: 18px; }
+  .card .value { font-size: 22px; }
+  .page-title { font-size: 19px; }
+}
+
+/* Phone (<640) — bigger tap targets, lighter padding, better scroll feel */
+@media (max-width: 640px) {
+  /* Cards sit right against the edge on tiny screens for immersion */
+  .content-area { padding: 14px 12px 24px; }
+  .card { padding: 16px 14px; border-radius: var(--r-md); }
+  .card .value { font-size: 22px; }
+  .topbar { padding: 0 14px; height: 54px; gap: 10px; }
+  .topbar-user { gap: 8px; font-size: 11px; }
+  .topbar-user .logout-btn { padding: 6px 10px; }
+  .status-pill { padding: 4px 10px 4px 8px; font-size: 10px; }
+  .status-pill .dot { width: 6px; height: 6px; }
+  /* Larger tap target for buttons */
+  .btn, .tab { min-height: 36px; padding: 8px 14px; }
+  /* Modal: full-width on tiny screens */
+  .modal-backdrop > div:not(.login-core) { min-width: 92vw !important; max-width: 96vw !important; }
+  /* Drawer: larger handle, smoother slide */
+  .sidebar.mobile-open {
+    animation: slideIn 0.25s var(--ease-out);
+  }
+  @keyframes slideIn { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+}
+
+/* Tiny phones (<400) — already had padding 10px, tune a bit more */
+@media (max-width: 400px) {
+  .content-area { padding: 12px 10px 22px; }
+  .card { padding: 14px 12px; }
+  .card .label { font-size: 9.5px; letter-spacing: 0.6px; }
+  .card .value { font-size: 20px; }
+  .page-title { font-size: 17px; margin-bottom: 14px; padding-bottom: 12px; }
+  .login-box {
+    width: 94%; padding: 28px 22px 32px;
+    border-radius: var(--r-lg);
+  }
+  .login-box .brand { margin-bottom: 20px; gap: 10px; }
+  .login-box .brand-logo { width: 46px; height: 46px; font-size: 17px; }
+  .login-box h1 { font-size: 20px; }
+  .login-box input, .login-box button { padding: 11px 14px; font-size: 13px; }
+  /* Reactor rings smaller on tiny phones so they don't clip */
+  .login-page::before { width: 540px; height: 540px; }
+  .login-page::after { width: 340px; height: 340px; }
+  .login-core { width: 180px; height: 180px; }
+}
+
+/* Mobile drawer overlay — smoother fade */
+.mobile-overlay {
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  background: rgba(3,4,10,0.72);
+}
+
+/* Reduce motion — respect OS preference */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+  .login-page::before, .login-page::after, .login-core { animation: none !important; }
+}
 
 /* Responsive — global guards */
 /* Prevent any wide child from forcing the whole page to scroll horizontally.

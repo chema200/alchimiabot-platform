@@ -972,6 +972,17 @@ def create_app(
 
         @app.get("/", response_class=FileResponse)
         async def serve_index():
-            return FileResponse(str(_static / "index.html"), media_type="text/html")
+            # Force the browser to re-validate the HTML on every load.
+            # Without this, iOS Safari (including private tabs) and some
+            # Android browsers apply heuristic caching and serve stale
+            # HTML for hours after a deploy — users see the "old" UI and
+            # assume the deploy didn't land. The HTML is ~200 KB so there
+            # is no bandwidth cost to always revalidating; static assets
+            # under /static/ keep their regular caching.
+            return FileResponse(
+                str(_static / "index.html"),
+                media_type="text/html",
+                headers={"Cache-Control": "no-cache, must-revalidate"},
+            )
 
     return app
