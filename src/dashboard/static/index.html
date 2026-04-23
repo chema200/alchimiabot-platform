@@ -348,6 +348,111 @@ td { vertical-align: top; }
 /* Hidden helpers */
 .header { display: none; }
 .tabs { display: none; }
+
+/* ── Help Tab ── */
+.help-layout { display: grid; grid-template-columns: 240px 1fr; gap: 24px; align-items: flex-start; }
+@media (max-width: 900px) { .help-layout { grid-template-columns: 1fr; } }
+.help-sidenav { position: sticky; top: 16px; max-height: calc(100vh - 60px); overflow-y: auto;
+  background: rgba(15,15,26,0.6); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; padding: 14px 10px; }
+@media (max-width: 900px) { .help-sidenav { position: static; max-height: none; } }
+.help-sidenav .group-label { font-size: 10px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase;
+  padding: 12px 10px 6px; color: rgba(255,255,255,0.5); }
+.help-sidenav .nav-item { display: flex; gap: 8px; align-items: center; padding: 7px 10px; border-radius: 8px;
+  font-size: 12px; color: rgba(255,255,255,0.55); cursor: pointer; transition: all 0.15s; }
+.help-sidenav .nav-item:hover { background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.85); }
+.help-sidenav .nav-item.active { background: rgba(59,130,246,0.12); color: #93c5fd; border-left: 2px solid #3b82f6; padding-left: 8px; }
+.help-sidenav .nav-item .ic { width: 14px; text-align: center; font-size: 11px; opacity: 0.7; }
+
+.help-content { min-width: 0; }
+.help-hero { background: linear-gradient(135deg, rgba(59,130,246,0.08), rgba(139,92,246,0.08));
+  border: 1px solid rgba(139,92,246,0.15); border-radius: 14px; padding: 22px 24px; margin-bottom: 20px; }
+.help-hero h1 { font-size: 22px; font-weight: 700; margin-bottom: 6px; letter-spacing: -0.4px; }
+.help-hero .tagline { font-size: 13px; color: rgba(255,255,255,0.55); line-height: 1.55; }
+.help-hero .badges { display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap; }
+
+.help-section { background: rgba(15,15,26,0.5); border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 12px; padding: 18px 20px; margin-bottom: 14px; }
+.help-section > h3 { font-size: 13px; font-weight: 700; color: #e0e0e8; margin-bottom: 10px;
+  display: flex; gap: 8px; align-items: center; letter-spacing: 0.2px; }
+.help-section > h3 .hbadge { font-size: 9px; padding: 2px 8px; border-radius: 999px;
+  background: rgba(59,130,246,0.15); color: #93c5fd; font-weight: 600; letter-spacing: 0.3px; }
+.help-section p { font-size: 12.5px; color: rgba(255,255,255,0.7); line-height: 1.65; margin-bottom: 8px; }
+.help-section p:last-child { margin-bottom: 0; }
+.help-section ol, .help-section ul { font-size: 12.5px; color: rgba(255,255,255,0.7);
+  line-height: 1.75; padding-left: 22px; margin-bottom: 4px; }
+.help-section ol li, .help-section ul li { margin-bottom: 4px; }
+.help-section code { background: rgba(255,255,255,0.06); padding: 1px 6px; border-radius: 4px;
+  font-family: 'SF Mono', 'Fira Code', monospace; font-size: 11px; color: #fbbf24; }
+.help-section strong { color: #e0e0e8; }
+
+.help-sql { background: #0a0a12; border: 1px solid rgba(255,255,255,0.06); border-radius: 8px;
+  padding: 14px 16px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 11.5px;
+  line-height: 1.6; overflow-x: auto; color: #d4d4d8; white-space: pre; }
+.help-sql .kw { color: #c084fc; font-weight: 600; }
+.help-sql .fn { color: #7dd3fc; }
+.help-sql .str { color: #fbbf24; }
+.help-sql .num { color: #86efac; }
+.help-sql .cm { color: #6b7280; font-style: italic; }
+
+.help-img-wrap { margin: 6px 0 10px; border-radius: 10px; overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.08); background: #0a0a12; }
+.help-img-wrap img { display: block; width: 100%; height: auto; }
+.help-img-wrap .caption { font-size: 11px; color: rgba(255,255,255,0.4);
+  padding: 8px 12px; background: rgba(0,0,0,0.35); border-top: 1px solid rgba(255,255,255,0.04); }
+.help-img-placeholder { display: flex; flex-direction: column; justify-content: center; align-items: center;
+  min-height: 180px; padding: 24px; background: repeating-linear-gradient(45deg, rgba(139,92,246,0.04), rgba(139,92,246,0.04) 10px, transparent 10px, transparent 20px);
+  color: rgba(255,255,255,0.4); text-align: center; font-size: 12px; }
+.help-img-placeholder .icon { font-size: 28px; margin-bottom: 8px; opacity: 0.55; }
+.help-img-placeholder .pname { font-family: 'SF Mono', 'Fira Code', monospace;
+  color: rgba(139,92,246,0.7); font-size: 11px; margin-top: 6px; }
+
+.help-callout { border-left: 3px solid #3b82f6; background: rgba(59,130,246,0.05);
+  padding: 12px 16px; border-radius: 6px; margin: 10px 0; font-size: 12px; color: rgba(255,255,255,0.75); }
+.help-callout.warn { border-left-color: #f97316; background: rgba(249,115,22,0.05); }
+.help-callout.danger { border-left-color: #ef4444; background: rgba(239,68,68,0.05); }
+.help-callout.ok { border-left-color: #22c55e; background: rgba(34,197,94,0.05); }
+.help-callout strong { display: block; margin-bottom: 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; }
+.help-callout.warn strong { color: #fb923c; }
+.help-callout.danger strong { color: #f87171; }
+.help-callout.ok strong { color: #4ade80; }
+.help-callout strong:first-child { color: #93c5fd; }
+
+.help-kv { display: grid; grid-template-columns: 180px 1fr; gap: 6px 14px; font-size: 12px;
+  margin: 6px 0; }
+.help-kv dt { color: rgba(255,255,255,0.45); font-weight: 500; }
+.help-kv dd { color: rgba(255,255,255,0.82); margin: 0; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 11.5px; }
+
+.help-diagram { background: #0a0a12; border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 10px; padding: 18px; margin: 10px 0; overflow-x: auto; }
+
+.help-flow { display: flex; gap: 8px; align-items: stretch; justify-content: flex-start; flex-wrap: wrap; }
+.help-flow .step { flex: 1; min-width: 140px; padding: 12px 14px; background: rgba(59,130,246,0.06);
+  border: 1px solid rgba(59,130,246,0.2); border-radius: 10px; font-size: 11.5px; position: relative; }
+.help-flow .step .step-num { position: absolute; top: -8px; left: 10px; font-size: 9px; font-weight: 700;
+  background: #3b82f6; color: white; padding: 2px 7px; border-radius: 999px; letter-spacing: 0.3px; }
+.help-flow .step .step-title { font-weight: 700; color: #93c5fd; font-size: 11.5px; margin-bottom: 4px; }
+.help-flow .step .step-desc { color: rgba(255,255,255,0.6); font-size: 11px; line-height: 1.45; }
+.help-flow .arrow { display: flex; align-items: center; color: rgba(255,255,255,0.25); font-size: 18px; }
+@media (max-width: 760px) { .help-flow .arrow { transform: rotate(90deg); width: 100%; text-align: center; } }
+
+.help-crosslinks { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.help-crosslink { font-size: 11px; padding: 4px 10px; border-radius: 999px; cursor: pointer;
+  background: rgba(139,92,246,0.1); color: #c4b5fd; border: 1px solid rgba(139,92,246,0.2); transition: all 0.15s; }
+.help-crosslink:hover { background: rgba(139,92,246,0.2); color: white; }
+
+.help-layer-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 8px 0; }
+.help-layer { padding: 14px 16px; border-radius: 10px; border: 1px solid; }
+.help-layer.ops { background: rgba(59,130,246,0.06); border-color: rgba(59,130,246,0.25); }
+.help-layer.res { background: rgba(168,85,247,0.06); border-color: rgba(168,85,247,0.25); }
+.help-layer.gov { background: rgba(34,197,94,0.06); border-color: rgba(34,197,94,0.25); }
+.help-layer.val { background: rgba(234,179,8,0.06); border-color: rgba(234,179,8,0.25); }
+.help-layer .lh { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px; }
+.help-layer.ops .lh { color: #60a5fa; }
+.help-layer.res .lh { color: #c084fc; }
+.help-layer.gov .lh { color: #4ade80; }
+.help-layer.val .lh { color: #facc15; }
+.help-layer .lq { font-size: 12px; color: rgba(255,255,255,0.85); font-weight: 600; margin-bottom: 2px; }
+.help-layer .ld { font-size: 11px; color: rgba(255,255,255,0.55); line-height: 1.5; }
   </style>
 </head>
 <body>
@@ -2760,6 +2865,52 @@ const SHADOW_TEMPLATES = [
     apply: (f) => ({ ...f, name: f.name || "tp-wider", tpPct: "1.2" }) },
 ];
 
+/**
+ * Reusable in-app modal. Matches the dark theme of the rest of the
+ * dashboard — no native window.alert/confirm. Click backdrop or
+ * the × button to cancel; `onConfirm` fires only when the user
+ * hits the primary action.
+ */
+function Modal({ open, title, children, onCancel, onConfirm, confirmLabel, confirmStyle, cancelLabel, busy }) {
+  if (!open) return null;
+  const pConfirmLabel = confirmLabel || "Confirmar";
+  const pCancelLabel  = cancelLabel  || "Cancelar";
+  const confirmBg = confirmStyle === "danger" ? "#b91c1c" : confirmStyle === "primary" ? "#3b82f6" : "#3b82f6";
+  return (
+    <div onClick={onCancel}
+      style={{position:"fixed", inset:0, background:"rgba(3,4,10,0.78)", zIndex:1000,
+              display:"flex", alignItems:"center", justifyContent:"center", backdropFilter:"blur(3px)"}}>
+      <div onClick={e => e.stopPropagation()}
+        style={{background:"#0d0d17", border:"1px solid #2a2a40", borderRadius:10, minWidth:420, maxWidth:620,
+                maxHeight:"85vh", overflowY:"auto", boxShadow:"0 20px 60px rgba(0,0,0,0.6)"}}>
+        <div style={{display:"flex", alignItems:"center", justifyContent:"space-between",
+                     padding:"12px 16px", borderBottom:"1px solid #1f1f30"}}>
+          <div style={{fontSize:13, fontWeight:600, color:"#e0e0e8"}}>{title}</div>
+          <button onClick={onCancel} disabled={busy} aria-label="cerrar"
+            style={{background:"transparent", border:"none", color:"#888", cursor:"pointer", fontSize:18, lineHeight:1}}>×</button>
+        </div>
+        <div style={{padding:"14px 16px", fontSize:12, color:"#ccc", lineHeight:1.5}}>{children}</div>
+        <div style={{display:"flex", justifyContent:"flex-end", gap:8,
+                     padding:"10px 16px", borderTop:"1px solid #1f1f30"}}>
+          <button onClick={onCancel} disabled={busy}
+            style={{padding:"6px 14px", fontSize:11, background:"#1a1a2e", border:"1px solid #333",
+                    borderRadius:5, color:"#ccc", cursor: busy ? "not-allowed" : "pointer"}}>
+            {pCancelLabel}
+          </button>
+          {onConfirm && (
+            <button onClick={onConfirm} disabled={busy}
+              style={{padding:"6px 16px", fontSize:11, background: busy ? "#333" : confirmBg,
+                      border:"none", borderRadius:5, color:"white", fontWeight:600,
+                      cursor: busy ? "not-allowed" : "pointer"}}>
+              {busy ? "..." : pConfirmLabel}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ShadowModeTab() {
   const [variants, setVariants] = useState([]);
   const [evaluations, setEvaluations] = useState([]);
@@ -2774,6 +2925,24 @@ function ShadowModeTab() {
 
   const [form, setForm] = useState(EMPTY_FORM());
   const [submitMsg, setSubmitMsg] = useState("");
+  // null = creating a new variant; string = editing an existing variant
+  // (holds the ORIGINAL name so the PUT proxy can find the row even if
+  // the user types a different name into form.name to trigger a rename).
+  const [editingName, setEditingName] = useState(null);
+
+  // Delete confirmation modal state. Fetches associated counts lazily
+  // when opened so the user sees exactly what will be wiped.
+  const [deleteModal, setDeleteModal] = useState(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+
+  // Lightweight info toast, shown after destructive actions with a summary
+  // of what happened. Auto-dismisses after 4s.
+  const [flash, setFlash] = useState(null);
+  useEffect(() => {
+    if (!flash) return;
+    const t = setTimeout(() => setFlash(null), 4000);
+    return () => clearTimeout(t);
+  }, [flash]);
 
   const refresh = useCallback(async () => {
     setLoading(true); setErr(null);
@@ -2834,12 +3003,12 @@ function ShadowModeTab() {
 
   const submitVariant = async () => {
     setSubmitMsg("");
-    if (!form.name.trim()) { setSubmitMsg("✗ Falta nombre"); return; }
+    const newName = form.name.trim();
+    if (!newName) { setSubmitMsg("✗ Falta nombre"); return; }
     if (!hasAnyFilter())   { setSubmitMsg("✗ Activa al menos un filtro o un override"); return; }
     try {
       const coinList = form.coins.split(",").map(s => s.trim().toUpperCase()).filter(Boolean);
-      const body = {
-        name: form.name.trim(),
+      const base = {
         blockLateEntryRisks: form.lateRisks,
         blockQualityLabels:  form.labels,
         blockSides:          form.sides,
@@ -2854,15 +3023,27 @@ function ShadowModeTab() {
         tpPctOverride:           form.tpPct.toString().trim() === ""    ? null : Number(form.tpPct),
         maxHoldMinutesOverride:  form.maxHold.toString().trim() === ""  ? null : Math.trunc(Number(form.maxHold))
       };
-      const r = await fetch(API + "/api/shadow/variants", {
-        method: "POST", credentials: "include",
+      let url, method, body;
+      if (editingName) {
+        // PUT to the original name; send newName only if the user actually renamed.
+        url = API + "/api/shadow/variants/" + encodeURIComponent(editingName);
+        method = "PUT";
+        body = { ...base, newName: newName };
+      } else {
+        url = API + "/api/shadow/variants";
+        method = "POST";
+        body = { ...base, name: newName };
+      }
+      const r = await fetch(url, {
+        method, credentials: "include",
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify(body)
       });
       const data = await r.json();
       if (data.success) {
-        setSubmitMsg("✓ Variante guardada");
+        setSubmitMsg(editingName ? "✓ Variante actualizada" : "✓ Variante guardada");
         setForm(EMPTY_FORM());
+        setEditingName(null);
         refresh();
       } else {
         setSubmitMsg("✗ " + (data.error || "error"));
@@ -2870,12 +3051,82 @@ function ShadowModeTab() {
     } catch (e) { setSubmitMsg("✗ " + e.message); }
   };
 
-  const unregisterVariant = async (name) => {
-    if (!window.confirm("Quitar variante \"" + name + "\"?")) return;
-    await fetch(API + "/api/shadow/variants/" + encodeURIComponent(name), {
-      method: "DELETE", credentials: "include"
+  const editVariant = (v) => {
+    // Hydrate the form from the selected variant so the user sees all
+    // current values and only changes what they want. Works for any of
+    // the 12 fields including rename.
+    setForm({
+      name:           v.name || "",
+      lateRisks:      Array.from(v.blockLateEntryRisks || []),
+      labels:         Array.from(v.blockQualityLabels  || []),
+      sides:          Array.from(v.blockSides          || []),
+      modes:          Array.from(v.blockModes          || []),
+      coins:          Array.from(v.blockCoins          || []).join(", "),
+      minScore:       String(v.minScoreOverride       ?? 0),
+      collateral:     String(v.collateralOverrideUsd  ?? 0),
+      blockExhausted: !!v.blockImpulseExhausted,
+      roiTable:       v.roiTableOverride || "",
+      slPct:          v.slPctOverride != null ? String(v.slPctOverride) : "",
+      tpPct:          v.tpPctOverride != null ? String(v.tpPctOverride) : "",
+      maxHold:        v.maxHoldMinutesOverride != null ? String(v.maxHoldMinutesOverride) : "",
     });
-    refresh();
+    setEditingName(v.name);
+    setSubmitMsg("");
+    // Scroll the form into view so the user sees their fields populated.
+    setTimeout(() => {
+      const el = document.getElementById("shadow-variant-form");
+      if (el) el.scrollIntoView({behavior:"smooth", block:"start"});
+    }, 50);
+  };
+
+  const cancelEdit = () => {
+    setForm(EMPTY_FORM());
+    setEditingName(null);
+    setSubmitMsg("");
+  };
+
+  /**
+   * Opens the delete modal and, in parallel, fetches the exact counts of
+   * hl_shadow_evaluations + hl_shadow_exits rows that would be cascade-
+   * deleted so the user sees what they are about to wipe.
+   */
+  const openDeleteModal = async (name) => {
+    setDeleteModal({ name, evaluations: null, exits: null, loading: true });
+    try {
+      const r = await fetch(API + "/api/shadow/variants/" + encodeURIComponent(name) + "/associated",
+                            {credentials:"include"});
+      if (r.ok) {
+        const d = await r.json();
+        setDeleteModal(m => m && m.name === name ? { ...m, evaluations: d.evaluations ?? 0, exits: d.exits ?? 0, loading: false } : m);
+      } else {
+        setDeleteModal(m => m && m.name === name ? { ...m, loading: false } : m);
+      }
+    } catch {
+      setDeleteModal(m => m && m.name === name ? { ...m, loading: false } : m);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteModal) return;
+    setDeleteBusy(true);
+    try {
+      const r = await fetch(API + "/api/shadow/variants/" + encodeURIComponent(deleteModal.name),
+                            { method: "DELETE", credentials: "include" });
+      const d = await r.json();
+      if (d.success) {
+        setFlash({
+          kind: "success",
+          msg: `Variante "${deleteModal.name}" borrada. Limpiadas ${d.deletedEvaluations ?? 0} evaluaciones y ${d.deletedExits ?? 0} salidas.`
+        });
+      } else {
+        setFlash({ kind: "error", msg: "No se pudo borrar: " + (d.error || "variante no existe") });
+      }
+      setDeleteModal(null);
+      refresh();
+    } catch (e) {
+      setFlash({ kind: "error", msg: "Error de red al borrar: " + (e.message || e) });
+    }
+    setDeleteBusy(false);
   };
 
   const Chip = ({ active, onClick, children, title }) => (
@@ -2937,8 +3188,15 @@ function ShadowModeTab() {
                   <td style={{color:"#aaa"}}>{v.collateralOverrideUsd > 0 ? ("$" + v.collateralOverrideUsd) : <span style={{color:"#555"}}>prod</span>}</td>
                   <td style={{color: v.blockImpulseExhausted ? "#f59e0b" : "#555"}}>{v.blockImpulseExhausted ? "ON" : "off"}</td>
                   <td style={{color:"#22d3ee", fontSize:10}}>{exitChips.length > 0 ? exitChips.join(" · ") : <span style={{color:"#555"}}>—</span>}</td>
-                  <td style={{textAlign:"right"}}>
-                    <button onClick={() => unregisterVariant(v.name)} style={{padding:"3px 10px", fontSize:10, background:"#1a1a2e", border:"1px solid #444", borderRadius:4, color:"#ef4444", cursor:"pointer"}}>Quitar</button>
+                  <td style={{textAlign:"right", whiteSpace:"nowrap"}}>
+                    <button onClick={() => editVariant(v)}
+                      style={{padding:"3px 10px", fontSize:10, background:"#1a1a2e", border:"1px solid #444", borderRadius:4, color:"#3b82f6", cursor:"pointer", marginRight:6}}>
+                      Editar
+                    </button>
+                    <button onClick={() => openDeleteModal(v.name)}
+                      style={{padding:"3px 10px", fontSize:10, background:"#1a1a2e", border:"1px solid #444", borderRadius:4, color:"#ef4444", cursor:"pointer"}}>
+                      Quitar
+                    </button>
                   </td>
                 </tr>
               );
@@ -2965,8 +3223,11 @@ function ShadowModeTab() {
     </div>
 
     {/* ── New variant form ── */}
-    <h3 className="section-title">Nueva variante <Tip text="Si el nombre coincide con una existente se reemplaza. Al menos UN filtro o un override debe estar activo para guardar." /></h3>
-    <div className="card" style={{marginBottom:12, padding:12}}>
+    <h3 className="section-title" id="shadow-variant-form">
+      {editingName ? <>Editando variante <span style={{color:"#3b82f6"}}>"{editingName}"</span></> : "Nueva variante"}
+      <Tip text="Al menos UN filtro o un override debe estar activo para guardar. Cambiar el nombre al editar una variante renombra la variante y toda su historial asociada (evaluaciones + salidas simuladas)." />
+    </h3>
+    <div className="card" style={{marginBottom:12, padding:12, borderColor: editingName ? "#3b82f6" : undefined}}>
 
       {/* Nombre */}
       <label style={{fontSize:10, color:"#888", display:"block", marginBottom:10}}>Nombre (unico)
@@ -3076,12 +3337,19 @@ function ShadowModeTab() {
       <div style={{display:"flex", alignItems:"center", gap:12}}>
         <button onClick={submitVariant} disabled={!form.name.trim() || !hasAnyFilter()}
           style={{padding:"7px 18px", fontSize:12, background: (form.name.trim() && hasAnyFilter()) ? "#3b82f6" : "#222", border:"none", borderRadius:4, color:"white", cursor: (form.name.trim() && hasAnyFilter()) ? "pointer" : "not-allowed", fontWeight:600}}>
-          Guardar variante
+          {editingName ? "Guardar cambios" : "Guardar variante"}
         </button>
-        <button type="button" onClick={() => { setForm(EMPTY_FORM()); setSubmitMsg(""); }}
-          style={{padding:"7px 14px", fontSize:11, background:"#1a1a2e", border:"1px solid #333", borderRadius:4, color:"#888", cursor:"pointer"}}>
-          Limpiar
-        </button>
+        {editingName ? (
+          <button type="button" onClick={cancelEdit}
+            style={{padding:"7px 14px", fontSize:11, background:"#1a1a2e", border:"1px solid #333", borderRadius:4, color:"#888", cursor:"pointer"}}>
+            Cancelar edición
+          </button>
+        ) : (
+          <button type="button" onClick={() => { setForm(EMPTY_FORM()); setSubmitMsg(""); }}
+            style={{padding:"7px 14px", fontSize:11, background:"#1a1a2e", border:"1px solid #333", borderRadius:4, color:"#888", cursor:"pointer"}}>
+            Limpiar
+          </button>
+        )}
         {submitMsg && <span style={{fontSize:11, color: submitMsg.startsWith("✓") ? "#22c55e" : "#ef4444"}}>{submitMsg}</span>}
       </div>
     </div>
@@ -3290,143 +3558,1408 @@ function ShadowModeTab() {
         </div>
       )}
     </div>
+
+    {/* ── In-app flash toast (replaces native alert) ────────────────── */}
+    {flash && (
+      <div style={{
+        position:"fixed", bottom:20, right:20, zIndex:999, minWidth:320, maxWidth:480,
+        padding:"12px 16px", borderRadius:8,
+        background: flash.kind === "success" ? "#052e16" : "#2a1010",
+        border: "1px solid " + (flash.kind === "success" ? "#22c55e" : "#ef4444"),
+        color: flash.kind === "success" ? "#86efac" : "#fca5a5",
+        fontSize:12, boxShadow:"0 10px 30px rgba(0,0,0,0.4)"
+      }}>
+        <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", gap:10}}>
+          <div>{flash.msg}</div>
+          <button onClick={() => setFlash(null)}
+            style={{background:"transparent", border:"none", color:"inherit", cursor:"pointer", opacity:0.7}}>×</button>
+        </div>
+      </div>
+    )}
+
+    {/* ── Delete confirmation modal ────────────────────────────────── */}
+    <Modal
+      open={!!deleteModal}
+      title="Borrar variante"
+      busy={deleteBusy}
+      confirmStyle="danger"
+      confirmLabel="Borrar todo"
+      onCancel={() => deleteBusy ? null : setDeleteModal(null)}
+      onConfirm={confirmDelete}>
+      {deleteModal && (
+        <>
+          <p style={{marginBottom:10}}>
+            Vas a borrar la variante <b style={{color:"#e0e0e8"}}>"{deleteModal.name}"</b> y
+            todos sus datos asociados:
+          </p>
+          {deleteModal.loading ? (
+            <p style={{color:"#666", fontStyle:"italic"}}>Contando filas a limpiar…</p>
+          ) : (
+            <ul style={{paddingLeft:20, marginBottom:10, color:"#ccc"}}>
+              <li><b style={{color:"#f59e0b"}}>{deleteModal.evaluations ?? "?"}</b> evaluaciones de entrada (<code>hl_shadow_evaluations</code>)</li>
+              <li><b style={{color:"#f59e0b"}}>{deleteModal.exits ?? "?"}</b> salidas simuladas (<code>hl_shadow_exits</code>)</li>
+            </ul>
+          )}
+          <p style={{color:"#f59e0b", fontSize:11}}>
+            ⚠ Esta acción no se puede deshacer. Si solo quieres cambiar nombre o valores, usa <b>Editar</b>
+            — el historial se conserva.
+          </p>
+        </>
+      )}
+    </Modal>
   </>);
 }
 
-// ── App ──
-// ── Help Tab ──
-function HelpTab() {
-  const sections = [
-    {
-      title: "OPERATIONS — Estado del sistema en tiempo real",
-      color: "#3b82f6",
-      items: [
-        { tab: "Bot Live", desc: "PnL en vivo, trades recientes, senales ENTER/SKIP/BLOCKED del bot. Responde: como va el bot ahora mismo?" },
-        { tab: "Trades", desc: "Historial completo de trades. Click en cualquiera para ver detalle: veredicto (GOOD/ACCEPTABLE/BAD/TERRIBLE), timeline de snapshots (SL, precio, HWM), sugerencias de mejora, y counterfactual (que habria pasado con SL mas ancho, TP mas corto). Boton de limpiar snapshots antiguos." },
-        { tab: "Daily Report", desc: "Informe diario automatico con 12 secciones: general, sistema, integracion, PnL, senales, features, storage, trading analysis, problemas. Compara dias entre si." },
-        { tab: "System", desc: "Salud tecnica: disco (uso, crecimiento, dias restantes), CPU, RAM, estado WS, estado DB." },
-        { tab: "Capture", desc: "Volumen de captura: eventos ingestados, archivos parquet, coins trackeados, computes de features." },
-      ]
-    },
-    {
-      title: "RESEARCH — Analisis cuantitativo",
-      color: "#a855f7",
-      items: [
-        { tab: "Research Lab", desc: "Cerebro de research. 5 vistas: Overview (KPIs + decisions), Metrics (breakdowns por coin/side/score/exit/mode), Analysis (score effectiveness, micro value, fee impact, holding time), Experiments (simular configs alternativas), Decisions (sugerencias automaticas con evidencia)." },
-        { tab: "Validation", desc: "Proceso formal de cambio. Ejecuta 3 batches de experimentos (score threshold, trailing, SL/fees) contra datos reales. Cada uno con verdict: ADOPT / TEST_LIVE / REJECT / INCONCLUSIVE. Sugiere combinacion optima." },
-        { tab: "Reports", desc: "Informes operativos: WR por coin/side/hora, PnL por mode/tag/reason, fee analysis, poison coins, rescuable coins, signal blocked vs entered, daily summary." },
-        { tab: "Features", desc: "Las 48 features en vivo por coin: momentum, volatilidad, tendencia, microestructura, temporales. Selector de coin con tabla de valores." },
-      ]
-    },
-    {
-      title: "GOVERNANCE — Calidad y contratos",
-      color: "#22c55e",
-      items: [
-        { tab: "Audit", desc: "Sistema de auditorias automaticas: 4 checks (integration cada 5m, data_quality cada 15m, storage cada 1h, consistency cada 6h). Health score 0-100, findings activos, historial de runs." },
-        { tab: "Contract", desc: "Contrato formal de features: las 48 features definidas con nombre, version, grupo, fuente, ventana temporal. Garantiza que live = replay = training." },
-      ]
-    },
-  ];
+// ── Help Tab ──────────────────────────────────────────────────────────
+// Trader-oriented guide. No SQL, no DB. Focus on what you see on each
+// panel, what it means, and what decisions it helps you take.
 
-  return (<>
-    <div className="page-title">Ayuda<div className="page-sub">Guia completa del sistema, arquitectura y proceso de mejora</div></div>
-    <div style={{marginBottom:24}}>
-      <h2 style={{fontSize:18, fontWeight:700, marginBottom:8}}>Alchimia Platform — Guia</h2>
-      <p style={{fontSize:12, color:"#888", lineHeight:1.6}}>
-        Esta plataforma tiene 3 capas separadas con funciones distintas.
-        Cada pestana responde a una pregunta concreta. Si no sabes donde mirar, usa esta guia.
-      </p>
+function HelpImg({ src, caption, description }) {
+  const [failed, setFailed] = useState(false);
+  const filename = src ? src.split("/").pop() : "sin nombre";
+  if (!src || failed) {
+    return (
+      <div className="help-img-wrap">
+        <div className="help-img-placeholder">
+          <div className="icon">📷</div>
+          <div>Captura pendiente</div>
+          <div className="pname">{filename}</div>
+          {description && <div style={{marginTop:10, fontSize:11, color:"rgba(255,255,255,0.5)", maxWidth:380}}>{description}</div>}
+        </div>
+        {caption && <div className="caption">{caption}</div>}
+      </div>
+    );
+  }
+  return (
+    <div className="help-img-wrap">
+      <img src={src} alt={caption || ""} onError={() => setFailed(true)} loading="lazy" />
+      {caption && <div className="caption">{caption}</div>}
     </div>
+  );
+}
 
-    <div style={{padding:"12px 16px", background:"#0f0f1a", border:"1px solid #1a1a2e", borderRadius:10, marginBottom:16}}>
-      <h3 style={{fontSize:13, fontWeight:700, color:"#e0e0e8", marginBottom:8}}>Regla clave</h3>
-      <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, fontSize:11}}>
-        <div><span style={{color:"#3b82f6"}}>Operations</span> = como va el sistema ahora?</div>
-        <div><span style={{color:"#a855f7"}}>Research</span> = que podemos mejorar?</div>
-        <div><span style={{color:"#22c55e"}}>Governance</span> = los datos son fiables?</div>
-        <div><span style={{color:"#eab308"}}>Validation</span> = este cambio merece ir a live?</div>
+function HelpCaptures({ entries }) {
+  if (!entries || entries.length === 0) return null;
+  return (
+    <div className="help-section">
+      <h3>📷 Capturas de ejemplo</h3>
+      {entries.map((e, i) => (
+        <HelpImg key={i} src={e.src} caption={e.caption} description={e.description} />
+      ))}
+    </div>
+  );
+}
+
+function HelpCallout({ tone, title, children }) {
+  return (
+    <div className={"help-callout " + (tone || "")}>
+      {title && <strong>{title}</strong>}
+      {children}
+    </div>
+  );
+}
+
+function HelpLayerGrid() {
+  return (
+    <div className="help-layer-grid">
+      <div className="help-layer ops">
+        <div className="lh">Operations</div>
+        <div className="lq">¿Cómo va el bot ahora?</div>
+        <div className="ld">Conclusiones, Bot Live, Trades, Shadow Mode, Regímenes, Cambios, Daily Report, Sistema.</div>
+      </div>
+      <div className="help-layer res">
+        <div className="lh">Research</div>
+        <div className="lq">¿Qué podemos mejorar?</div>
+        <div className="ld">Research Lab, Reports, Features. Analiza lo que ya pasó para encontrar patrones.</div>
+      </div>
+      <div className="help-layer gov">
+        <div className="lh">Governance</div>
+        <div className="lq">¿Los datos son fiables?</div>
+        <div className="ld">Audit, Contrato. Controla la calidad de lo que lees en el resto de pestañas.</div>
+      </div>
+      <div className="help-layer val">
+        <div className="lh">Validation</div>
+        <div className="lq">¿Este cambio merece ir al bot?</div>
+        <div className="ld">Validation + Shadow Mode. Antes de tocar el bot live, se prueba aquí.</div>
       </div>
     </div>
+  );
+}
 
-    {sections.map((section, si) => (
-      <div key={si} style={{marginBottom:20}}>
-        <h3 style={{fontSize:13, fontWeight:700, color: section.color, marginBottom:10, textTransform:"uppercase", letterSpacing:0.5}}>{section.title}</h3>
-        {section.items.map((item, ii) => (
-          <div key={ii} className="card" style={{marginBottom:8, padding:"10px 14px"}}>
-            <div style={{display:"flex", gap:8, alignItems:"center", marginBottom:4}}>
-              <span style={{fontWeight:700, fontSize:12, color:"#e0e0e8"}}>{item.tab}</span>
+function HelpFlow({ steps }) {
+  return (
+    <div className="help-diagram">
+      <div className="help-flow">
+        {steps.map((s, i) => (
+          <React.Fragment key={i}>
+            <div className="step">
+              <div className="step-num">{i + 1}</div>
+              <div className="step-title">{s.title}</div>
+              <div className="step-desc">{s.desc}</div>
             </div>
-            <p style={{fontSize:11, color:"#888", lineHeight:1.5}}>{item.desc}</p>
-          </div>
+            {i < steps.length - 1 && <div className="arrow">→</div>}
+          </React.Fragment>
         ))}
       </div>
-    ))}
-
-    <div className="card" style={{marginTop:20, borderColor:"#333"}}>
-      <h3 style={{fontSize:13, fontWeight:700, color:"#e0e0e8", marginBottom:10}}>Arquitectura del sistema</h3>
-      <pre style={{fontSize:10, color:"#888", lineHeight:1.6, fontFamily:"monospace"}}>{`
-agentbot-live (Java)          agentbot-platform (Python)
-━━━━━━━━━━━━━━━━━              ━━━━━━━━━━━━━━━━━━━━━━━━━
-  Trading engine                 Ingestion (HL + Binance WS)
-  Signal detection        →      Storage (Parquet + PostgreSQL)
-  Risk management         →      Feature Store (48 features)
-  Position management     →      Regime Detection (5 regimes)
-  Telegram notifications         Audit System (4 checks)
-                                 Research Lab (metrics + analysis)
-  PlatformBridge ──POST──→       Validation Runner
-  (fire-and-forget)              Decision Engine
-                                 Daily Reports
-                                 Dashboard (este frontend)
-
-bot.alchimiabot.com             platform.alchimiabot.com
-api.alchimiabot.com
-      `}</pre>
     </div>
+  );
+}
 
-    <div className="card" style={{marginTop:12, borderColor:"#333"}}>
-      <h3 style={{fontSize:13, fontWeight:700, color:"#e0e0e8", marginBottom:10}}>Flujo de datos</h3>
-      <pre style={{fontSize:10, color:"#888", lineHeight:1.6, fontFamily:"monospace"}}>{`
-1. BOT LIVE ejecuta trades en Hyperliquid
-2. PlatformBridge envia cada trade y senal a platform (fire-and-forget)
-3. Platform guarda en PostgreSQL (trade_outcomes, signal_evaluations)
-4. Ingestion WS captura raw trades + L2 book → Parquet
-5. Feature Store computa 48 features cada 3s → snapshots cada 60s a DB
-6. Audit system valida integridad cada 5-60 min
-7. Research Lab analiza todo offline → genera insights y decisions
-8. Validation Runner prueba cambios antes de aplicarlos al bot
-
-Principio: el bot NUNCA depende de la platform.
-Si platform cae, el bot sigue operando normal.
-      `}</pre>
+function HelpRelated({ items, onGo }) {
+  if (!items || items.length === 0) return null;
+  return (
+    <div className="help-section">
+      <h3>🔗 Relacionado</h3>
+      <div className="help-crosslinks">
+        {items.map((it, i) => (
+          <span key={i} className="help-crosslink" onClick={() => onGo && onGo(it.id)}>{it.label}</span>
+        ))}
+      </div>
     </div>
+  );
+}
 
-    <div className="card" style={{marginTop:12, borderColor:"#333"}}>
-      <h3 style={{fontSize:13, fontWeight:700, color:"#e0e0e8", marginBottom:10}}>Proceso de mejora</h3>
-      <ol style={{fontSize:11, color:"#888", lineHeight:1.8, paddingLeft:20}}>
-        <li>Capturar datos (minimo 5-7 dias sin cambiar el bot)</li>
-        <li>Revisar Daily Report cada dia — detectar anomalias</li>
-        <li>Research Lab → entender que funciona y que no</li>
-        <li>Decision Engine → genera sugerencias automaticas</li>
-        <li>Validation → probar el cambio sugerido contra datos reales</li>
-        <li>Si verdict = ADOPT → aplicar al bot</li>
-        <li>Si verdict = TEST_LIVE → probar en shadow mode primero</li>
-        <li>Si verdict = REJECT → NO cambiar, buscar otra hipotesis</li>
-        <li>Repetir desde paso 1</li>
-      </ol>
-    </div>
+// ── Help content registry ──
+// Each key is a section id. Sections are trader-oriented: what you see,
+// what it means, how to use it daily, common mistakes. No SQL.
 
-    <div className="card" style={{marginTop:12, borderColor:"#ef4444"}}>
-      <h3 style={{fontSize:13, fontWeight:700, color:"#ef4444", marginBottom:10}}>Errores a evitar</h3>
-      <ul style={{fontSize:11, color:"#888", lineHeight:1.8, paddingLeft:20}}>
-        <li>Cambiar el bot cada dia → rompe el baseline, no puedes medir nada</li>
-        <li>Optimizar con pocos datos (menos de 50 trades) → sobreoptimizacion</li>
-        <li>Ignorar las fees → te parece q ganas pero pierdes por costes</li>
-        <li>Confiar en 1 dia → un dia no significa nada, necesitas tendencia</li>
-        <li>Mezclar cambios → si cambias 3 cosas a la vez, no sabes cual funciono</li>
-        <li>No usar Validation → cambiar "porque creo que mejora" sin datos</li>
-      </ul>
-    </div>
-  </>);
+const HELP_CONTENT = {
+  // ─── START ──────────────────────────────────────────────
+  intro: {
+    icon: "🚀",
+    title: "Visión general",
+    tagline: "Qué es Alchimia Platform y para qué sirve.",
+    badges: [{ label: "Empezar aquí", color: "#8b5cf6" }],
+    body: (
+      <>
+        <div className="help-section">
+          <h3>¿Qué es Alchimia Platform?</h3>
+          <p>Alchimia Platform es el <strong>centro de mando</strong> del bot de trading. El bot opera solo; la plataforma te permite <strong>ver cómo lo está haciendo, entender por qué gana o pierde, y decidir qué mejorar</strong> sin tocar nada en caliente.</p>
+          <p>La plataforma <strong>no ejecuta órdenes</strong>. Solo observa, mide y analiza. Si la plataforma se cae, el bot sigue operando. Si el bot se cae, la plataforma sigue mostrando lo que pasó.</p>
+        </div>
+
+        <div className="help-section">
+          <h3>Las 4 capas</h3>
+          <p>Para no saturarte con datos, la plataforma está dividida en 4 <strong>capas</strong>. Cada una responde a una pregunta distinta. Si no sabes dónde mirar, ésta es la guía rápida:</p>
+          <HelpLayerGrid />
+        </div>
+
+        <div className="help-section">
+          <h3>¿Por qué necesitas esta plataforma?</h3>
+          <ul>
+            <li><strong>Decidir con datos, no con sensaciones.</strong> Un trade malo no implica un bot malo; un día bueno tampoco implica un bot que funciona.</li>
+            <li><strong>Saber el origen de un problema.</strong> ¿El bot pierde por mala entrada, mal cierre, fees, mercado plano? Cada pestaña aísla una causa.</li>
+            <li><strong>Probar mejoras sin arriesgar capital.</strong> Shadow Mode simula cambios sobre trades reales en paralelo.</li>
+            <li><strong>Historial auditable.</strong> Cada cambio de config queda registrado con su impacto medido.</li>
+          </ul>
+        </div>
+
+        <HelpCallout tone="ok" title="Rutina mínima diaria (5 min)">
+          1) Abre <strong>Conclusiones</strong> — ¿edge positivo hoy? · 2) Abre <strong>Daily Report</strong> — ¿algún score por debajo de 70? · 3) Mira <strong>Audit</strong> — ¿health verde? Si los 3 salen bien, cierra y déjalo trabajar.
+        </HelpCallout>
+      </>
+    ),
+    related: [
+      { id: "arquitectura", label: "Arquitectura" },
+      { id: "flujo", label: "Flujo de datos" },
+      { id: "primeros-pasos", label: "Primeros pasos" },
+    ],
+  },
+
+  arquitectura: {
+    icon: "🏛️",
+    title: "Arquitectura",
+    tagline: "Cómo encajan el bot y la plataforma.",
+    body: (
+      <>
+        <div className="help-section">
+          <h3>Dos sistemas, una pareja</h3>
+          <p>El ecosistema tiene dos piezas vivas que se comunican en una sola dirección:</p>
+          <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginTop:10}}>
+            <div className="help-layer ops">
+              <div className="lh">Bot Live (Java)</div>
+              <div className="ld">Ejecuta trades en Hyperliquid. Señales, filtros, stop-loss, take-profit. No depende de la plataforma.</div>
+            </div>
+            <div className="help-layer res">
+              <div className="lh">Platform (Python)</div>
+              <div className="ld">Captura cada trade y señal del bot + datos de mercado. Analiza, compara, audita. No envía órdenes.</div>
+            </div>
+          </div>
+          <p style={{marginTop:12}}>El bot envía datos al platform por HTTP de forma <strong>fire-and-forget</strong>: si el platform no está, el bot no se bloquea.</p>
+        </div>
+
+        <div className="help-section">
+          <h3>Las 4 capas dentro de la plataforma</h3>
+          <HelpLayerGrid />
+        </div>
+
+        <div className="help-section">
+          <h3>Dominios</h3>
+          <dl className="help-kv">
+            <dt>Bot Live (trading real)</dt><dd>bot-v2.alchimiabot.com</dd>
+            <dt>API del bot</dt><dd>api-v2.alchimiabot.com</dd>
+            <dt>Plataforma (esta)</dt><dd>platform-v2.alchimiabot.com</dd>
+          </dl>
+        </div>
+      </>
+    ),
+    related: [
+      { id: "flujo", label: "Flujo de datos" },
+      { id: "intro", label: "Visión general" },
+    ],
+  },
+
+  flujo: {
+    icon: "🌊",
+    title: "Flujo de datos",
+    tagline: "Cómo pasa un trade desde Hyperliquid hasta tu pantalla.",
+    body: (
+      <>
+        <div className="help-section">
+          <h3>Recorrido de un trade</h3>
+          <HelpFlow steps={[
+            { title: "Señal", desc: "El bot detecta una oportunidad en Hyperliquid y la evalúa contra sus filtros." },
+            { title: "Entrada", desc: "Si pasa los filtros, entra. La plataforma recibe la entrada al instante." },
+            { title: "Monitoreo", desc: "Cada 30s la plataforma guarda un snapshot: precio, PnL, distancia a SL/TP." },
+            { title: "Salida", desc: "Stop-loss, take-profit o cierre manual. Se calcula el PnL neto (con fees)." },
+            { title: "Análisis", desc: "La plataforma lo clasifica, mide el MFE, ubica el régimen de mercado." },
+            { title: "Visible", desc: "Aparece en Trades, cuenta en Conclusiones, alimenta al Research Lab." },
+          ]} />
+        </div>
+
+        <div className="help-section">
+          <h3>De dónde vienen los datos</h3>
+          <ul>
+            <li><strong>Del bot:</strong> cada trade ejecutado, cada señal (aunque no se haya operado), cambios de configuración, cambios de régimen.</li>
+            <li><strong>De Hyperliquid:</strong> libro de órdenes y trades crudos de 20 monedas, tiempo real.</li>
+            <li><strong>De Binance:</strong> contexto cruzado de 15 monedas para detectar tendencia global.</li>
+          </ul>
+        </div>
+
+        <HelpCallout title="Principio de oro">
+          <strong>El bot nunca depende de la plataforma.</strong> Si la plataforma se cae, el bot sigue operando normal. Solo pierdes visibilidad durante el corte.
+        </HelpCallout>
+      </>
+    ),
+    related: [
+      { id: "intro", label: "Visión general" },
+      { id: "arquitectura", label: "Arquitectura" },
+    ],
+  },
+
+  "primeros-pasos": {
+    icon: "🧭",
+    title: "Primeros pasos",
+    tagline: "Qué mirar hoy, esta semana, este mes.",
+    body: (
+      <>
+        <div className="help-section">
+          <h3>Día 1: familiarízate</h3>
+          <ol>
+            <li>Entra en <strong>Conclusiones</strong>. Aunque no entiendas todo, fija la atención en el <em>edge status</em>.</li>
+            <li>Entra en <strong>Daily Report</strong>. Es un informe de una página con las 12 secciones clave.</li>
+            <li>Entra en <strong>Audit</strong>. Verifica que el <em>health score</em> esté por encima de 80.</li>
+          </ol>
+        </div>
+
+        <div className="help-section">
+          <h3>Rutina diaria (5 min)</h3>
+          <ol>
+            <li><strong>Conclusiones</strong> — ¿edge positivo? ¿PnL ok? Si ambos sí, respira.</li>
+            <li><strong>Daily Report</strong> — mira si hay alguna sección con score &lt; 70.</li>
+            <li>Si algo huele raro: abre <strong>Trades</strong> para ver los últimos; si muchos rojos, abre <strong>Research Lab</strong>.</li>
+          </ol>
+        </div>
+
+        <div className="help-section">
+          <h3>Rutina semanal (20 min)</h3>
+          <ol>
+            <li>Revisa <strong>Research Lab</strong> en vista Overview: ¿qué funcionó? ¿qué falló?</li>
+            <li>Mira <strong>Shadow Mode</strong>: ¿alguna variante lleva 48-72h con resultados claros?</li>
+            <li>Si vas a hacer un cambio, pásalo por <strong>Validation</strong> antes.</li>
+            <li>Marca en <strong>Cambios</strong> cualquier ajuste que hagas — luego podrás medir su impacto.</li>
+          </ol>
+        </div>
+
+        <HelpCallout tone="warn" title="Lo que no debes hacer">
+          Cambiar el bot a diario sin dejarle acumular datos, confiar en un día bueno, optimizar con menos de 50 trades, ignorar las fees.
+        </HelpCallout>
+      </>
+    ),
+    related: [
+      { id: "conclusions", label: "Conclusiones" },
+      { id: "daily", label: "Daily Report" },
+      { id: "audit", label: "Audit" },
+    ],
+  },
+
+  // ─── OPERATIONS ─────────────────────────────────────────
+  conclusions: {
+    icon: "◆",
+    title: "Conclusiones",
+    tagline: "El dashboard ejecutivo: estado del edge, evidencia y acciones.",
+    badges: [{ label: "Operations", color: "#3b82f6" }],
+    body: (
+      <>
+        <div className="help-section">
+          <h3>¿Qué es?</h3>
+          <p>La pantalla de arranque. En una sola vista condensa <strong>el estado del edge</strong> del bot, la <strong>confianza estadística</strong> del veredicto, la <strong>calidad de los datos</strong>, qué está funcionando y qué no, evidencia numérica, y una <strong>cola priorizada de acciones</strong> que deberías considerar.</p>
+        </div>
+
+        <div className="help-section">
+          <h3>¿Para qué sirve?</h3>
+          <p>Responder en un vistazo a tres preguntas:</p>
+          <ol>
+            <li>¿El bot tiene <strong>ventaja real</strong> (edge) ahora mismo?</li>
+            <li>¿Con cuánta <strong>confianza</strong> lo digo (muestra suficiente, datos limpios)?</li>
+            <li>¿Cuál es la <strong>siguiente acción</strong> priorizada que debería tomar?</li>
+          </ol>
+        </div>
+
+        <HelpCaptures entries={[
+          { src: "/static/help/img/conclusiones.png", caption: "Parte superior: estado, diagnóstico y evidencia.",
+            description: "Arriba del todo al abrir Conclusiones: 3 tarjetas de estado + 4 cajas de conclusiones + evidencia live vs replay." },
+        ]} />
+
+        <div className="help-section">
+          <h3>Qué ves en pantalla — parte superior</h3>
+          <p><strong>1. Tres tarjetas de estado</strong> (en la fila de arriba):</p>
+          <ul>
+            <li><strong>ESTADO DEL EDGE</strong> — POSITIVE / NEGATIVE. Veredicto global. Debajo pone cuántos trades se han analizado (ej. 416 trades).</li>
+            <li><strong>CONFIANZA</strong> — HIGH / MEDIUM / LOW. Muestra la cobertura de scores actual (% de trades con scoring completo) y la global.</li>
+            <li><strong>CALIDAD DE DATOS</strong> — GOOD / FAIR / POOR. Resumen de la auditoría automática sobre los datos que alimentan el resto de la pantalla.</li>
+          </ul>
+          <p><strong>2. Banner de divergencia</strong> (solo aparece si procede): <em>"CONFLICTING — Live and replay evidence diverge"</em>. Salta cuando los trades reales recientes y los históricos cuentan historias distintas. Es un aviso, no una alarma — suele significar cambio de régimen o período anómalo.</p>
+          <p><strong>3. Cuatro cajas de conclusiones</strong> (cada una con su color):</p>
+          <ul>
+            <li><strong>QUE FUNCIONA</strong> (verde): lo que los datos confirman que está funcionando. Mantener.</li>
+            <li><strong>QUE FALLA</strong> (rojo): problemas con evidencia. Atacar.</li>
+            <li><strong>QUE CAMBIAR</strong> (azul): acciones sugeridas con prioridad <code>[high]</code> / <code>[medium]</code>. Cada una con su justificación.</li>
+            <li><strong>NO TOCAR</strong> (morado): partes del sistema que están claramente bien — no las alteres aunque haya tentación.</li>
+          </ul>
+          <p><strong>4. EVIDENCIA</strong> — dos columnas:</p>
+          <ul>
+            <li><strong>LIVE TRADES</strong>: los números duros del bot real — Trades, Win Rate, Expectancy, Profit Factor, Net PnL, Max DD, ganadores/perdedores, avg W / avg L, fees killed (trades que cerraron mal por fees).</li>
+            <li><strong>REPLAY (HISTORICAL)</strong>: resumen del archivo histórico disponible para replay (número de ficheros, días, coins). Estado DATA_AVAILABLE indica que tienes material para replay/backtest.</li>
+          </ul>
+        </div>
+
+        <HelpCaptures entries={[
+          { src: "/static/help/img/conclusiones-1.png", caption: "Scroll abajo: paridad de scores, cambios recientes con impacto y cola de acciones.",
+            description: "Continuación al hacer scroll: paridad, tabla de cambios recientes con Δ WR / Δ Expectancy, cola de acciones priorizada, siguiente acción destacada." },
+        ]} />
+
+        <div className="help-section">
+          <h3>Qué ves en pantalla — parte inferior (scroll)</h3>
+          <p><strong>5. PARIDAD DE SCORES</strong>: comprueba que casi todos los trades tienen los 3 scores (signal, trend, micro). Cobertura global, actual, cuántos trades <em>legacy</em> (antes de tener scoring) vs actuales, y el desglose por tipo. <strong>95%+ en cada métrica = sano</strong>.</p>
+          <p><strong>6. CAMBIOS RECIENTES CON IMPACTO</strong> — tabla con columnas:</p>
+          <dl className="help-kv">
+            <dt>CUANDO</dt><dd>Fecha/hora del cambio.</dd>
+            <dt>CATEGORIA</dt><dd>SHADOW_VARIANT_REGISTERED · PRESET_EDIT · MODE_CHANGE · etc.</dd>
+            <dt>ETIQUETA</dt><dd>Texto legible: "Preset SCALP: collateralPerTradeUsd 0.0 → 50.0", "Mode NORMAL → SWING", etc.</dd>
+            <dt>ESTADO</dt><dd>PENDING · INSUFFICIENT_DATA · PROMOTE · REJECT.</dd>
+            <dt>Δ WR, Δ EXPECTANCY, Δ SL%</dt><dd>Impacto medido contra la ventana previa. Solo se llena cuando hay muestra suficiente.</dd>
+          </dl>
+          <p><strong>7. COLA DE ACCIONES (N)</strong> — tabla de acciones priorizadas con: PRIORITY (high/medium/low), TYPE (warning/recommendation), TITLE, ACTION (qué hacer) y EVIDENCE (por qué).</p>
+          <p><strong>8. SIGUIENTE ACCION PRIORITARIA</strong> — caja grande destacada con la <em>acción #1</em> seleccionada de la cola (la que deberías atender primero).</p>
+        </div>
+
+        <div className="help-section">
+          <h3>Cómo usarla día a día</h3>
+          <ol>
+            <li>Entra por la mañana. Mira las <strong>3 tarjetas de estado</strong>. Si las tres están verdes → el bot va bien, cierra.</li>
+            <li>Si alguna no está verde, lee las <strong>4 cajas</strong> (funciona / falla / cambiar / no tocar).</li>
+            <li>Baja a <strong>Cambios recientes con impacto</strong>: ¿algo que hiciste en los últimos días está en rojo?</li>
+            <li>Revisa la <strong>cola de acciones</strong>. La más urgente ya aparece destacada en "Siguiente acción prioritaria".</li>
+            <li>Antes de aplicar una acción, pásala por <strong>Validation</strong> o <strong>Shadow Mode</strong>.</li>
+          </ol>
+        </div>
+
+        <div className="help-section">
+          <h3>Cómo interpretar las cifras</h3>
+          <ul>
+            <li><strong>Edge NEGATIVE</strong> no significa "el bot está roto". Significa "con esta config y este mercado, ahora mismo no tienes ventaja". Puede ser régimen, puede ser estructural.</li>
+            <li><strong>Confianza LOW o MEDIUM</strong> = poca muestra o cobertura incompleta. Un edge POSITIVE con confianza LOW es casi azar.</li>
+            <li><strong>Calidad de datos POOR</strong> = hay que arreglar la ingestión ANTES de interpretar nada más de la pantalla.</li>
+            <li><strong>Profit Factor &gt; 1.3</strong> saludable, <strong>1.0 a 1.3</strong> frágil, <strong>&lt; 1.0</strong> estás perdiendo.</li>
+            <li><strong>CONFLICTING</strong> = revisa si el último cambio de régimen es responsable; no trates una divergencia puntual como certeza.</li>
+            <li><strong>INSUFFICIENT_DATA</strong> en la tabla de cambios = aún hay pocos trades desde el cambio; no saques conclusiones ya.</li>
+            <li>En <strong>cola de acciones</strong>: <code>[high] warning</code> + evidencia clara = atacar hoy; <code>[high] recommendation</code> = buena candidata a Shadow; <code>[medium]</code> = cuando tengas tiempo.</li>
+          </ul>
+        </div>
+
+        <HelpCallout tone="warn" title="Errores comunes al leerla">
+          Mirar solo "Estado del Edge" e ignorar confianza (edge con confianza baja no es información fiable). Aplicar una acción de la cola sin pasarla por Validation/Shadow. Ignorar el aviso CONFLICTING y asumir que Live es la verdad. Atribuir un Δ WR malo a "rompió algo" cuando el estado dice INSUFFICIENT_DATA (son 2-3 trades, no conclusión).
+        </HelpCallout>
+      </>
+    ),
+    related: [
+      { id: "daily", label: "Daily Report" },
+      { id: "lab", label: "Research Lab" },
+      { id: "shadow", label: "Shadow Mode" },
+      { id: "validation", label: "Validation" },
+      { id: "cambios", label: "Cambios" },
+    ],
+  },
+
+  botlive: {
+    icon: "▶",
+    title: "Bot Live",
+    tagline: "Telemetría en vivo: qué hace el bot ahora mismo.",
+    badges: [{ label: "Operations", color: "#3b82f6" }],
+    body: (
+      <>
+        <div className="help-section">
+          <h3>¿Qué es?</h3>
+          <p>El pulso del bot en tiempo real. Cada pocos segundos verás las últimas señales que evaluó (y qué decidió) y los últimos trades que ejecutó.</p>
+        </div>
+
+        <div className="help-section">
+          <h3>¿Para qué sirve?</h3>
+          <p>Saber si el bot <strong>está activo</strong>, si <strong>ve oportunidades</strong>, y por qué cuando ve una decide <strong>entrar o saltársela</strong>. Es el primer sitio al que vas si alguien te pregunta "¿está operando?".</p>
+        </div>
+
+        <div className="help-section">
+          <h3>Qué ves en pantalla</h3>
+          <ul>
+            <li><strong>Trades recientes</strong> — lista corta de los últimos ejecutados con su PnL. Actualiza sola.</li>
+            <li><strong>Señales evaluadas</strong> — por cada una: fecha, moneda, decisión final (ENTER, SKIP, BLOCKED).</li>
+            <li><strong>Gate stats</strong> — en qué filtro están cayendo las señales que no entran (score bajo, late entry, régimen no ok, score invertido…).</li>
+            <li><strong>Contador por modo</strong> — cuántas señales SCALP, NORMAL, SWING.</li>
+          </ul>
+        </div>
+
+        <div className="help-section">
+          <h3>Cómo usarla día a día</h3>
+          <ol>
+            <li>Abre la pestaña. Si hay movimiento (señales llegando), el bot está vivo.</li>
+            <li>Mira la proporción <em>ENTER / SKIP / BLOCKED</em>. Los tres son normales; lo anormal es que <em>todo</em> esté en uno solo.</li>
+            <li>Si hay muchos BLOCKED en el mismo filtro, ese filtro está siendo dominante. ¿Merecido? Pásalo a <strong>Research Lab</strong>.</li>
+          </ol>
+        </div>
+
+        <div className="help-section">
+          <h3>Cómo interpretar las cifras</h3>
+          <ul>
+            <li><strong>ENTER</strong> = entró al trade. <strong>SKIP</strong> = el bot la vio pero no le gustó. <strong>BLOCKED</strong> = la vio pero un filtro duro la paró (ej. el régimen de mercado no encaja).</li>
+            <li>Un <strong>100% de SKIP/BLOCKED</strong> puede significar que los filtros están demasiado apretados y te estás perdiendo oportunidades reales.</li>
+            <li>Un <strong>0% de SKIP</strong> significa que el bot no filtra nada — peligroso.</li>
+          </ul>
+        </div>
+
+        <HelpCaptures entries={[
+          { src: "/static/help/img/bot-live.png", caption: "Gate breakdown y señales recientes.", description: "Captura de Bot Live con el desglose de filtros." },
+        ]} />
+
+        <HelpCallout tone="warn" title="Errores comunes al leerla">
+          Mirar 30 minutos sin señales y asumir que el bot no funciona: en mercados planos puede haber pausas largas. La confirmación real de "funciona" la da Conclusiones y Daily.
+        </HelpCallout>
+      </>
+    ),
+    related: [
+      { id: "trades", label: "Trades" },
+      { id: "conclusions", label: "Conclusiones" },
+      { id: "shadow", label: "Shadow Mode" },
+    ],
+  },
+
+  trades: {
+    icon: "📈",
+    title: "Trades",
+    tagline: "Historial completo con detalle trade a trade.",
+    badges: [{ label: "Operations", color: "#3b82f6" }],
+    body: (
+      <>
+        <div className="help-section">
+          <h3>¿Qué es?</h3>
+          <p>El libro de operaciones completo del bot: <strong>cada trade con su ficha</strong>. Desde la lista puedes pinchar en cualquiera para ver su historia completa en un panel lateral.</p>
+        </div>
+
+        <div className="help-section">
+          <h3>¿Para qué sirve?</h3>
+          <ul>
+            <li>Investigar por qué un trade concreto salió mal.</li>
+            <li>Comparar entradas buenas con entradas malas en la misma moneda.</li>
+            <li>Ver si el bot está respetando el stop-loss o si lo está arrastrando demasiado.</li>
+          </ul>
+        </div>
+
+        <div className="help-section">
+          <h3>Qué ves en la lista</h3>
+          <ul>
+            <li><strong>Fecha + moneda + lado</strong> (LONG/SHORT).</li>
+            <li><strong>Entrada y salida</strong> — precios y horas.</li>
+            <li><strong>PnL neto</strong> — ya descontadas fees.</li>
+            <li><strong>Exit reason</strong> — cómo cerró: TP (take-profit), SL (stop-loss), TRAIL (trailing), TIMEOUT (se agotó el tiempo), MANUAL.</li>
+            <li><strong>Modo</strong> — SCALP, NORMAL, SWING.</li>
+          </ul>
+        </div>
+
+        <div className="help-section">
+          <h3>Qué ves en el detalle (drawer lateral)</h3>
+          <ul>
+            <li><strong>Precio de entrada / salida / PnL</strong> desglosado.</li>
+            <li><strong>Timeline de snapshots</strong> — cada 30 segundos durante el trade: precio, SL activo, HWM (máximo alcanzado), PnL momentáneo. Permite <em>ver</em> si el trade llegó a estar en verde y luego cayó.</li>
+            <li><strong>MFE</strong> (Maximum Favorable Excursion) — cuánto llegó a ganarse en el mejor momento del trade.</li>
+            <li><strong>Capture %</strong> — cuánto del MFE se quedó el trade al final. Si entra al 1% y captura 0.2%, cerró mal.</li>
+            <li><strong>Scores</strong> — los números que tenía la señal en el momento de entrar.</li>
+          </ul>
+        </div>
+
+        <div className="help-section">
+          <h3>Cómo usarla día a día</h3>
+          <ol>
+            <li>Si en Conclusiones viste una moneda roja, filtra Trades por esa moneda.</li>
+            <li>Pincha en los últimos 3-5 trades perdedores y mira su timeline.</li>
+            <li>Si ves que todos llegaron a verde y después cayeron → el problema es la salida, no la entrada. Abre <strong>Shadow Mode</strong> y crea una variante con salida más paciente.</li>
+            <li>Si ves que ninguno llegó a verde → el problema es la entrada. Abre <strong>Research Lab</strong> para buscar el patrón.</li>
+          </ol>
+        </div>
+
+        <div className="help-section">
+          <h3>Cómo interpretar las cifras</h3>
+          <ul>
+            <li><strong>MFE alto + Capture % bajo</strong> = el bot sale muy pronto. Valora Shadow con salida paciente.</li>
+            <li><strong>MFE bajo</strong> en la mayoría = entradas tarde, el movimiento ya estaba casi agotado.</li>
+            <li><strong>Exit reason = TIMEOUT</strong> muchas veces = el bot no está decidiendo; deja que el tiempo lo haga.</li>
+            <li><strong>SL inmediato</strong> (MFE &lt; 0.05%) = entrada "dead on arrival", típico de impulso agotado.</li>
+          </ul>
+        </div>
+
+        <HelpCaptures entries={[
+          { src: "/static/help/img/trades.png", caption: "Lista de trades con filtros y exit reason.", description: "Vista general de Trades." },
+          { src: "/static/help/img/trades-detalle.png", caption: "Drawer de detalle con timeline de snapshots.", description: "Al pinchar un trade, se abre a la derecha con toda la historia." },
+        ]} />
+
+        <HelpCallout tone="warn" title="Errores comunes al leerla">
+          Obsesionarse con un trade perdedor concreto (todos los sistemas pierden trades; el negocio está en el agregado). Juzgar el trade solo por PnL sin mirar el timeline — a veces un trade "malo" entró bien pero se torció por un cambio de régimen.
+        </HelpCallout>
+      </>
+    ),
+    related: [
+      { id: "shadow", label: "Shadow Mode" },
+      { id: "lab", label: "Research Lab" },
+      { id: "conclusions", label: "Conclusiones" },
+    ],
+  },
+
+  shadow: {
+    icon: "◐",
+    title: "Shadow Mode",
+    tagline: "Laboratorio de pruebas sobre el bot real — sin riesgo de capital.",
+    badges: [{ label: "Operations", color: "#3b82f6" }, { label: "Clave", color: "#a855f7" }],
+    body: (
+      <>
+        <div className="help-section">
+          <h3>¿Qué es?</h3>
+          <p>Una zona donde puedes <strong>crear variantes</strong> del bot (filtros diferentes, salidas más pacientes, TP más amplios…) y la plataforma las <strong>simula en paralelo</strong> sobre los trades y señales reales del bot. Nunca se ejecuta una orden en real desde Shadow.</p>
+        </div>
+
+        <div className="help-section">
+          <h3>¿Para qué sirve?</h3>
+          <p>Contestar preguntas tipo: <em>"¿mejoraría si cerrara más tarde?"</em>, <em>"¿y si solo opero SHORT?"</em>, <em>"¿y si filtro las señales con score bajo?"</em> — sin tener que cambiar el bot vivo y arriesgar.</p>
+        </div>
+
+        <div className="help-section">
+          <h3>Dos tipos de variante</h3>
+          <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginTop:8}}>
+            <div className="help-layer ops">
+              <div className="lh">Filtros de entrada</div>
+              <div className="ld">Bloquean señales que el bot real sí habría ejecutado. Ej: <em>aplus-block</em>, <em>agotada-block</em>.</div>
+            </div>
+            <div className="help-layer res">
+              <div className="lh">Overrides de salida</div>
+              <div className="ld">Cambian ROI, Stop-Loss, Take-Profit o tiempo máximo. Ej: <em>roi-patient</em>, <em>tp-wider</em>.</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="help-section">
+          <h3>Qué ves en pantalla</h3>
+          <ul>
+            <li><strong>Tabla de variantes</strong> — las 7 que vienen de serie más las que crees tú. Cada una con su estado activa/inactiva.</li>
+            <li><strong>Formulario "Crear variante"</strong> — plantillas rápidas (🐢 roi-patient, 🎯 tp-wider, ⛔ aplus-block, 💤 agotada-block…) y formulario manual con filtros y overrides de salida.</li>
+            <li><strong>Comparativa de salidas</strong> — por variante, su winRate simulado y la suma de ΔPnL (diferencia contra la salida real).</li>
+            <li><strong>Salidas hipotéticas recientes</strong> — lista detallada: qué variante ganó antes que la real, cuál aguantó más, cuál empató.</li>
+          </ul>
+        </div>
+
+        <div className="help-section">
+          <h3>Workflow completo</h3>
+          <HelpFlow steps={[
+            { title: "Elige o crea", desc: "Usa una plantilla o define una variante custom." },
+            { title: "Espera 48-72h", desc: "Necesitas ≥50 trades comparables para que los números signifiquen algo." },
+            { title: "Lee la comparativa", desc: "winRate + suma de ΔPnL por variante." },
+            { title: "Decide", desc: "Si gana claramente, promociónala al bot. Si no, apréndela y prueba otra." },
+          ]} />
+        </div>
+
+        <div className="help-section">
+          <h3>Cómo interpretar los estados</h3>
+          <ul>
+            <li><strong>PENDING</strong> — la variante "se apuntó" a una entrada real y aún no ha cerrado nada todavía.</li>
+            <li><strong>VARIANT_FIRST</strong> — la variante cerró antes que el bot real (típicamente variantes agresivas: cierran pronto).</li>
+            <li><strong>REAL_FIRST</strong> — el bot real cerró antes; la variante habría aguantado más (variantes pacientes).</li>
+            <li><strong>BOTH_EVALUATED</strong> — los dos cerraron: ya hay un ΔPnL comparable. Éstas son las filas que cuentan para decidir.</li>
+          </ul>
+        </div>
+
+        <div className="help-section">
+          <h3>Regla de promoción</h3>
+          <HelpCallout tone="ok" title="Criterio recomendado">
+            ≥ <strong>50 filas BOTH_EVALUATED</strong> · winRate simulado &gt; <strong>55%</strong> · suma de ΔPnL &gt; <strong>+10 USD</strong>. Si tu variante cumple las 3, es candidata a pasar al bot real.
+          </HelpCallout>
+        </div>
+
+        <HelpCaptures entries={[
+          { src: "/static/help/img/shadow-mode.png", caption: "Tabla con las variantes activas.",
+            description: "Vista principal de Shadow con las variantes cargadas." },
+          { src: "/static/help/img/shadow-mode-form.png", caption: "Formulario de creación con overrides de salida.",
+            description: "El bloque 'Overrides de salida' (ROI / SL / TP / maxHold) es la novedad clave." },
+          { src: "/static/help/img/shadow-mode-exits.png", caption: "Comparativa de salidas: winRate y ΔPnL por variante.",
+            description: "La tabla donde lees los resultados al cabo de 48-72h." },
+        ]} />
+
+        <HelpCallout tone="danger" title="Errores comunes al leerla">
+          Promover una variante con menos de 50 BOTH_EVALUATED (es ruido, no señal). Comparar dos variantes en períodos distintos. Activar muchas a la vez y no saber cuál funcionó.
+        </HelpCallout>
+      </>
+    ),
+    related: [
+      { id: "trades", label: "Trades" },
+      { id: "validation", label: "Validation" },
+      { id: "lab", label: "Research Lab" },
+      { id: "glosario", label: "Glosario" },
+    ],
+  },
+
+  regimes: {
+    icon: "🌡",
+    title: "Regímenes",
+    tagline: "Qué clima de mercado hay en cada moneda.",
+    badges: [{ label: "Operations", color: "#3b82f6" }],
+    body: (
+      <>
+        <div className="help-section">
+          <h3>¿Qué es?</h3>
+          <p>Clasificación automática del estado del mercado para cada moneda. En vez de "sube o baja", la plataforma lo reduce a <strong>5 regímenes</strong> y te dice en cuál está cada coin ahora mismo.</p>
+        </div>
+
+        <div className="help-section">
+          <h3>Los 5 regímenes</h3>
+          <dl className="help-kv">
+            <dt>trending_up</dt><dd>Subida clara y sostenida.</dd>
+            <dt>trending_down</dt><dd>Bajada clara y sostenida.</dd>
+            <dt>choppy</dt><dd>Lateral con reversiones frecuentes. Muy hostil para operar.</dd>
+            <dt>high_vol</dt><dd>Volatilidad alta sin dirección clara.</dd>
+            <dt>quiet</dt><dd>Baja actividad, pocas oportunidades.</dd>
+          </dl>
+        </div>
+
+        <div className="help-section">
+          <h3>¿Para qué sirve?</h3>
+          <ul>
+            <li>Saber si el mercado está operable en el momento (trending = mejor; choppy = peor).</li>
+            <li>Poner en contexto un trade: un trade malo en choppy no juzga al bot; en trending sí.</li>
+            <li>Filtrar ideas de Research Lab: un patrón que funciona en trending_up puede romperse en choppy.</li>
+          </ul>
+        </div>
+
+        <div className="help-section">
+          <h3>Qué ves en pantalla</h3>
+          <ul>
+            <li><strong>Grid por moneda</strong> — una tarjeta por coin con el régimen actual y la confianza (0 a 1).</li>
+            <li><strong>Historial corto</strong> — los últimos cambios de régimen.</li>
+          </ul>
+        </div>
+
+        <div className="help-section">
+          <h3>Cómo interpretar las cifras</h3>
+          <ul>
+            <li><strong>Confianza &lt; 0.5</strong> = el clasificador no lo tiene claro. Trátalo como "transición".</li>
+            <li><strong>Cambios muy frecuentes</strong> = probablemente estás en choppy aunque una etiqueta puntual diga otra cosa.</li>
+            <li><strong>high_vol</strong> no es ni bueno ni malo: son trades más arriesgados y con SL más lejano.</li>
+          </ul>
+        </div>
+
+        <HelpCaptures entries={[
+          { src: "/static/help/img/regimenes.png", caption: "Grid de regímenes por moneda.", description: "Vista general con el régimen actual de cada coin." },
+        ]} />
+
+        <HelpCallout tone="warn" title="Errores comunes al leerla">
+          Tomar un cambio de régimen puntual como señal para cambiar la config del bot — los regímenes giran; espera confirmación sostenida.
+        </HelpCallout>
+      </>
+    ),
+    related: [
+      { id: "features", label: "Features" },
+      { id: "lab", label: "Research Lab" },
+    ],
+  },
+
+  cambios: {
+    icon: "✎",
+    title: "Cambios",
+    tagline: "Todo cambio de config queda aquí con su impacto medido.",
+    badges: [{ label: "Operations", color: "#3b82f6" }],
+    body: (
+      <>
+        <div className="help-section">
+          <h3>¿Qué es?</h3>
+          <p>El <strong>diario</strong> de cambios. Cada vez que tú o el sistema ajusta algo (un umbral, una plantilla, un límite de colateral…), queda un marcador con fecha, qué se cambió y — lo importante — <strong>qué pasó con el PnL y el WR antes y después</strong>.</p>
+        </div>
+
+        <div className="help-section">
+          <h3>¿Para qué sirve?</h3>
+          <ul>
+            <li>Demostrar que un cambio concreto ayudó o perjudicó.</li>
+            <li>Revertir con seguridad si algo empeora.</li>
+            <li>Tener memoria: evitar "¿por qué cambiamos esto en febrero?" sin respuesta.</li>
+          </ul>
+        </div>
+
+        <div className="help-section">
+          <h3>Qué ves en pantalla</h3>
+          <ul>
+            <li><strong>Lista cronológica</strong> — filtrable por ventana (7/30/90 días).</li>
+            <li><strong>Cada marcador</strong> incluye: qué se cambió, valor antes/después, cuándo, y el impacto medido en PnL y WR sobre los trades posteriores.</li>
+            <li><strong>Botón "Recalcular"</strong> — fuerza a re-medir el impacto cuando ya hay más trades acumulados.</li>
+          </ul>
+        </div>
+
+        <div className="help-section">
+          <h3>Cómo usarla día a día</h3>
+          <ol>
+            <li>Cuando hagas un cambio, asegúrate de que queda marcado (el sistema lo hace solo en los cambios oficiales).</li>
+            <li>Espera 48-72h para que tenga trades suficientes post-cambio.</li>
+            <li>Pulsa "Recalcular". Si el impacto es positivo y con muestra suficiente, mantén el cambio. Si es negativo, reviértelo.</li>
+          </ol>
+        </div>
+
+        <HelpCaptures entries={[
+          { src: "/static/help/img/cambios.png", caption: "Un marker con el impacto antes/después.", description: "Desplegando un marker ves PnL/WR previo y posterior." },
+        ]} />
+
+        <HelpCallout tone="warn" title="Errores comunes al leerla">
+          Atribuir al cambio lo que fue del mercado (si el mercado mejoró, cualquier cambio parece bueno). Siempre mira <strong>Regímenes</strong> del mismo período.
+        </HelpCallout>
+      </>
+    ),
+    related: [
+      { id: "regimes", label: "Regímenes" },
+      { id: "validation", label: "Validation" },
+    ],
+  },
+
+  daily: {
+    icon: "📋",
+    title: "Daily Report",
+    tagline: "Informe de 12 secciones, listo para leer cada mañana.",
+    badges: [{ label: "Operations", color: "#3b82f6" }],
+    body: (
+      <>
+        <div className="help-section">
+          <h3>¿Qué es?</h3>
+          <p>Un informe que se genera <strong>automáticamente cada día</strong> con el estado del bot y la plataforma. 12 secciones. Pensado para que si solo entras 5 minutos al día, esta pantalla te baste.</p>
+        </div>
+
+        <div className="help-section">
+          <h3>Las 12 secciones</h3>
+          <ol>
+            <li><strong>General</strong> — score global del día.</li>
+            <li><strong>Sistema</strong> — CPU, RAM, disco, estado de servicios.</li>
+            <li><strong>Integración bot-platform</strong> — el bot está enviando datos correctamente?</li>
+            <li><strong>PnL</strong> — del día, semana, mes; mejores y peores coins.</li>
+            <li><strong>Señales</strong> — evaluadas, entradas, saltadas, bloqueadas.</li>
+            <li><strong>Features</strong> — calidad y frescura de las 48 features.</li>
+            <li><strong>Storage</strong> — Parquet creciendo bien? PostgreSQL ok?</li>
+            <li><strong>Trading analysis</strong> — WR, PF, capture %, exit reasons.</li>
+            <li><strong>Problemas</strong> — lista de findings que requieren tu mirada.</li>
+            <li><strong>Comparativa vs ayer</strong> — mejoró o empeoró?</li>
+            <li><strong>Mejores / peores coins</strong> — concentración del PnL.</li>
+            <li><strong>Recomendaciones</strong> — sugerencias automáticas para esta semana.</li>
+          </ol>
+        </div>
+
+        <div className="help-section">
+          <h3>Cómo usarla día a día</h3>
+          <ol>
+            <li>Por la mañana, ábrelo.</li>
+            <li>Mira cada sección y el score (0–100). <strong>Por debajo de 70 = mirar</strong>, por debajo de 50 = revisar urgente.</li>
+            <li>Si "Problemas" tiene items, apáñalos o lleva los relevantes a la pestaña que corresponda.</li>
+            <li>Compara con el de ayer: tendencia &gt; día aislado.</li>
+          </ol>
+        </div>
+
+        <HelpCaptures entries={[
+          { src: "/static/help/img/daily-report.png", caption: "Parte superior del Daily Report.", description: "Score global + estado del sistema." },
+          { src: "/static/help/img/daily-report-1.png", caption: "Detalle de una sección desplegada.", description: "Al pinchar en una sección, ves sus números exactos." },
+        ]} />
+
+        <HelpCallout tone="warn" title="Errores comunes al leerla">
+          Saltárselo varios días y luego intentar "ponerse al día": los informes viejos son útiles pero perdiste el timing. Leer solo PnL — las otras 11 secciones cuentan.
+        </HelpCallout>
+      </>
+    ),
+    related: [
+      { id: "conclusions", label: "Conclusiones" },
+      { id: "audit", label: "Audit" },
+      { id: "system", label: "Sistema" },
+    ],
+  },
+
+  system: {
+    icon: "⚙",
+    title: "Sistema",
+    tagline: "Salud técnica de la plataforma.",
+    badges: [{ label: "Operations", color: "#3b82f6" }],
+    body: (
+      <>
+        <div className="help-section">
+          <h3>¿Qué es?</h3>
+          <p>La parte técnica: disco, ingestión de datos, estado de los servicios. Si algo falla en la plataforma (no en el bot), aquí lo ves primero.</p>
+        </div>
+
+        <div className="help-section">
+          <h3>Qué ves en pantalla</h3>
+          <ul>
+            <li><strong>Disco</strong> — uso total y por carpeta. Incluye el detalle del almacenamiento Parquet.</li>
+            <li><strong>Ingestión</strong> — eventos recibidos, archivos Parquet creados, monedas activas, cálculos de features por segundo.</li>
+            <li><strong>Servicios</strong> — ok/fallo de cada componente.</li>
+          </ul>
+        </div>
+
+        <div className="help-section">
+          <h3>Cómo interpretar las cifras</h3>
+          <ul>
+            <li><strong>Disco &gt; 85%</strong> = atención. Por encima de 90% = actúa (borra datos antiguos, amplía disco).</li>
+            <li><strong>Ingestión en 0 eventos/s</strong> sostenido = el WS se desconectó. Probablemente Hyperliquid tiene lag o hay que reiniciar.</li>
+            <li><strong>Features por segundo muy bajo</strong> = el cálculo está pinchando.</li>
+          </ul>
+        </div>
+
+        <HelpCaptures entries={[
+          { src: "/static/help/img/sistema.png", caption: "Disco + ingestión de datos.", description: "Vista general del estado técnico." },
+        ]} />
+
+        <HelpCallout tone="danger" title="Errores comunes al leerla">
+          Ignorar una alerta de disco hasta quedarse sin espacio — entonces Parquet falla y pierdes ingestión hasta que se libere.
+        </HelpCallout>
+      </>
+    ),
+    related: [
+      { id: "audit", label: "Audit" },
+      { id: "daily", label: "Daily Report" },
+    ],
+  },
+
+  // ─── RESEARCH ───────────────────────────────────────────
+  lab: {
+    icon: "🔬",
+    title: "Research Lab",
+    tagline: "Análisis profundo para entender qué funciona y por qué.",
+    badges: [{ label: "Research", color: "#a855f7" }],
+    body: (
+      <>
+        <div className="help-section">
+          <h3>¿Qué es?</h3>
+          <p>El cerebro analítico. Si Conclusiones es el titular y Daily es el resumen, Research Lab es <strong>el artículo largo</strong>. Tiene varias sub-vistas, cada una respondiendo una pregunta distinta.</p>
+        </div>
+
+        <div className="help-section">
+          <h3>Sub-vistas principales</h3>
+          <dl className="help-kv">
+            <dt>Overview</dt><dd>KPIs generales + decisiones automáticas con evidencia.</dd>
+            <dt>Metrics</dt><dd>Desgloses por moneda, lado, score, exit reason, modo, hora.</dd>
+            <dt>Analysis</dt><dd>Score effectiveness, valor de la microestructura, impacto de fees, holding time.</dd>
+            <dt>Score</dt><dd>¿Los scores del bot predicen bien? ¿Trades con score alto ganan más?</dd>
+            <dt>Config</dt><dd>Impacto parámetro a parámetro.</dd>
+            <dt>Rejections</dt><dd>Qué pasó con las señales que el bot saltó (habrían ganado?).</dd>
+            <dt>Counterfactual</dt><dd>¿Y si hubiéramos usado otro umbral?</dd>
+            <dt>Diagnostic</dt><dd>Diagnóstico automático de problemas.</dd>
+            <dt>Entry Quality</dt><dd>¿Entra pronto o tarde respecto al mejor momento?</dd>
+            <dt>Decisions</dt><dd>Sugerencias accionables: HOLD, TEST, ADOPT, RETIRE.</dd>
+          </dl>
+        </div>
+
+        <div className="help-section">
+          <h3>Cómo usarla</h3>
+          <ol>
+            <li>Llega a Research Lab con una <strong>pregunta</strong>, no a curiosear. Ej: "¿por qué perdemos en BTC?".</li>
+            <li>Elige la sub-vista que la responda (Metrics por coin, en el ejemplo).</li>
+            <li>Contrasta con Score / Entry Quality / Counterfactual.</li>
+            <li>Lo que salga como candidato a cambio, pásalo por Validation o Shadow antes de tocar el bot.</li>
+          </ol>
+        </div>
+
+        <HelpCaptures entries={[
+          { src: "/static/help/img/research-lab.png", caption: "Vista Overview con KPIs y decisiones.", description: "La vista por defecto al entrar al Research Lab." },
+          { src: "/static/help/img/research-lab-1.png", caption: "Scroll: más desgloses.", description: "Continuación del Overview, breakdowns adicionales." },
+        ]} />
+
+        <HelpCallout tone="warn" title="Errores comunes al leerla">
+          Perderse en los números sin hipótesis previa. Sacar conclusiones con 10 trades. Ignorar el período analizado (30 días vs 7 días dan pictures muy distintas).
+        </HelpCallout>
+      </>
+    ),
+    related: [
+      { id: "validation", label: "Validation" },
+      { id: "shadow", label: "Shadow Mode" },
+      { id: "reports", label: "Reports" },
+    ],
+  },
+
+  validation: {
+    icon: "✓",
+    title: "Validation",
+    tagline: "Antes de tocar el bot, pasa tu idea por aquí.",
+    badges: [{ label: "Research", color: "#a855f7" }],
+    body: (
+      <>
+        <div className="help-section">
+          <h3>¿Qué es?</h3>
+          <p>Un banco de pruebas <strong>formal</strong>: ejecuta 3 tandas (batches) de experimentos sobre los trades reales ya ocurridos y da un <strong>veredicto</strong> por cada cambio propuesto.</p>
+        </div>
+
+        <div className="help-section">
+          <h3>¿Para qué sirve?</h3>
+          <p>Para NO tocar el bot por corazonada. Si tienes una idea ("debería ser más exigente con el score"), Validation te dice cuánto te habría costado/ganado ese cambio con los datos reales.</p>
+        </div>
+
+        <div className="help-section">
+          <h3>Los 3 batches</h3>
+          <ol>
+            <li><strong>Score threshold</strong> — probar distintos umbrales de score.</li>
+            <li><strong>Trailing</strong> — probar distintas configuraciones de trailing stop.</li>
+            <li><strong>SL/fees</strong> — probar distintos SL y estimar el peso de fees.</li>
+          </ol>
+        </div>
+
+        <div className="help-section">
+          <h3>Los 4 veredictos</h3>
+          <dl className="help-kv">
+            <dt>ADOPT</dt><dd>Evidencia clara de mejora. Puedes aplicar al bot con confianza.</dd>
+            <dt>TEST_LIVE</dt><dd>Posible mejora pero con dudas. Pruébalo primero en Shadow Mode.</dd>
+            <dt>REJECT</dt><dd>Los datos no lo respaldan. No lo apliques.</dd>
+            <dt>INCONCLUSIVE</dt><dd>Muestra insuficiente. Espera a tener más trades.</dd>
+          </dl>
+        </div>
+
+        <div className="help-section">
+          <h3>Cómo usarla día a día</h3>
+          <ol>
+            <li>Cada vez que pienses en cambiar algo del bot, abre Validation primero.</li>
+            <li>Ejecuta el batch relevante.</li>
+            <li>Si veredicto = ADOPT → aplica. Si TEST_LIVE → a Shadow. Si REJECT → no lo toques. Si INCONCLUSIVE → espera.</li>
+          </ol>
+        </div>
+
+        <HelpCaptures entries={[
+          { src: "/static/help/img/validation.png", caption: "Un batch desplegado con veredicto.", description: "La tarjeta de un batch con su verdict y los números que lo respaldan." },
+        ]} />
+
+        <HelpCallout tone="danger" title="Errores comunes al leerla">
+          Saltarse Validation y cambiar el bot "porque Daily dijo algo". Leer solo el verdict sin mirar la muestra (INCONCLUSIVE ≠ REJECT).
+        </HelpCallout>
+      </>
+    ),
+    related: [
+      { id: "shadow", label: "Shadow Mode" },
+      { id: "lab", label: "Research Lab" },
+    ],
+  },
+
+  reports: {
+    icon: "📊",
+    title: "Reports",
+    tagline: "11 informes operativos para consultar rápido.",
+    badges: [{ label: "Research", color: "#a855f7" }],
+    body: (
+      <>
+        <div className="help-section">
+          <h3>¿Qué es?</h3>
+          <p>Una colección de informes tabulares con breakdowns útiles. <strong>Son tablas, no análisis</strong>: tú ordenas y sacas la conclusión. Perfectos para preguntas concretas.</p>
+        </div>
+
+        <div className="help-section">
+          <h3>Los informes</h3>
+          <ul>
+            <li><strong>WR por moneda</strong></li>
+            <li><strong>WR por lado</strong> (LONG / SHORT)</li>
+            <li><strong>WR por hora del día</strong></li>
+            <li><strong>PnL por modo</strong> (SCALP / NORMAL / SWING)</li>
+            <li><strong>PnL por tag</strong></li>
+            <li><strong>PnL por exit reason</strong></li>
+            <li><strong>Fee analysis</strong></li>
+            <li><strong>Poison coins</strong> — coins que pierden consistentemente</li>
+            <li><strong>Rescuable coins</strong> — coins que mejorarían con un ajuste</li>
+            <li><strong>Signal blocked vs entered</strong></li>
+            <li><strong>Daily summary</strong></li>
+          </ul>
+        </div>
+
+        <div className="help-section">
+          <h3>Cómo usarla</h3>
+          <ol>
+            <li>Piensa en tu pregunta primero (ej. "¿a qué hora opero peor?").</li>
+            <li>Abre el informe que la responde (WR por hora).</li>
+            <li>Ordena la columna relevante y mira los extremos.</li>
+          </ol>
+        </div>
+
+        <HelpCallout tone="warn" title="Errores comunes al leerla">
+          Ordenar por una métrica sin mirar la muestra (una moneda con 3 trades y WR 100% no es mejor que una con 60 trades y WR 55%).
+        </HelpCallout>
+      </>
+    ),
+    related: [
+      { id: "lab", label: "Research Lab" },
+      { id: "daily", label: "Daily Report" },
+    ],
+  },
+
+  features: {
+    icon: "◎",
+    title: "Features",
+    tagline: "Las 48 señales técnicas que usa el bot, en vivo por coin.",
+    badges: [{ label: "Research", color: "#a855f7" }],
+    body: (
+      <>
+        <div className="help-section">
+          <h3>¿Qué es?</h3>
+          <p>El bot decide mirando 48 indicadores (momentum, volatilidad, tendencia, microestructura, temporales). Aquí los ves todos en tiempo real para cualquier moneda.</p>
+        </div>
+
+        <div className="help-section">
+          <h3>Los 5 grupos</h3>
+          <dl className="help-kv">
+            <dt>Momentum</dt><dd>12 features. Cómo de rápido se mueve el precio. RSI, MACD, stochastic…</dd>
+            <dt>Volatilidad</dt><dd>10 features. Cuánto oscila. ATR, Bollinger width, realized vol…</dd>
+            <dt>Tendencia</dt><dd>12 features. Dirección y fuerza. EMA cross, ADX, supertrend…</dd>
+            <dt>Microestructura</dt><dd>8 features. Qué dice el orderbook. Book imbalance, trade flow…</dd>
+            <dt>Temporales</dt><dd>6 features. Hora del día, día de semana, sesión de mercado.</dd>
+          </dl>
+        </div>
+
+        <div className="help-section">
+          <h3>¿Para qué sirve?</h3>
+          <ul>
+            <li>Entender por qué el bot no entró en una señal visible a ojo.</li>
+            <li>Aislar la feature que está bloqueando una señal que crees buena.</li>
+            <li>Investigar un patrón: ¿qué features tenían en común los 10 últimos trades ganadores?</li>
+          </ul>
+        </div>
+
+        <HelpCaptures entries={[
+          { src: "/static/help/img/features.png", caption: "Grid de 48 features para una coin.", description: "Con selector de coin arriba y valores actuales en la tabla." },
+        ]} />
+
+        <HelpCallout tone="warn" title="Errores comunes al leerla">
+          Obsesionarse con una feature aislada. El bot las combina: una feature "mal" puede compensarse con otras.
+        </HelpCallout>
+      </>
+    ),
+    related: [
+      { id: "contract", label: "Contrato" },
+      { id: "regimes", label: "Regímenes" },
+    ],
+  },
+
+  // ─── GOVERNANCE ─────────────────────────────────────────
+  audit: {
+    icon: "🛡",
+    title: "Audit",
+    tagline: "¿Los datos son fiables? Aquí se comprueba automáticamente.",
+    badges: [{ label: "Governance", color: "#22c55e" }],
+    body: (
+      <>
+        <div className="help-section">
+          <h3>¿Qué es?</h3>
+          <p>Un sistema de <strong>vigilancia automática</strong> que corre 4 tipos de comprobaciones sobre los datos, a ritmos distintos. Si algo está roto o sospechoso, aparece aquí.</p>
+        </div>
+
+        <div className="help-section">
+          <h3>Los 4 checks</h3>
+          <dl className="help-kv">
+            <dt>Integration</dt><dd>Cada 5 min. ¿Bot y plataforma están sincronizados?</dd>
+            <dt>Data quality</dt><dd>Cada 15 min. ¿Los datos tienen lagunas, duplicados, valores absurdos?</dd>
+            <dt>Storage</dt><dd>Cada hora. ¿Parquet y DB están sanos?</dd>
+            <dt>Consistency</dt><dd>Cada 6 horas. ¿Los cálculos live coinciden con los replay?</dd>
+          </dl>
+        </div>
+
+        <div className="help-section">
+          <h3>Qué ves en pantalla</h3>
+          <ul>
+            <li><strong>Health score</strong> — nota global 0–100. Por encima de 80 = ok.</li>
+            <li><strong>Findings activos</strong> — lista de problemas detectados con severidad.</li>
+            <li><strong>Historial de runs</strong> — cuándo corrió cada check y qué resultado dio.</li>
+          </ul>
+        </div>
+
+        <div className="help-section">
+          <h3>Cómo usarla día a día</h3>
+          <ol>
+            <li>Ábrelo tras Conclusiones. Si health &gt; 80 y sin findings nuevos, cierra.</li>
+            <li>Si hay findings: ordénalos por severidad y resuelve los críticos primero.</li>
+            <li>Un health por debajo de 80 implica que lo que ves en otras pestañas puede no ser de confiar.</li>
+          </ol>
+        </div>
+
+        <HelpCaptures entries={[
+          { src: "/static/help/img/audit.png", caption: "Health score + findings.", description: "Vista general con la nota y la lista de hallazgos." },
+        ]} />
+
+        <HelpCallout tone="danger" title="Errores comunes al leerla">
+          Ignorar findings porque "el bot opera bien". Si Audit dice que algo huele mal, aunque PnL esté verde, puede ser ilusorio.
+        </HelpCallout>
+      </>
+    ),
+    related: [
+      { id: "system", label: "Sistema" },
+      { id: "daily", label: "Daily Report" },
+    ],
+  },
+
+  contract: {
+    icon: "📄",
+    title: "Contrato",
+    tagline: "Definición formal de las 48 features.",
+    badges: [{ label: "Governance", color: "#22c55e" }],
+    body: (
+      <>
+        <div className="help-section">
+          <h3>¿Qué es?</h3>
+          <p>El "manual de instrucciones" de las 48 features: nombre, versión, grupo, fuente de datos, ventana temporal. Asegura que la misma feature significa lo mismo en tiempo real, en histórico y en replay.</p>
+        </div>
+
+        <div className="help-section">
+          <h3>¿Para qué sirve?</h3>
+          <ul>
+            <li>Saber qué mide exactamente una feature cuando dudas.</li>
+            <li>Controlar versiones: si alguien cambia el cálculo, cambia la versión y aquí se ve.</li>
+          </ul>
+        </div>
+
+        <div className="help-section">
+          <h3>Cómo usarla</h3>
+          <p>Es referencia. No entras aquí cada día. La abres cuando:</p>
+          <ul>
+            <li>Quieres saber cómo se calcula <em>exactamente</em> una feature.</li>
+            <li>Ves un cambio de versión en el Daily y quieres revisar qué cambió.</li>
+          </ul>
+        </div>
+
+        <HelpCallout tone="warn" title="Errores comunes al leerla">
+          Modificar una feature sin subir su versión — rompe el contrato y los análisis históricos dejan de ser comparables.
+        </HelpCallout>
+      </>
+    ),
+    related: [
+      { id: "features", label: "Features" },
+      { id: "audit", label: "Audit" },
+    ],
+  },
+
+  // ─── EXTRAS ─────────────────────────────────────────────
+  glosario: {
+    icon: "📚",
+    title: "Glosario",
+    tagline: "Los términos que aparecen una y otra vez.",
+    body: (
+      <>
+        <div className="help-section">
+          <h3>Términos de trading</h3>
+          <dl className="help-kv">
+            <dt>PnL</dt><dd>Profit & Loss. Resultado en dinero del trade (ya con fees).</dd>
+            <dt>WR (Win Rate)</dt><dd>% de trades ganadores.</dd>
+            <dt>PF (Profit Factor)</dt><dd>Suma de ganancias / suma de pérdidas. &gt;1 = rentable.</dd>
+            <dt>Expectancy</dt><dd>PnL medio esperado por trade.</dd>
+            <dt>Sharpe</dt><dd>Rentabilidad ajustada por riesgo.</dd>
+            <dt>Drawdown</dt><dd>Máxima caída desde un pico.</dd>
+            <dt>MFE</dt><dd>Maximum Favorable Excursion: máximo ganado durante el trade (antes del cierre).</dd>
+            <dt>MAE</dt><dd>Maximum Adverse Excursion: máxima pérdida momentánea durante el trade.</dd>
+            <dt>Capture %</dt><dd>Cuánto del MFE se queda finalmente al cerrar.</dd>
+            <dt>ROI ladder</dt><dd>Escalera de take-profit por tiempo: "a los 0 min pedir 0.4%, a los 5 min 0.25%…".</dd>
+            <dt>Trailing stop</dt><dd>Stop que se arrastra cuando el precio mejora.</dd>
+            <dt>SL / TP</dt><dd>Stop-Loss / Take-Profit.</dd>
+          </dl>
+        </div>
+
+        <div className="help-section">
+          <h3>Términos del bot</h3>
+          <dl className="help-kv">
+            <dt>Señal</dt><dd>Oportunidad detectada (no implica entrada).</dd>
+            <dt>Gate</dt><dd>Filtro que decide si una señal se ejecuta.</dd>
+            <dt>ENTER / SKIP / BLOCKED</dt><dd>Decisiones del bot por señal.</dd>
+            <dt>Score</dt><dd>Nota numérica que da el bot a cada señal.</dd>
+            <dt>Modo</dt><dd>SCALP, NORMAL o SWING. Se diferencian en horizonte y tamaño.</dd>
+            <dt>Regime</dt><dd>Estado del mercado (trending_up/down, choppy, high_vol, quiet).</dd>
+          </dl>
+        </div>
+
+        <div className="help-section">
+          <h3>Términos de la plataforma</h3>
+          <dl className="help-kv">
+            <dt>Variante</dt><dd>En Shadow Mode: un bot alternativo simulado.</dd>
+            <dt>Template</dt><dd>Plantilla de variante predefinida (roi-patient, tp-wider…).</dd>
+            <dt>Override</dt><dd>Campo de la variante que "pisa" el valor del bot real.</dd>
+            <dt>Marker</dt><dd>Marcador de cambio en la pestaña Cambios.</dd>
+            <dt>Counterfactual</dt><dd>"¿Y si…?" aplicado a trades reales.</dd>
+            <dt>Snapshot</dt><dd>Foto del trade cada 30 segundos (precio, SL, PnL…).</dd>
+            <dt>Feature</dt><dd>Señal técnica numérica calculada sobre precio/volumen.</dd>
+            <dt>Contract</dt><dd>Definición formal de una feature (nombre, versión, fuente).</dd>
+          </dl>
+        </div>
+      </>
+    ),
+    related: [
+      { id: "shadow", label: "Shadow Mode" },
+      { id: "trades", label: "Trades" },
+    ],
+  },
+
+  faq: {
+    icon: "❔",
+    title: "Preguntas frecuentes",
+    tagline: "Dudas típicas de los primeros días.",
+    body: (
+      <>
+        <div className="help-section">
+          <h3>¿La plataforma puede parar el bot?</h3>
+          <p>No. La plataforma solo observa. Para operar sobre el bot usa su propio panel (bot-v2.alchimiabot.com). Si esta plataforma cae, el bot sigue vivo.</p>
+        </div>
+
+        <div className="help-section">
+          <h3>Cambié algo del bot hace 2 días y no veo impacto — ¿está roto?</h3>
+          <p>Probablemente no. El impacto se mide con trades posteriores al cambio; con pocos trades el número no es fiable. Espera a tener ≥50 trades post-cambio y pulsa "Recalcular" en <strong>Cambios</strong>.</p>
+        </div>
+
+        <div className="help-section">
+          <h3>¿Cuánto tengo que esperar entre cambios del bot?</h3>
+          <p>Al menos 5-7 días con el cambio activo antes de evaluarlo. Cambiar todos los días impide aprender: no sabes qué causó qué.</p>
+        </div>
+
+        <div className="help-section">
+          <h3>Mi Shadow variante lleva 24h y no tengo resultados — ¿está rota?</h3>
+          <p>Necesitas ≥50 filas <em>BOTH_EVALUATED</em> para leer números. Con poco tráfico de trades, puede tardar 48-72h. Revisa en la pestaña Shadow el contador.</p>
+        </div>
+
+        <div className="help-section">
+          <h3>PnL en verde pero edge en amarillo — ¿cuál hago caso?</h3>
+          <p>El edge. PnL en verde con muestra pequeña o un solo día grande no equivale a ventaja. El edge requiere consistencia.</p>
+        </div>
+
+        <div className="help-section">
+          <h3>¿Qué hago si Audit marca health &lt; 70?</h3>
+          <p>Mira los findings, ataca los críticos primero. Mientras el health esté bajo, no hagas cambios en el bot basándote en los datos de las demás pestañas — pueden no ser fiables.</p>
+        </div>
+
+        <div className="help-section">
+          <h3>El Daily dice "reducir en BTC" pero yo veo BTC ganando — ¿quién tiene razón?</h3>
+          <p>Los dos pueden tenerla. El Daily mira una ventana amplia; "hoy" es solo un punto. Llevátelo a <strong>Validation</strong> para que te dé un veredicto formal antes de cambiar nada.</p>
+        </div>
+      </>
+    ),
+    related: [
+      { id: "primeros-pasos", label: "Primeros pasos" },
+      { id: "glosario", label: "Glosario" },
+    ],
+  },
+};
+
+function HelpTab() {
+  const [sectionId, setSectionId] = useState("intro");
+  const goTo = (id) => {
+    if (HELP_CONTENT[id]) {
+      setSectionId(id);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
+
+  const nav = [
+    { group: "Empezar", items: [
+      ["intro", "🚀", "Visión general"],
+      ["arquitectura", "🏛️", "Arquitectura"],
+      ["flujo", "🌊", "Flujo de datos"],
+      ["primeros-pasos", "🧭", "Primeros pasos"],
+    ]},
+    { group: "Operations", items: [
+      ["conclusions", "◆", "Conclusiones"],
+      ["botlive", "▶", "Bot Live"],
+      ["trades", "📈", "Trades"],
+      ["shadow", "◐", "Shadow Mode"],
+      ["regimes", "🌡", "Regímenes"],
+      ["cambios", "✎", "Cambios"],
+      ["daily", "📋", "Daily Report"],
+      ["system", "⚙", "Sistema"],
+    ]},
+    { group: "Research", items: [
+      ["lab", "🔬", "Research Lab"],
+      ["validation", "✓", "Validation"],
+      ["reports", "📊", "Reports"],
+      ["features", "◎", "Features"],
+    ]},
+    { group: "Governance", items: [
+      ["audit", "🛡", "Audit"],
+      ["contract", "📄", "Contrato"],
+    ]},
+    { group: "Extras", items: [
+      ["glosario", "📚", "Glosario"],
+      ["faq", "❔", "FAQ"],
+    ]},
+  ];
+
+  const current = HELP_CONTENT[sectionId] || HELP_CONTENT.intro;
+
+  return (
+    <>
+      <div className="page-title">
+        ❓ Ayuda
+        <div className="page-sub">Guía completa de la plataforma — orientada a trader</div>
+      </div>
+
+      <div className="help-layout">
+        <aside className="help-sidenav">
+          {nav.map((g, gi) => (
+            <div key={gi}>
+              <div className="group-label">{g.group}</div>
+              {g.items.map(([id, ic, label]) => (
+                <div
+                  key={id}
+                  className={"nav-item " + (sectionId === id ? "active" : "")}
+                  onClick={() => goTo(id)}
+                >
+                  <span className="ic">{ic}</span>
+                  <span>{label}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </aside>
+
+        <div className="help-content">
+          <div className="help-hero">
+            <h1>{current.icon} {current.title}</h1>
+            <div className="tagline">{current.tagline}</div>
+            {current.badges && (
+              <div className="badges">
+                {current.badges.map((b, i) => (
+                  <span key={i} className="tag" style={{background: b.color + "22", color: b.color, border: "1px solid " + b.color + "40"}}>{b.label}</span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {current.body}
+
+          {current.related && current.related.length > 0 && (
+            <HelpRelated items={current.related} onGo={goTo} />
+          )}
+        </div>
+      </div>
+    </>
+  );
 }
 
 // ── Auth helpers ──

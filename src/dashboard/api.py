@@ -901,6 +901,12 @@ def create_app(
                         headers=headers,
                         json=body or {},
                     )
+                elif method == "PUT":
+                    resp = await client.put(
+                        f"{_BOT_API_URL}{path}",
+                        headers=headers,
+                        json=body or {},
+                    )
                 elif method == "DELETE":
                     resp = await client.delete(
                         f"{_BOT_API_URL}{path}",
@@ -929,6 +935,14 @@ def create_app(
     @app.delete("/api/shadow/variants/{name}")
     async def shadow_unregister_variant(name: str, request: Request):
         return await _shadow_proxy("DELETE", f"/api/admin/shadow/variants/{name}", request)
+
+    @app.get("/api/shadow/variants/{name}/associated")
+    async def shadow_variant_associated(name: str, request: Request):
+        return await _shadow_proxy("GET", f"/api/admin/shadow/variants/{name}/associated", request)
+
+    @app.put("/api/shadow/variants/{name}")
+    async def shadow_update_variant(name: str, body: dict, request: Request):
+        return await _shadow_proxy("PUT", f"/api/admin/shadow/variants/{name}", request, body=body)
 
     @app.get("/api/shadow/evaluations")
     async def shadow_evaluations(request: Request):
