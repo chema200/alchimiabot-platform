@@ -196,27 +196,6 @@ class SignalEvaluation(Base):
     )
 
 
-# ── Coin Profiles ───────────────────────────────────────────────────────
-
-class CoinProfile(Base):
-    """Per-coin performance profile — aggregated stats."""
-    __tablename__ = "coin_profiles"
-
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
-    coin = Column(String(20), nullable=False, index=True)
-    side = Column(String(10), nullable=False)
-    trades = Column(Integer, default=0)
-    wins = Column(Integer, default=0)
-    losses = Column(Integer, default=0)
-    total_pnl = Column(Float, default=0)
-    avg_pnl = Column(Float, default=0)
-    win_rate = Column(Float, default=0)
-    avg_hold_sec = Column(Integer, default=0)
-    best_regime = Column(String(30))
-    worst_regime = Column(String(30))
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-
-
 # ── Feature Snapshots ───────────────────────────────────────────────────
 
 class FeatureSnapshotRecord(Base):
@@ -255,97 +234,11 @@ class RegimeLabel(Base):
     )
 
 
-# ── Dataset Registry ────────────────────────────────────────────────────
-
-class DatasetRecord(Base):
-    """Registry of generated datasets for ML training."""
-    __tablename__ = "dataset_registry"
-
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
-    name = Column(String(200), nullable=False, unique=True)
-    description = Column(Text)
-    path = Column(String(500), nullable=False)  # file path to parquet/csv
-    row_count = Column(Integer)
-    feature_version = Column(String(100))
-    label_type = Column(String(50))  # win_loss, pnl, expectancy
-    date_from = Column(DateTime(timezone=True))
-    date_to = Column(DateTime(timezone=True))
-    coins = Column(JSON)  # list of coins included
-    params = Column(JSON)  # generation parameters
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-
-
-# ── Model Registry ──────────────────────────────────────────────────────
-
-class ModelRecord(Base):
-    """Registry of trained ML models."""
-    __tablename__ = "model_registry"
-
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
-    name = Column(String(200), nullable=False)
-    version = Column(String(50), nullable=False)
-    model_type = Column(String(50))  # lightgbm, xgboost, etc.
-    dataset_id = Column(BigInteger)  # FK to dataset_registry
-    path = Column(String(500))  # file path to model artifact
-    feature_version = Column(String(100))
-    # Performance metrics
-    metrics = Column(JSON)  # accuracy, auc, sharpe, etc.
-    # Status
-    status = Column(String(20), default="trained")  # trained, validated, promoted, retired
-    promoted_at = Column(DateTime(timezone=True))
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    notes = Column(Text)
-
-    __table_args__ = (
-        Index("idx_model_name_version", "name", "version"),
-    )
-
-
-# ── Replay Runs ─────────────────────────────────────────────────────────
-
-class ReplayRun(Base):
-    """Record of each replay/backtest execution."""
-    __tablename__ = "replay_runs"
-
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
-    name = Column(String(200))
-    run_type = Column(String(30))  # replay, backtest, walkforward
-    date_from = Column(DateTime(timezone=True))
-    date_to = Column(DateTime(timezone=True))
-    coins = Column(JSON)
-    params = Column(JSON)
-    # Results
-    total_trades = Column(Integer)
-    net_pnl = Column(Float)
-    win_rate = Column(Float)
-    sharpe = Column(Float)
-    max_drawdown = Column(Float)
-    results = Column(JSON)
-    # Meta
-    events_processed = Column(Integer)
-    elapsed_sec = Column(Float)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-
-
-# ── Experiment Runs ─────────────────────────────────────────────────────
-
-class ExperimentRun(Base):
-    """Experiment tracking — hypothesis, params, results comparison."""
-    __tablename__ = "experiment_runs"
-
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
-    name = Column(String(200), nullable=False)
-    hypothesis = Column(Text)
-    params = Column(JSON)
-    baseline_params = Column(JSON)
-    status = Column(String(20), default="created")  # created, running, completed, promoted, rejected
-    results = Column(JSON)
-    baseline_results = Column(JSON)
-    promoted = Column(Boolean, default=False)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    completed_at = Column(DateTime(timezone=True))
-    notes = Column(Text)
-
+# NOTE: removed in 2026-04-23 alembic f8c2d9a4b5e6 — the following models/
+# tables were scaffolding for an ML pipeline that never shipped and had
+# zero rows in prod: CoinProfile, DatasetRecord, ModelRecord, ReplayRun,
+# ExperimentRun. Resurrect from alembic downgrade if a future iteration
+# needs them again.
 
 # ── Audit System ────────────────────────────────────────────────────────
 

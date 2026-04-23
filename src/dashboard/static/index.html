@@ -1222,7 +1222,7 @@ function LabTab() {
   const warnings = analysis.warnings || [];
   const recommendations = analysis.recommendations || [];
 
-  const views = ["overview", "metrics", "analysis", "score", "mode", "config", "rejections", "counterfactual", "diagnostic", "quality", "experiments", "decisions"];
+  const views = ["overview", "metrics", "analysis", "score", "mode", "config", "rejections", "counterfactual", "diagnostic", "quality", "decisions"];
 
   return (<>
     <div className="page-title">Research Lab <Tip text="Vision general del rendimiento con KPIs principales y decisiones automaticas del sistema." /><div className="page-sub">Analisis cuantitativo: metricas, experiments, decisions</div></div>
@@ -1769,14 +1769,6 @@ function LabTab() {
         </div>
       </>);
     })()}
-
-    {view === "experiments" && (
-      <div className="card" style={{textAlign:"center", padding:40, color:"#555"}}>
-        <p style={{fontSize:14}}>Run experiments via API:</p>
-        <p style={{fontSize:11, marginTop:8, fontFamily:"monospace"}}>POST /api/quant/experiment</p>
-        <p style={{fontSize:10, marginTop:4, color:"#444"}}>{"{"} name, score_min, micro_min, sl_max_pct, tp_min_pct, trailing_distance_pct, partial_close_pct {"}"}</p>
-      </div>
-    )}
 
     {view === "diagnostic" && (() => {
       const rateColor = (r) => r >= 80 ? "#22c55e" : r >= 50 ? "#eab308" : "#ef4444";
