@@ -1340,6 +1340,7 @@ function ConclusionsTab() {
   const changes = data.what_to_change || [];
   const dnt = data.do_not_touch || [];
   const recs = data.top_recommendations || [];
+  const dqi = data.data_quality_issues || [];
 
   // Map semantic labels → visual variant (ok / warn / bad / info)
   const edgeVariant = ss.edge_status === "POSITIVE" ? "ok" : ss.edge_status === "NEGATIVE" ? "bad" : ss.edge_status === "NEUTRAL" ? "warn" : "info";
