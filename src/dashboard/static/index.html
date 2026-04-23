@@ -782,6 +782,18 @@ function SystemTab() {
         </tbody>
       </table>
     </div>
+
+    {/* ── Ingestion / captura: merged from the old Captura tab ── */}
+    <h3 className="section-title" style={{marginTop: 16}}>Ingestion de datos
+      <Tip text="Metricas de captura: cuantos eventos llegan, cuantos archivos parquet hay, cache hits del feature store. Antes estaba en una pestaña separada 'Captura' — la hemos unido aqui para evitar duplicidad." />
+    </h3>
+    <div className="grid">
+      <MC label="Events Ingested" value={(status.features?.events_ingested || 0).toLocaleString()} color="blue" />
+      <MC label="Raw Files" value={dirs.raw?.file_count || 0} sub="parquet chunks" />
+      <MC label="Raw Size" value={(dirs.raw?.size_gb || 0) + " GB"} />
+      <MC label="Feature Computes" value={(status.features?.computes || 0).toLocaleString()} />
+      <MC label="Cache Hits" value={(status.features?.cache_hits || 0).toLocaleString()} />
+    </div>
   </>);
 }
 
@@ -2290,25 +2302,15 @@ function TradesTab() {
 
   if (detail && selected) {
     const t = detail.trade || {};
-    const v = detail.verdict || {};
+    // verdict data (detail.verdict) removed from UI: the trade_verdicts table
+    // hasn't been updated since 2026-04-17 so the section showed stale info.
+    // Re-add when/if the verdict generator is wired back up.
     const snaps = detail.snapshots || [];
     const sig = detail.signal || {};
     return (<div>
       <button onClick={()=>{setSelected(null);setDetail(null);}} style={{marginBottom:12,padding:"6px 16px",background:"#1e1b4b",border:"1px solid #4c1d95",borderRadius:8,color:"#a78bfa",cursor:"pointer"}}>Volver a lista</button>
-      <h3 style={{fontSize:18,fontWeight:700,marginBottom:4}}>{t.coin} {t.side} <span style={{color:VC[v.verdict]||"#888",fontWeight:700}}>{v.verdict||"?"}</span></h3>
+      <h3 style={{fontSize:18,fontWeight:700,marginBottom:4}}>{t.coin} {t.side}</h3>
       <p style={{fontSize:11,color:"#666",marginBottom:16}}>{t.mode} | {t.entry_tag} | {new Date(t.entry_time).toLocaleString("es-ES")}</p>
-
-      {/* Verdict */}
-      <div style={{background:"rgba(30,27,75,0.5)",border:"1px solid "+(VC[v.verdict]||"#333"),borderRadius:12,padding:16,marginBottom:16}}>
-        <div style={{fontSize:13,fontWeight:700,color:VC[v.verdict],marginBottom:6}}>Veredicto: {v.verdict}</div>
-        <p style={{fontSize:12,color:"#aaa"}}>{v.verdict_reason}</p>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginTop:12}}>
-          <MC label="Entry Timing" value={v.entry_timing||"?"} />
-          <MC label="MFE Captura" value={(v.mfe_capture_pct||0).toFixed(1)+"%"} />
-          <MC label="Tiempo en Profit" value={(v.time_in_profit_pct||0).toFixed(0)+"%"} />
-          <MC label="Fee Killed" value={v.fee_killed?"SI":"NO"} accent={!v.fee_killed} negative={v.fee_killed} />
-        </div>
-      </div>
 
       {/* Entry / Exit */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:16}}>
@@ -2404,7 +2406,6 @@ function TradesTab() {
             <th style={{textAlign:"right"}}>MFE</th>
             <th style={{textAlign:"right"}}>MAE</th>
             <th>Salida</th>
-            <th>Veredicto</th>
             <th>Quality</th>
             <th></th>
           </tr></thead>
@@ -2419,7 +2420,6 @@ function TradesTab() {
               <td style={{textAlign:"right",fontFamily:"monospace",color:"#22c55e"}}>{(t.mfe_pct||0).toFixed(3)}%</td>
               <td style={{textAlign:"right",fontFamily:"monospace",color:"#ef4444"}}>{(t.mae_pct||0).toFixed(3)}%</td>
               <td style={{fontSize:10,color:"#888"}}>{t.exit_reason}</td>
-              <td>{t.verdict ? <span style={{padding:"2px 8px",borderRadius:4,fontSize:10,fontWeight:700,background:(VC[t.verdict]||"#333")+"22",color:VC[t.verdict]||"#888"}}>{t.verdict}</span> : <span style={{color:"#444"}}>-</span>}</td>
               <td style={{fontSize:10,color:"#888"}}>{t.entry_quality_label||""}</td>
               <td><span style={{color:"#4c1d95",fontSize:10}}>Ver</span></td>
             </tr>
@@ -3330,10 +3330,10 @@ function App() {
       { id: "botlive", label: "Bot Live", icon: "▶" },
       { id: "trades", label: "Trades", icon: "📈" },
       { id: "shadow", label: "Shadow Mode", icon: "◐" },
+      { id: "regimes", label: "Regimenes", icon: "🌡" },
       { id: "cambios", label: "Cambios", icon: "✎" },
       { id: "daily", label: "Daily Report", icon: "📋" },
       { id: "system", label: "Sistema", icon: "⚙" },
-      { id: "capture", label: "Captura", icon: "📡" },
     ]},
     { group: "Research", color: "#a855f7", items: [
       { id: "lab", label: "Research Lab", icon: "🔬" },
@@ -3408,7 +3408,7 @@ function App() {
         {tab === "cambios" && <CambiosTab />}
         {tab === "daily" && <DailyReportTab />}
         {tab === "system" && <SystemTab />}
-        {tab === "capture" && <CaptureTab />}
+        {tab === "regimes" && <RegimesTab />}
         {tab === "lab" && <LabTab />}
         {tab === "validation" && <ValidationTab />}
         {tab === "research" && <ResearchTab />}

@@ -178,12 +178,35 @@ def create_app(
         return state.to_dict()
 
     @app.get("/api/regimes")
-    def get_all_regimes() -> dict[str, Any]:
-        if not regime_detector:
-            raise HTTPException(503, "Regime detector not available")
-        coins = feature_store.tracked_coins if feature_store else []
-        states = regime_detector.detect_all(coins)
-        return {coin: state.to_dict() for coin, state in states.items()}
+    async def get_all_regimes() -> dict[str, Any]:
+        # Preferred path: live regime_detector in process memory.
+        if regime_detector:
+            coins = feature_store.tracked_coins if feature_store else []
+            states = regime_detector.detect_all(coins)
+            return {coin: state.to_dict() for coin, state in states.items()}
+
+        # Fallback: the bot's HlTrendService pushes a regime label per coin
+        # every 60s to regime_labels. Read the most recent row per coin so the
+        # Regimes tab has fresh data even when the local detector isn't wired.
+        if not session_factory:
+            return {}
+        from sqlalchemy import text
+        async with session_factory() as session:
+            result = await session.execute(text(
+                "SELECT DISTINCT ON (coin) coin, regime, confidence, "
+                "trend_strength, volatility_level "
+                "FROM regime_labels "
+                "WHERE timestamp > now() - interval '10 minutes' "
+                "ORDER BY coin, timestamp DESC"))
+            out: dict[str, Any] = {}
+            for row in result.mappings().all():
+                out[row["coin"]] = {
+                    "regime": row["regime"],
+                    "confidence": row["confidence"],
+                    "trend_strength": row["trend_strength"],
+                    "volatility_level": row["volatility_level"],
+                }
+            return out
 
     @app.get("/api/positions")
     def get_positions() -> list[dict]:
