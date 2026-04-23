@@ -250,6 +250,21 @@ body::after {
   border-color: rgba(0,212,255,0.22);
   background: var(--bg-elevated);
 }
+/* When JSX supplies an inline borderColor (Conclusions / Validation
+   decorate cards with semantic color: red=bad, green=good, yellow=warn),
+   convert the full-rectangle colored frame into a thin TOP accent bar.
+   Rule: inline borderColor sets all 4 sides — we force the 3 non-top
+   sides back to the neutral hairline, so only the top keeps the inline
+   color at 2px. Looks like a cockpit status strip instead of a pastel
+   Bootstrap box. */
+.card[style*="borderColor"] {
+  border-width: 2px 1px 1px 1px !important;
+  border-left-color:   var(--border-subtle) !important;
+  border-right-color:  var(--border-subtle) !important;
+  border-bottom-color: var(--border-subtle) !important;
+  background: var(--bg-surface) !important;
+  border-radius: 6px !important;
+}
 .card .label {
   font-size: 10px; color: var(--text-muted); text-transform: uppercase;
   letter-spacing: 1.2px; margin-bottom: 10px; font-weight: 600;
@@ -698,12 +713,12 @@ html, body { overflow-x: hidden; max-width: 100vw; }
 .mobile-menu-btn { display: none; background: none; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; color: rgba(255,255,255,0.6); padding: 6px 10px; cursor: pointer; font-size: 18px; }
 .mobile-menu-btn:hover { border-color: rgba(255,255,255,0.2); color: white; }
 
-/* Tables: fit width and wrap content. No horizontal scroll on mobile. */
+/* Tables: desktop wraps fine, mobile needs horizontal scroll instead of
+   wrapping letters vertically. The previous rule stacked 1-char-per-line
+   on narrow screens (terrible UX). */
 .card { max-width: 100%; }
 table { width: 100%; table-layout: auto; }
-th, td { word-break: break-word; overflow-wrap: anywhere; white-space: normal; }
-/* Numeric cells (font-mono) don't break by default — let them shrink instead */
-td { vertical-align: top; }
+th, td { word-break: normal; overflow-wrap: normal; white-space: normal; vertical-align: top; }
 
 /* Override ANY inline grid to auto-fit on small screens.
    Many tabs use inline gridTemplateColumns:"1fr 1fr 1fr" which doesn't collapse.
@@ -774,18 +789,24 @@ td { vertical-align: top; }
   table { font-size: 11px; }
 }
 
-/* Tables on tablet/phone: shrink fonts and padding aggressively */
+/* Tables on tablet/phone: horizontal scroll inside the card instead of
+   stacking letters vertically. Parent card gets overflow-x:auto so the
+   table remains readable. Minimum width prevents squish. */
 @media (max-width: 900px) {
-  table { font-size: 10px; table-layout: fixed; }
-  th, td { padding: 4px 5px; font-size: 10px; line-height: 1.3; }
-  th { font-size: 9px; letter-spacing: 0.2px; }
+  .card { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .card::-webkit-scrollbar { height: 6px; }
+  .card::-webkit-scrollbar-thumb { background: rgba(0,212,255,0.25); border-radius: 3px; }
+  table { font-size: 11px; min-width: 520px; }
+  th, td {
+    padding: 7px 9px; font-size: 11px; line-height: 1.35;
+    white-space: nowrap; word-break: normal; overflow-wrap: normal;
+  }
+  th { font-size: 9px; letter-spacing: 0.3px; }
 }
-@media (max-width: 600px) {
-  table { font-size: 9px; }
-  th, td { padding: 3px 4px; font-size: 9px; }
-  th { font-size: 8px; padding: 4px 3px; }
-  /* Tags inside narrow cells */
-  .tag { padding: 2px 6px; font-size: 9px; }
+@media (max-width: 640px) {
+  table { min-width: 480px; font-size: 10.5px; }
+  th, td { padding: 6px 8px; font-size: 10.5px; }
+  th { font-size: 9px; }
 }
 
 /* Phone portrait (<640px): drawer sidebar, single column */
