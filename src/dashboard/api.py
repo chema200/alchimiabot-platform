@@ -959,6 +959,12 @@ def create_app(
         suffix = f"?{qs}" if qs else ""
         return await _shadow_proxy("GET", f"/api/admin/shadow/exits{suffix}", request)
 
+    @app.get("/api/shadow/variants/impact")
+    async def shadow_variants_impact(request: Request):
+        qs = request.url.query
+        suffix = f"?{qs}" if qs else ""
+        return await _shadow_proxy("GET", f"/api/admin/shadow/variants/impact{suffix}", request)
+
     @app.get("/api/shadow/exits/summary")
     async def shadow_exits_summary(request: Request):
         qs = request.url.query

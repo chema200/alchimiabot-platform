@@ -3748,6 +3748,10 @@ function ShadowModeTab() {
   const [exits, setExits] = useState([]);
   const [exitsSummary, setExitsSummary] = useState({variants: [], totalExits: 0, hours: 168});
   const [exitsHours, setExitsHours] = useState(168);
+  // Impact analysis — the new panel that joins shadow evaluations with real
+  // trade outcomes so the user sees what each variant would have saved/cost.
+  const [impact, setImpact] = useState({variants: [], windowDays: 7});
+  const [impactDays, setImpactDays] = useState(7);
   const [hours, setHours] = useState(24);
   const [filterVariant, setFilterVariant] = useState("");
   const [err, setErr] = useState(null);
@@ -3778,15 +3782,16 @@ function ShadowModeTab() {
     setLoading(true); setErr(null);
     try {
       const qs = filterVariant ? ("?variant=" + encodeURIComponent(filterVariant)) : "";
-      const [vResp, eResp, sResp, xResp, xsResp] = await Promise.all([
+      const [vResp, eResp, sResp, xResp, xsResp, iResp] = await Promise.all([
         fetch(API + "/api/shadow/variants", {credentials:"include"}),
         fetch(API + "/api/shadow/evaluations" + qs, {credentials:"include"}),
         fetch(API + "/api/shadow/summary?hours=" + hours, {credentials:"include"}),
         fetch(API + "/api/shadow/exits" + qs, {credentials:"include"}),
         fetch(API + "/api/shadow/exits/summary?hours=" + exitsHours, {credentials:"include"}),
+        fetch(API + "/api/shadow/variants/impact?days=" + impactDays, {credentials:"include"}),
       ]);
       if (vResp.status === 403 || eResp.status === 403 || sResp.status === 403
-          || xResp.status === 403 || xsResp.status === 403) {
+          || xResp.status === 403 || xsResp.status === 403 || iResp.status === 403) {
         throw new Error("Acceso denegado — requiere rol ADMIN");
       }
       // Defensive parsing: endpoint can be missing (404) while the bot /
@@ -3801,14 +3806,16 @@ function ShadowModeTab() {
       const sData  = await jsonOrDefault(sResp, {variants: [], totalEvaluations: 0, hours});
       const xData  = await jsonOrDefault(xResp, []);
       const xsData = await jsonOrDefault(xsResp, {variants: [], totalExits: 0, hours: exitsHours});
+      const iData  = await jsonOrDefault(iResp, {variants: [], windowDays: impactDays});
       setVariants(Array.isArray(vData) ? vData : []);
       setEvaluations(Array.isArray(eData) ? eData : []);
       setSummary(sData && typeof sData === "object" && Array.isArray(sData.variants) ? sData : {variants: [], totalEvaluations: 0, hours});
       setExits(Array.isArray(xData) ? xData : []);
       setExitsSummary(xsData && typeof xsData === "object" && Array.isArray(xsData.variants) ? xsData : {variants: [], totalExits: 0, hours: exitsHours});
+      setImpact(iData && typeof iData === "object" && Array.isArray(iData.variants) ? iData : {variants: [], windowDays: impactDays});
     } catch (e) { setErr(e.message || String(e)); }
     setLoading(false);
-  }, [hours, filterVariant, exitsHours]);
+  }, [hours, filterVariant, exitsHours, impactDays]);
 
   useEffect(() => { refresh(); const t = setInterval(refresh, 15000); return () => clearInterval(t); }, [refresh]);
 
@@ -3977,6 +3984,184 @@ function ShadowModeTab() {
     </div>
 
     {err && <div style={{padding:12, background:"#2a1010", border:"1px solid #ef4444", borderRadius:6, color:"#ef4444", marginBottom:12, fontSize:12}}>{err}</div>}
+
+    {/* ══════════════════════════════════════════════════════════════════
+        ANÁLISIS DE IMPACTO — el panel explicativo para no-técnicos.
+        Lo ponemos ARRIBA porque es la información más importante:
+        responde "¿qué variante sirve y cuánto dinero ahorraría?".
+        ══════════════════════════════════════════════════════════════════ */}
+    <div className="panel" style={{marginBottom:18}}>
+      <div className="panel-title">
+        Análisis de impacto
+        <span className="meta">
+          <select value={impactDays} onChange={e => setImpactDays(Number(e.target.value))}
+            style={{marginRight:10, padding:"3px 8px", fontSize:10, background:"var(--bg-panel)", border:"1px solid var(--border-subtle)", color:"var(--text-dim)", borderRadius:4}}>
+            <option value={1}>últ. 24 h</option>
+            <option value={3}>últ. 3 días</option>
+            <option value={7}>últ. 7 días</option>
+            <option value={14}>últ. 14 días</option>
+            <option value={30}>últ. 30 días</option>
+          </select>
+          {impact.variants?.length || 0} variantes analizadas
+        </span>
+      </div>
+
+      {/* Cómo leer esto — tooltip permanente arriba del todo */}
+      <div className="diag info" style={{marginBottom:16}}>
+        <div className="diag-label">CÓMO LEER</div>
+        <div className="diag-text" style={{lineHeight:1.55}}>
+          Para cada variante mido <b>qué habría pasado si hubiera estado activa en prod</b> durante la ventana seleccionada.
+          En variantes de <b>filtro de entrada</b> (ej: score-62) cruzo los candidatos bloqueados con los trades reales y sumo el PnL que habrías ahorrado o costado.
+          En variantes de <b>salida</b> (ej: roi-patient) sumo las diferencias sim vs real de cada cierre.
+          El <b>veredicto</b> abajo se basa en esos números automáticamente — <span style={{color:"var(--pos-hi)"}}>CANDIDATA</span> = lista para aplicar al preset,
+          {" "}<span style={{color:"var(--warn-hi)"}}>NEUTRAL/POSITIVA</span> = seguir midiendo,
+          {" "}<span style={{color:"var(--neg-hi)"}}>NEGATIVA</span> = no aplicar,
+          {" "}<span style={{color:"var(--text-muted)"}}>DATOS INSUFICIENTES</span> = muestra menor de 10-20 trades.
+        </div>
+      </div>
+
+      {(!impact.variants || impact.variants.length === 0) ? (
+        <div style={{color:"var(--text-muted)", fontSize:12, padding:8}}>
+          Aún no hay datos suficientes. Espera a que el bot procese algunas entradas durante la ventana seleccionada.
+        </div>
+      ) : (
+        <div style={{display:"flex", flexDirection:"column", gap:10}}>
+          {/* Sort: strong candidates first, then positive, neutral, negative, insufficient, observer */}
+          {[...impact.variants].sort((a, b) => {
+            const rank = (v) => ({
+              CANDIDATE_STRONG: 0, POSITIVE: 1, NEUTRAL: 2, NEGATIVE: 3,
+              INSUFFICIENT_DATA: 4, OBSERVER: 5
+            }[v.verdict] ?? 99);
+            return rank(a) - rank(b);
+          }).map(v => {
+            const verdictCls = {
+              CANDIDATE_STRONG: "ok",
+              POSITIVE: "ok",
+              NEUTRAL: "info",
+              NEGATIVE: "bad",
+              INSUFFICIENT_DATA: "warn",
+              OBSERVER: "info",
+            }[v.verdict] || "info";
+            const verdictLabel = {
+              CANDIDATE_STRONG: "CANDIDATA A PRODUCCIÓN",
+              POSITIVE: "SEÑAL POSITIVA",
+              NEUTRAL: "EMPATE / NEUTRO",
+              NEGATIVE: "NEGATIVA — NO APLICAR",
+              INSUFFICIENT_DATA: "DATOS INSUFICIENTES",
+              OBSERVER: "VARIANTE OBSERVADORA",
+            }[v.verdict] || v.verdict;
+
+            const isExit = v.kind === "EXIT";
+            return (
+              <div key={v.name}
+                style={{
+                  background: "var(--bg-panel)",
+                  border: "1px solid var(--border-subtle)",
+                  borderLeft: "3px solid " + (verdictCls === "ok" ? "var(--pos)" : verdictCls === "bad" ? "var(--neg)" : verdictCls === "warn" ? "var(--warn)" : "var(--info)"),
+                  borderRadius: 8,
+                  padding: "14px 18px",
+                }}>
+                {/* Header row: name + kind tag + verdict chip */}
+                <div style={{display:"flex", alignItems:"center", gap:10, flexWrap:"wrap", marginBottom:10}}>
+                  <div style={{fontSize:14, fontWeight:600, color:"var(--text)", fontFamily:"var(--font-mono)"}}>{v.name}</div>
+                  <span style={{
+                    fontSize:9, fontWeight:600, letterSpacing:0.8, textTransform:"uppercase",
+                    padding:"2px 8px", borderRadius:3,
+                    background: v.kind === "EXIT" ? "rgba(167,139,250,0.14)" : v.kind === "SIZING" ? "rgba(251,191,36,0.14)" : "rgba(56,189,248,0.14)",
+                    color: v.kind === "EXIT" ? "var(--accent-violet)" : v.kind === "SIZING" ? "var(--warn-hi)" : "var(--accent-hi)",
+                  }}>{v.kind === "EXIT" ? "SALIDA" : v.kind === "SIZING" ? "SIZING" : "FILTRO ENTRADA"}</span>
+                  <span style={{marginLeft:"auto", padding:"3px 10px", borderRadius:4, fontSize:10, fontWeight:700, letterSpacing:0.6, textTransform:"uppercase",
+                    background: verdictCls === "ok" ? "rgba(16,185,129,0.14)" : verdictCls === "bad" ? "rgba(244,63,94,0.14)" : verdictCls === "warn" ? "rgba(245,158,11,0.14)" : "rgba(56,189,248,0.12)",
+                    color: verdictCls === "ok" ? "var(--pos-hi)" : verdictCls === "bad" ? "var(--neg-hi)" : verdictCls === "warn" ? "var(--warn-hi)" : "var(--accent-hi)",
+                  }}>{verdictLabel}</span>
+                </div>
+
+                {/* Description */}
+                <div style={{fontSize:11.5, color:"var(--text-muted)", marginBottom:12, lineHeight:1.5}}>{v.description}</div>
+
+                {/* Metrics grid */}
+                {isExit ? (
+                  <div className="kpi-strip" style={{marginBottom:12, background:"var(--bg-base)", borderRadius:6, padding:"8px 0"}}>
+                    <div>
+                      <div className="k">Comparables</div>
+                      <div className="v">{v.simTotal ?? 0}</div>
+                      <div className="sub">BOTH_EVALUATED</div>
+                    </div>
+                    <div>
+                      <div className="k">Ganó vs prod</div>
+                      <div className="v pos">{v.simWinsVsProd ?? 0}</div>
+                      <div className="sub">{v.simTotal ? Math.round(100*(v.simWinsVsProd||0)/v.simTotal) : 0}% win rate</div>
+                    </div>
+                    <div>
+                      <div className="k">Perdió vs prod</div>
+                      <div className="v neg">{v.simLossesVsProd ?? 0}</div>
+                      <div className="sub">delta &lt; 0</div>
+                    </div>
+                    <div>
+                      <div className="k">Σ ΔPnL</div>
+                      <div className={"v " + ((v.sumDeltaUsd||0) > 0 ? "pos" : (v.sumDeltaUsd||0) < 0 ? "neg" : "")}>
+                        {(v.sumDeltaUsd||0) >= 0 ? "+" : ""}${(v.sumDeltaUsd||0).toFixed(2)}
+                      </div>
+                      <div className="sub">total $ ganado/perdido vs prod</div>
+                    </div>
+                    <div>
+                      <div className="k">Mejor · Peor</div>
+                      <div className="v" style={{fontSize:13}}>
+                        <span style={{color:"var(--pos-hi)"}}>+${(v.bestDeltaUsd||0).toFixed(2)}</span>
+                        <span style={{color:"var(--text-soft)"}}> · </span>
+                        <span style={{color:"var(--neg-hi)"}}>${(v.worstDeltaUsd||0).toFixed(2)}</span>
+                      </div>
+                      <div className="sub">{v.simPending||0} pending · {v.simRealFirst||0} real first</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="kpi-strip" style={{marginBottom:12, background:"var(--bg-base)", borderRadius:6, padding:"8px 0"}}>
+                    <div>
+                      <div className="k">Evaluados</div>
+                      <div className="v">{v.evalTotal ?? 0}</div>
+                      <div className="sub">candidatos totales</div>
+                    </div>
+                    <div>
+                      <div className="k">Dejaría pasar</div>
+                      <div className="v">{v.evalFired ?? 0}</div>
+                      <div className="sub">{v.evalTotal ? Math.round(100*(v.evalFired||0)/v.evalTotal) : 0}% del flujo</div>
+                    </div>
+                    <div>
+                      <div className="k">Habría bloqueado</div>
+                      <div className="v warn">{v.evalBlocked ?? 0}</div>
+                      <div className="sub">emparejados: {v.matched ?? 0}</div>
+                    </div>
+                    <div>
+                      <div className="k">Pérdidas evitadas</div>
+                      <div className="v pos">{v.lossesSaved ?? 0}</div>
+                      <div className="sub">habrías esquivado</div>
+                    </div>
+                    <div>
+                      <div className="k">Ganadores perdidos</div>
+                      <div className="v neg">{v.winsMissed ?? 0}</div>
+                      <div className="sub">coste de oportunidad</div>
+                    </div>
+                    <div>
+                      <div className="k">Σ ahorrado</div>
+                      <div className={"v " + ((v.sumSavedUsd||0) > 0 ? "pos" : (v.sumSavedUsd||0) < 0 ? "neg" : "")}>
+                        {(v.sumSavedUsd||0) >= 0 ? "+" : ""}${(v.sumSavedUsd||0).toFixed(2)}
+                      </div>
+                      <div className="sub">impacto neto en $</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Verdict text in plain Spanish */}
+                <div style={{fontSize:12, color:"var(--text-dim)", lineHeight:1.6, background:"var(--bg-base)", borderRadius:6, padding:"10px 14px", borderLeft:"2px solid " + (verdictCls === "ok" ? "var(--pos)" : verdictCls === "bad" ? "var(--neg)" : verdictCls === "warn" ? "var(--warn)" : "var(--info)")}}>
+                  <b style={{color:"var(--text-muted)", fontSize:10, textTransform:"uppercase", letterSpacing:0.8}}>Interpretación:</b>{" "}
+                  {v.verdictText}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
 
     {/* ── Active variants ── */}
     <h3 className="section-title">Variantes activas ({variants.length}) <Tip text="Cada variante evalua en paralelo cada candidato de entrada y guarda su decision en hl_shadow_evaluations. Cero impacto sobre prod." /></h3>
