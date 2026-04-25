@@ -1046,6 +1046,38 @@ def create_app(
         suffix = f"?{qs}" if qs else ""
         return await _shadow_proxy("GET", f"/api/admin/shadow/exits/summary{suffix}", request)
 
+    # ── Strategies (Fase P del engine overhaul, 2026-04-25) ──
+    # Proxy a /api/strategies del bot. El platform muestra las strategies del
+    # user logueado (mismo JWT) + permite crear desde plantillas o importar
+    # JSON externo (botón "Cargar al bot"). La biblioteca global de plantillas
+    # curadas se guarda en el platform y se aplica al bot via /import.
+
+    @app.get("/api/strategies")
+    async def strategies_list(request: Request):
+        qs = request.url.query
+        suffix = f"?{qs}" if qs else ""
+        return await _shadow_proxy("GET", f"/api/strategies{suffix}", request)
+
+    @app.get("/api/strategies/{strategy_id}/stats")
+    async def strategies_stats(strategy_id: int, request: Request):
+        return await _shadow_proxy("GET", f"/api/strategies/{strategy_id}/stats", request)
+
+    @app.post("/api/strategies/auto")
+    async def strategies_auto(body: dict, request: Request):
+        return await _shadow_proxy("POST", "/api/strategies/auto", request, body=body)
+
+    @app.post("/api/strategies/import")
+    async def strategies_import(body: dict, request: Request):
+        return await _shadow_proxy("POST", "/api/strategies/import", request, body=body)
+
+    @app.put("/api/strategies/{strategy_id}")
+    async def strategies_update(strategy_id: int, body: dict, request: Request):
+        return await _shadow_proxy("PUT", f"/api/strategies/{strategy_id}", request, body=body)
+
+    @app.delete("/api/strategies/{strategy_id}")
+    async def strategies_delete(strategy_id: int, request: Request):
+        return await _shadow_proxy("DELETE", f"/api/strategies/{strategy_id}", request)
+
     # ── Serve frontend ──
     _static = Path(os.path.dirname(os.path.abspath(__file__))) / "static"
     if _static.exists():
