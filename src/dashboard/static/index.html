@@ -1007,6 +1007,28 @@ th, td { word-break: normal; overflow-wrap: normal; white-space: normal; vertica
   animation: pulse-dot 2.4s ease-in-out infinite;
 }
 
+/* Live pulse indicator — used on tabs that poll data in real time */
+@keyframes pulse-dot-cyan {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(56,189,248,0.55); }
+  50%      { opacity: 0.6; box-shadow: 0 0 0 6px rgba(56,189,248,0); }
+}
+.live-pulse {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 3px 10px 3px 9px; border-radius: var(--r-pill);
+  font-size: 10px; font-weight: 600; letter-spacing: 0.4px;
+  background: rgba(56,189,248,0.08); border: 1px solid rgba(56,189,248,0.22);
+  color: #7dd3fc;
+  vertical-align: middle;
+}
+.live-pulse .dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #38bdf8;
+  animation: pulse-dot-cyan 2.0s ease-in-out infinite;
+}
+.live-pulse .sub {
+  color: rgba(125,211,252,0.65); font-weight: 500;
+}
+
 /* Tablet landscape (1024px–1280px): sidebar slimmer, content tighter */
 @media (max-width: 1280px) {
   .content-area { padding: 20px 22px; }
@@ -1215,7 +1237,94 @@ th, td { word-break: normal; overflow-wrap: normal; white-space: normal; vertica
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const { useState, useEffect, useCallback } = React;
+const { useState, useEffect, useCallback, useContext, createContext } = React;
+
+// ── i18n (runtime) ─────────────────────────────────────────────────────────
+// Strings live in /static/i18n/{es,en}.json and are fetched on mount. The
+// user's choice is persisted in localStorage under "platform_lang".
+const I18nContext = createContext({ lang: "es", setLang: () => {}, t: (k) => k, ready: false });
+
+function I18nProvider({ children }) {
+  const [lang, setLangState] = useState(() => localStorage.getItem("platform_lang") || "es");
+  const [dict, setDict] = useState({ es: {}, en: {} });
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    Promise.all([
+      fetch("/static/i18n/es.json").then(r => r.ok ? r.json() : {}).catch(() => ({})),
+      fetch("/static/i18n/en.json").then(r => r.ok ? r.json() : {}).catch(() => ({})),
+    ]).then(([es, en]) => {
+      setDict({ es, en });
+      setReady(true);
+    });
+  }, []);
+
+  const setLang = useCallback((l) => {
+    localStorage.setItem("platform_lang", l);
+    setLangState(l);
+  }, []);
+
+  const t = useCallback((key, params) => {
+    let s = dict[lang]?.[key] ?? dict.es?.[key] ?? key;
+    if (params && typeof s === "string") {
+      Object.keys(params).forEach(k => {
+        s = s.split("{" + k + "}").join(String(params[k]));
+      });
+    }
+    return s;
+  }, [lang, dict]);
+
+  return <I18nContext.Provider value={{ lang, setLang, t, ready }}>{children}</I18nContext.Provider>;
+}
+
+const useI18n = () => useContext(I18nContext);
+
+// Small animated "LIVE" pill. Used in tabs that poll real-time data
+// so the user knows the screen is refreshing even when numbers don't change.
+function LivePulse({ intervalSec }) {
+  const { t } = useI18n();
+  const label = intervalSec ? t("common.live_every", {n: intervalSec}) : null;
+  return (
+    <span className="live-pulse" title={label || t("common.live")}>
+      <span className="dot"></span>
+      <span>{t("common.live")}</span>
+      {label && <span className="sub">· {label}</span>}
+    </span>
+  );
+}
+
+function LangToggle() {
+  const { lang, setLang, t } = useI18n();
+  const next = lang === "es" ? "en" : "es";
+  const title = lang === "es" ? t("topbar.lang_toggle_to_en") : t("topbar.lang_toggle_to_es");
+  return (
+    <button
+      type="button"
+      onClick={() => setLang(next)}
+      title={title}
+      aria-label={title}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        background: "transparent",
+        border: "1px solid var(--border, #2a2f3a)",
+        color: "var(--text-soft, #cbd5e1)",
+        padding: "4px 10px",
+        borderRadius: 6,
+        cursor: "pointer",
+        fontSize: 12,
+        lineHeight: 1,
+        fontWeight: 600,
+        letterSpacing: 0.3,
+      }}
+    >
+      {lang === "es"
+        ? <span style={{fontSize:14, lineHeight:1}}>🇪🇸</span>
+        : <span>EN</span>}
+    </button>
+  );
+}
 
 const API = "";  // same origin
 
@@ -1310,6 +1419,7 @@ function MC({ label, value, sub, color, tip }) {
 
 // ── Conclusions Tab — Quant Intelligence Center ──
 function ConclusionsTab() {
+  const { t, lang } = useI18n();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [recentMarkers, setRecentMarkers] = useState([]);
@@ -1326,8 +1436,8 @@ function ConclusionsTab() {
   };
   useEffect(() => { load(); }, []);
 
-  if (loading) return <div className="loading">Cargando datos...</div>;
-  if (!data) return <div style={{textAlign:"center",padding:40}}><p style={{color:"var(--text-muted)",marginBottom:12}}>No se pudo cargar el resumen</p><button className="tab" onClick={load}>Reintentar</button></div>;
+  if (loading) return <div className="loading">{t("common.loading")}</div>;
+  if (!data) return <div style={{textAlign:"center",padding:40}}><p style={{color:"var(--text-muted)",marginBottom:12}}>{t("conclusions.error_load")}</p><button className="tab" onClick={load}>{t("common.retry")}</button></div>;
 
   const ss = data.system_status || {};
   const live = data.live_evidence || {};
@@ -1363,31 +1473,31 @@ function ConclusionsTab() {
     {/* ── Page header ─────────────────────────────────────────── */}
     <div className="page-title" style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12}}>
       <div>
-        Conclusiones
-        <div className="page-sub">Resumen ejecutivo: estado del edge, drivers de PnL y acciones recomendadas</div>
+        {t("conclusions.title")}
+        <div className="page-sub">{t("conclusions.subtitle")}</div>
       </div>
       <div style={{display:"flex", gap:8, flexShrink:0}}>
-        <ExportBtn data={data} filename={"conclusiones_" + new Date().toISOString().split("T")[0] + ".json"} />
-        <button className="tab" onClick={load}>↻ Actualizar</button>
+        <ExportBtn data={data} filename={"conclusions_" + new Date().toISOString().split("T")[0] + ".json"} />
+        <button className="tab" onClick={load}>{t("common.refresh")}</button>
       </div>
     </div>
 
     {/* ── STATUS RAIL: the 3 "state" KPIs as compact strip, no giant cards ─── */}
     <div className="status-rail">
       <div className={"stat " + edgeVariant}>
-        <div className="k">Edge <Tip text="Ventaja estadistica real. POSITIVE = ganando, NEGATIVE = perdiendo." /></div>
+        <div className="k">{t("conclusions.edge")} <Tip text={t("conclusions.edge_tip")} /></div>
         <div className="v">{ss.edge_status || "—"}</div>
-        <div className="sub">{live.trades || 0} trades analizados</div>
+        <div className="sub">{t("conclusions.trades_analyzed", {n: live.trades || 0})}</div>
       </div>
       <div className={"stat " + confVariant}>
-        <div className="k">Confianza <Tip text="Depende del numero de trades, cobertura de scores y datos de replay." /></div>
+        <div className="k">{t("conclusions.confidence")} <Tip text={t("conclusions.confidence_tip")} /></div>
         <div className="v">{ss.confidence || "—"}</div>
-        <div className="sub">Cobertura {((sp.post_diagnostics_coverage||{}).trade_coverage_pct ?? sp.coverage_pct) ?? 0}% · Global {sp.coverage_pct || 0}%</div>
+        <div className="sub">{t("conclusions.coverage_line", {pct: ((sp.post_diagnostics_coverage||{}).trade_coverage_pct ?? sp.coverage_pct) ?? 0, global: sp.coverage_pct || 0})}</div>
       </div>
       <div className={"stat " + dqVariant}>
-        <div className="k">Calidad de datos <Tip text="GOOD = todo correcto, POOR = faltan scores o hay inconsistencias." /></div>
+        <div className="k">{t("conclusions.data_quality")} <Tip text={t("conclusions.data_quality_tip")} /></div>
         <div className="v">{ss.data_quality || "—"}</div>
-        <div className="sub">Real: {sp.real_status || sp.status || "—"}</div>
+        <div className="sub">{t("conclusions.data_quality_real", {status: sp.real_status || sp.status || "—"})}</div>
       </div>
     </div>
 
@@ -1401,43 +1511,43 @@ function ConclusionsTab() {
 
     {/* ── EXECUTIVE OVERVIEW: Net PnL hero + KPI strip + balance bar ── */}
     <div className="panel">
-      <div className="panel-title">Performance en vivo <span className="meta">{live.trades || 0} trades · últimas sesiones</span></div>
+      <div className="panel-title">{t("conclusions.performance_live")} <span className="meta">{t("conclusions.trades_sessions_meta", {n: live.trades || 0})}</span></div>
       {live.status === "NO_DATA" ? (
-        <div style={{color:"var(--text-muted)", fontSize:12, padding:"8px 0"}}>Sin datos de live trades aún</div>
+        <div style={{color:"var(--text-muted)", fontSize:12, padding:"8px 0"}}>{t("conclusions.no_live_data")}</div>
       ) : (
         <div style={{display:"grid", gridTemplateColumns:"minmax(220px, 280px) 1fr", gap:32, alignItems:"start"}}>
           {/* Hero — Net PnL */}
           <div className="kpi-hero">
-            <div className="k">Net PnL</div>
+            <div className="k">{t("conclusions.net_pnl")}</div>
             <div className={"v " + signCls(Number(live.net_pnl))}>{fmtPnl(live.net_pnl)}</div>
-            <div className="sub">Profit Factor <b style={{color: live.profit_factor >= 1 ? "var(--pos-hi)" : "var(--neg-hi)"}}>{live.profit_factor}</b> · Max DD <b style={{color:"var(--neg-hi)"}}>${live.max_drawdown || 0}</b></div>
+            <div className="sub">{t("conclusions.profit_factor")} <b style={{color: live.profit_factor >= 1 ? "var(--pos-hi)" : "var(--neg-hi)"}}>{live.profit_factor}</b> · {t("conclusions.max_dd")} <b style={{color:"var(--neg-hi)"}}>${live.max_drawdown || 0}</b></div>
           </div>
           {/* Strip — secondary metrics */}
           <div className="kpi-strip">
             <div>
-              <div className="k">Win Rate</div>
+              <div className="k">{t("conclusions.win_rate")}</div>
               <div className={"v " + (Number(live.winrate) >= 50 ? "pos" : "neg")}>{live.winrate ?? "—"}<span style={{fontSize:14, color:"var(--text-muted)"}}>%</span></div>
-              <div className="sub">{live.wins ?? 0}W · {live.losses ?? 0}L</div>
+              <div className="sub">{t("conclusions.wl_short", {wins: live.wins ?? 0, losses: live.losses ?? 0})}</div>
             </div>
             <div>
-              <div className="k">Expectancy</div>
+              <div className="k">{t("conclusions.expectancy")}</div>
               <div className={"v " + signCls(Number(live.expectancy))}>{live.expectancy == null ? "—" : (Number(live.expectancy) >= 0 ? "+" : "") + "$" + Number(live.expectancy).toFixed(2)}</div>
-              <div className="sub">por trade</div>
+              <div className="sub">{t("conclusions.per_trade")}</div>
             </div>
             <div>
-              <div className="k">Avg Win</div>
+              <div className="k">{t("conclusions.avg_win")}</div>
               <div className="v pos">${live.avg_win ?? "—"}</div>
-              <div className="sub">{live.wins ?? 0} ganadores</div>
+              <div className="sub">{t("conclusions.winners_count", {n: live.wins ?? 0})}</div>
             </div>
             <div>
-              <div className="k">Avg Loss</div>
+              <div className="k">{t("conclusions.avg_loss")}</div>
               <div className="v neg">${live.avg_loss ?? "—"}</div>
-              <div className="sub">{live.losses ?? 0} perdedores</div>
+              <div className="sub">{t("conclusions.losers_count", {n: live.losses ?? 0})}</div>
             </div>
             <div>
-              <div className="k">Fee killed</div>
+              <div className="k">{t("conclusions.fee_killed")}</div>
               <div className={"v " + ((live.fee_killed || 0) > 0 ? "warn" : "")}>{live.fee_killed ?? 0}</div>
-              <div className="sub">bruto + / neto −</div>
+              <div className="sub">{t("conclusions.fee_killed_sub")}</div>
             </div>
           </div>
         </div>
@@ -1447,8 +1557,8 @@ function ConclusionsTab() {
       {(aw > 0 || al > 0) && (
         <div className="balance-bar" style={{marginTop:22}}>
           <div className="bb-labels">
-            <span>Avg Win</span>
-            <span>Avg Loss</span>
+            <span>{t("conclusions.avg_win")}</span>
+            <span>{t("conclusions.avg_loss")}</span>
           </div>
           <div className="bb-track">
             <div className="bb-win" style={{width: bbWinPct.toFixed(1) + "%"}}>${aw.toFixed(2)}</div>
@@ -1456,10 +1566,10 @@ function ConclusionsTab() {
           </div>
           <div className="bb-summary">
             {al > aw
-              ? <>Perdedor medio <b style={{color:"var(--neg-hi)"}}>{(al/aw).toFixed(1)}×</b> el ganador medio. Tu win-rate necesita ser ≥ <b>{(al/(aw+al)*100).toFixed(0)}%</b> para break-even.</>
+              ? <span dangerouslySetInnerHTML={{__html: t("conclusions.balance.loser_heavier", {ratio: (al/aw).toFixed(1), wr: (al/(aw+al)*100).toFixed(0)})}} />
               : aw > al
-                ? <>Ganador medio <b style={{color:"var(--pos-hi)"}}>{(aw/al).toFixed(1)}×</b> el perdedor. Con WR ≥ <b>{(al/(aw+al)*100).toFixed(0)}%</b> el sistema es rentable.</>
-                : <>Ganador y perdedor medios equivalentes — PnL depende solo del win-rate.</>}
+                ? <span dangerouslySetInnerHTML={{__html: t("conclusions.balance.winner_heavier", {ratio: (aw/al).toFixed(1), wr: (al/(aw+al)*100).toFixed(0)})}} />
+                : <span>{t("conclusions.balance.equal")}</span>}
           </div>
         </div>
       )}
@@ -1469,9 +1579,9 @@ function ConclusionsTab() {
     {(works.length > 0 || fails.length > 0) && (
       <div className="split-2">
         <div className="panel">
-          <div className="panel-title">Está funcionando <span className="meta">{works.length} hallazgos</span></div>
+          <div className="panel-title">{t("conclusions.whats_working")} <span className="meta">{t("conclusions.findings_count", {n: works.length})}</span></div>
           {works.length === 0 ? (
-            <div style={{fontSize:12, color:"var(--text-soft)"}}>Sin ganadores claros todavía</div>
+            <div style={{fontSize:12, color:"var(--text-soft)"}}>{t("conclusions.no_winners")}</div>
           ) : (
             <ul className="driver-list pos">
               {works.map((w, i) => <li key={i}>{w}</li>)}
@@ -1479,9 +1589,9 @@ function ConclusionsTab() {
           )}
         </div>
         <div className="panel">
-          <div className="panel-title">Está fallando <span className="meta">{fails.length} hallazgos</span></div>
+          <div className="panel-title">{t("conclusions.whats_failing")} <span className="meta">{t("conclusions.findings_count", {n: fails.length})}</span></div>
           {fails.length === 0 ? (
-            <div style={{fontSize:12, color:"var(--text-soft)"}}>Nada crítico fallando</div>
+            <div style={{fontSize:12, color:"var(--text-soft)"}}>{t("conclusions.no_fails")}</div>
           ) : (
             <ul className="driver-list neg">
               {fails.map((f, i) => <li key={i}>{f}</li>)}
@@ -1495,9 +1605,9 @@ function ConclusionsTab() {
     {(changes.length > 0 || dnt.length > 0) && (
       <div className="split-2">
         <div className="panel">
-          <div className="panel-title">A evaluar <span className="meta">{changes.length} cambios propuestos</span></div>
+          <div className="panel-title">{t("conclusions.to_evaluate")} <span className="meta">{t("conclusions.changes_proposed", {n: changes.length})}</span></div>
           {changes.length === 0 ? (
-            <div style={{fontSize:12, color:"var(--text-soft)"}}>Sin cambios recomendados</div>
+            <div style={{fontSize:12, color:"var(--text-soft)"}}>{t("conclusions.no_changes")}</div>
           ) : (
             <ul className="driver-list info">
               {changes.map((c, i) => (
@@ -1513,9 +1623,9 @@ function ConclusionsTab() {
           )}
         </div>
         <div className="panel">
-          <div className="panel-title">No tocar <span className="meta">{dnt.length} estables</span></div>
+          <div className="panel-title">{t("conclusions.do_not_touch")} <span className="meta">{t("conclusions.stable_count", {n: dnt.length})}</span></div>
           {dnt.length === 0 ? (
-            <div style={{fontSize:12, color:"var(--text-soft)"}}>Necesita más datos</div>
+            <div style={{fontSize:12, color:"var(--text-soft)"}}>{t("conclusions.need_more_data")}</div>
           ) : (
             <ul className="driver-list">
               {dnt.map((d, i) => <li key={i}>{d}</li>)}
@@ -1533,7 +1643,7 @@ function ConclusionsTab() {
           <div className="action-meta">
             <span className="sev">{nba.priority || "INFO"}</span>
             {nba.category && <span>{nba.category}</span>}
-            <span>Siguiente acción prioritaria</span>
+            <span>{t("conclusions.next_action")}</span>
           </div>
           <div className="action-title">{nba.action}</div>
           {nba.reasoning && <div className="action-sub">{nba.reasoning}</div>}
@@ -1545,14 +1655,14 @@ function ConclusionsTab() {
     {recentMarkers.length > 0 && (
       <div className="panel">
         <div className="panel-title">
-          Cambios recientes con impacto <span className="meta">20 antes vs 20 después</span>
-          <Tip text="Últimos cambios marcados con su impacto medido (20 trades antes vs 20 después)." />
+          {t("conclusions.recent_markers")} <span className="meta">{t("conclusions.before_after_meta")}</span>
+          <Tip text={t("conclusions.recent_markers_tip")} />
         </div>
         <div className="timeline">
           {recentMarkers.map(m => {
             const imp = m.impact_data || {};
             const dExp = imp.delta_expectancy;
-            const when = m.timestamp ? new Date(m.timestamp).toLocaleString("es-ES", {day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"}) : "—";
+            const when = m.timestamp ? new Date(m.timestamp).toLocaleString(lang === "en" ? "en-US" : "es-ES", {day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"}) : "—";
             const row = m.impact_status === "IMPROVED" ? "up" : m.impact_status === "WORSENED" ? "down" : "flat";
             const fmt = (v, suffix) => v == null ? "—" : (v > 0 ? "+" : "") + v + (suffix || "");
             const dCls = (v) => v > 0 ? "pos" : v < 0 ? "neg" : "flat";
@@ -1580,7 +1690,7 @@ function ConclusionsTab() {
     {/* ── RECOMMENDATIONS QUEUE ─────────────────────────── */}
     {recs.length > 0 && (
       <div className="panel">
-        <div className="panel-title">Cola de acciones <span className="meta">{recs.length} pendientes</span></div>
+        <div className="panel-title">{t("conclusions.actions_queue")} <span className="meta">{t("conclusions.pending_count", {n: recs.length})}</span></div>
         <ul className="driver-list">
           {recs.map((r, i) => {
             const confCls = r.confidence === "high" ? "pos" : r.confidence === "medium" ? "warn" : "info";
@@ -1602,7 +1712,7 @@ function ConclusionsTab() {
     {/* ── REPLAY EVIDENCE (if available) ─────────────── */}
     {replay.status === "DATA_AVAILABLE" && (
       <div className="panel">
-        <div className="panel-title">Replay histórico <span className="meta">{replay.files} files · {replay.days} days · {replay.coins} coins</span></div>
+        <div className="panel-title">{t("conclusions.replay_history")} <span className="meta">{t("conclusions.replay_meta", {files: replay.files, days: replay.days, coins: replay.coins})}</span></div>
         <div style={{fontSize:12, color:"var(--text-dim)", lineHeight:1.6}}>{replay.note}</div>
       </div>
     )}
@@ -1615,8 +1725,8 @@ function ConclusionsTab() {
       return (
         <div className="panel">
           <div className="panel-title">
-            Paridad de scores
-            <span className="meta">coverage {sp.coverage_pct || 0}% · legacy {ls.legacy_trades ?? "?"} · actual {pd.trade_count ?? "?"}</span>
+            {t("conclusions.score_parity")}
+            <span className="meta">{t("conclusions.score_parity_meta", {pct: sp.coverage_pct || 0, legacy: ls.legacy_trades ?? "?", actual: pd.trade_count ?? "?"})}</span>
           </div>
           <div className={"diag " + spVariant} style={{marginBottom:16}}>
             <div className="diag-label">{sp.status}</div>
@@ -1625,23 +1735,23 @@ function ConclusionsTab() {
           {sp.trade_scores && sp.trade_scores.total > 0 && (
             <div className="kpi-strip">
               <div>
-                <div className="k">Signal</div>
+                <div className="k">{t("conclusions.score_signal")}</div>
                 <div className={"v " + (sp.trade_scores.signal_score_pct >= 80 ? "pos" : "warn")}>{sp.trade_scores.signal_score_pct}<span style={{fontSize:12, color:"var(--text-muted)"}}>%</span></div>
               </div>
               <div>
-                <div className="k">Trend</div>
+                <div className="k">{t("conclusions.score_trend")}</div>
                 <div className={"v " + (sp.trade_scores.trend_score_pct >= 80 ? "pos" : "warn")}>{sp.trade_scores.trend_score_pct}<span style={{fontSize:12, color:"var(--text-muted)"}}>%</span></div>
               </div>
               <div>
-                <div className="k">Micro</div>
+                <div className="k">{t("conclusions.score_micro")}</div>
                 <div className={"v " + (sp.trade_scores.micro_score_pct >= 80 ? "pos" : "warn")}>{sp.trade_scores.micro_score_pct}<span style={{fontSize:12, color:"var(--text-muted)"}}>%</span></div>
               </div>
               <div>
-                <div className="k">All present</div>
+                <div className="k">{t("conclusions.score_all_present")}</div>
                 <div className={"v " + (sp.trade_scores.all_present_pct >= 80 ? "pos" : "neg")}>{sp.trade_scores.all_present_pct}<span style={{fontSize:12, color:"var(--text-muted)"}}>%</span></div>
               </div>
               <div>
-                <div className="k">All zero</div>
+                <div className="k">{t("conclusions.score_all_zero")}</div>
                 <div className={"v " + (sp.trade_scores.all_zero_pct <= 5 ? "pos" : "neg")}>{sp.trade_scores.all_zero_pct}<span style={{fontSize:12, color:"var(--text-muted)"}}>%</span></div>
               </div>
             </div>
@@ -1663,7 +1773,7 @@ function ConclusionsTab() {
     {/* ── DATA QUALITY ISSUES ─────────────────────── */}
     {dqi.length > 0 && (
       <div className="panel">
-        <div className="panel-title">Problemas de calidad <span className="meta">{dqi.length} detectados</span></div>
+        <div className="panel-title">{t("conclusions.data_quality_issues")} <span className="meta">{t("conclusions.issues_detected", {n: dqi.length})}</span></div>
         <ul className="driver-list warn">
           {dqi.map((issue, i) => <li key={i}>{issue}</li>)}
         </ul>
@@ -1674,11 +1784,11 @@ function ConclusionsTab() {
 
 // ── System Tab ──
 function SystemTab() {
-  const _title = "Sistema";
+  const { t } = useI18n();
   const { data: status } = useFetch("/api/status", 3000);
   const { data: disk } = useFetch("/api/system/disk", 10000);
 
-  if (!status || !disk) return <div className="loading">Loading...</div>;
+  if (!status || !disk) return <div className="loading">{t("common.loading")}</div>;
 
   const d = disk.disk || {};
   const g = disk.growth || {};
@@ -1686,20 +1796,26 @@ function SystemTab() {
   const sev = d.severity || "ok";
 
   return (<>
-    <div className="page-title">Sistema<div className="page-sub">Salud tecnica, disco, CPU, RAM, estado de conexiones</div></div>
+    <div className="page-title" style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12, flexWrap:"wrap"}}>
+      <div>
+        {t("system.title")}
+        <div className="page-sub">{t("system.subtitle")}</div>
+      </div>
+      <LivePulse intervalSec={3} />
+    </div>
     <div className="grid">
-      <MC label="Status" value={status.status?.toUpperCase()} color="green" />
-      <MC label="Coins" value={status.features?.coins_tracked || 0} sub="tracking" color="purple" />
-      <MC label="Events" value={(status.features?.events_ingested || 0).toLocaleString()} sub="ingested" />
-      <MC label="Features" value={status.features?.total_features || 0} sub="computed" color="blue" />
+      <MC label={t("system.card.status")} value={status.status?.toUpperCase()} color="green" />
+      <MC label={t("system.card.coins")} value={status.features?.coins_tracked || 0} sub={t("system.card.coins_sub")} color="purple" />
+      <MC label={t("system.card.events")} value={(status.features?.events_ingested || 0).toLocaleString()} sub={t("system.card.events_sub")} />
+      <MC label={t("system.card.features")} value={status.features?.total_features || 0} sub={t("system.card.features_sub")} color="blue" />
     </div>
 
-    <h3 className="section-title">Uso de Disco <Tip text="Espacio ocupado en el servidor por datos, logs y base de datos. Si supera el 85% se activa una alerta." /></h3>
+    <h3 className="section-title">{t("system.disk_title")} <Tip text={t("system.disk_tip")} /></h3>
     <div className="grid">
-      <MC label="Total" value={d.total_gb + " GB"} />
-      <MC label="Used" value={d.used_gb + " GB"} sub={d.usage_pct + "%"} color={sev} />
-      <MC label="Free" value={d.free_gb + " GB"} />
-      <MC label="Status" value={sev.toUpperCase()} color={sev} />
+      <MC label={t("system.disk.total")} value={d.total_gb + " GB"} />
+      <MC label={t("system.disk.used")} value={d.used_gb + " GB"} sub={d.usage_pct + "%"} color={sev} />
+      <MC label={t("system.disk.free")} value={d.free_gb + " GB"} />
+      <MC label={t("system.card.status")} value={sev.toUpperCase()} color={sev} />
     </div>
     <div className="card" style={{marginBottom: 16}}>
       <div className="progress-bar">
@@ -1709,15 +1825,15 @@ function SystemTab() {
         }} />
       </div>
       <div style={{display: "flex", justifyContent: "space-between", marginTop: 8}}>
-        <span className="sub">Growth 24h: {g.growth_24h_gb} GB</span>
-        <span className="sub">Est. {g.estimated_days_remaining} days remaining</span>
+        <span className="sub">{t("system.disk.growth_24h", {n: g.growth_24h_gb})}</span>
+        <span className="sub">{t("system.disk.est_remaining", {n: g.estimated_days_remaining})}</span>
       </div>
     </div>
 
-    <h3 className="section-title">Uso por Directorio <Tip text="Desglose del espacio ocupado por cada directorio: raw, features, logs, etc." /></h3>
+    <h3 className="section-title">{t("system.by_dir_title")} <Tip text={t("system.by_dir_tip")} /></h3>
     <div className="card">
       <table>
-        <thead><tr><th>Directory</th><th style={{textAlign:"right"}}>Size</th><th style={{textAlign:"right"}}>Files</th></tr></thead>
+        <thead><tr><th>{t("system.col.directory")}</th><th style={{textAlign:"right"}}>{t("system.col.size")}</th><th style={{textAlign:"right"}}>{t("system.col.files")}</th></tr></thead>
         <tbody>
           {Object.entries(dirs).map(([name, info]) => (
             <tr key={name}>
@@ -1731,29 +1847,39 @@ function SystemTab() {
     </div>
 
     {/* ── Ingestion / captura: merged from the old Captura tab ── */}
-    <h3 className="section-title" style={{marginTop: 16}}>Ingestion de datos
-      <Tip text="Metricas de captura: cuantos eventos llegan, cuantos archivos parquet hay, cache hits del feature store. Antes estaba en una pestaña separada 'Captura' — la hemos unido aqui para evitar duplicidad." />
+    <h3 className="section-title" style={{marginTop: 16}}>{t("system.ingestion_title")}
+      <Tip text={t("system.ingestion_tip")} />
     </h3>
     <div className="grid">
-      <MC label="Events Ingested" value={(status.features?.events_ingested || 0).toLocaleString()} color="blue" />
-      <MC label="Raw Files" value={dirs.raw?.file_count || 0} sub="parquet chunks" />
-      <MC label="Raw Size" value={(dirs.raw?.size_gb || 0) + " GB"} />
-      <MC label="Feature Computes" value={(status.features?.computes || 0).toLocaleString()} />
-      <MC label="Cache Hits" value={(status.features?.cache_hits || 0).toLocaleString()} />
+      <MC label={t("system.events_ingested")} value={(status.features?.events_ingested || 0).toLocaleString()} color="blue" />
+      <MC label={t("system.raw_files")} value={dirs.raw?.file_count || 0} sub={t("system.raw_files_sub")} />
+      <MC label={t("system.raw_size")} value={(dirs.raw?.size_gb || 0) + " GB"} />
+      <MC label={t("system.feature_computes")} value={(status.features?.computes || 0).toLocaleString()} />
+      <MC label={t("system.cache_hits")} value={(status.features?.cache_hits || 0).toLocaleString()} />
     </div>
   </>);
 }
 
 // ── Features Tab ──
 function FeaturesTab() {
+  const { t } = useI18n();
   const { data: features } = useFetch("/api/features", 5000);
   const [selected, setSelected] = useState(null);
 
-  if (!features) return <div className="loading">Loading...</div>;
+  if (!features) return <div className="loading">{t("common.loading")}</div>;
   const coins = Object.keys(features);
 
   return (<>
-    <div className="page-title">Features<div className="page-sub">48 features en tiempo real por moneda</div></div>
+    <div className="page-title" style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12, flexWrap:"wrap"}}>
+      <div>
+        {t("features.title")}
+        <div className="page-sub">{t("features.subtitle")}</div>
+      </div>
+      <LivePulse intervalSec={5} />
+    </div>
+    {coins.length === 0 ? (
+      <div className="card" style={{padding:20, textAlign:"center", color:"#888", fontSize:12}}>{t("common.no_features_yet")}</div>
+    ) : (<>
     <div style={{display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 16}}>
       {coins.map(c => (
         <button key={c} className={"tab " + (selected === c ? "active" : "")} onClick={() => setSelected(c)}>{c}</button>
@@ -1761,8 +1887,11 @@ function FeaturesTab() {
     </div>
     {selected && features[selected] ? (
       <div className="card scroll">
+        {Object.entries(features[selected]).filter(([k]) => !["coin","timestamp_ms","version"].includes(k)).length === 0 ? (
+          <div style={{padding:16, textAlign:"center", color:"#666", fontSize:12}}>{t("common.no_features_yet")}</div>
+        ) : (
         <table>
-          <thead><tr><th>Feature</th><th style={{textAlign:"right"}}>Value</th></tr></thead>
+          <thead><tr><th>{t("features.col.feature")}</th><th style={{textAlign:"right"}}>{t("features.col.value")}</th></tr></thead>
           <tbody>
             {Object.entries(features[selected]).filter(([k]) => !["coin","timestamp_ms","version"].includes(k)).map(([k, v]) => (
               <tr key={k}>
@@ -1772,16 +1901,19 @@ function FeaturesTab() {
             ))}
           </tbody>
         </table>
+        )}
       </div>
-    ) : <div className="loading">Select a coin</div>}
+    ) : <div className="loading">{t("features.select_coin")}</div>}
+    </>)}
   </>);
 }
 
 // ── Regimes Tab ──
 function RegimesTab() {
+  const { t } = useI18n();
   const { data } = useFetch("/api/regimes", 5000);
 
-  if (!data) return <div className="loading">Loading...</div>;
+  if (!data) return <div className="loading">{t("common.loading")}</div>;
 
   const regimeColor = (r) => {
     if (r?.includes("trending_up")) return "tag-green";
@@ -1792,10 +1924,19 @@ function RegimesTab() {
   };
 
   return (<>
-    <div className="page-title">Regimenes de Mercado<div className="page-sub">Clasificacion actual: trending, choppy, high vol, quiet</div></div>
+    <div className="page-title" style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12, flexWrap:"wrap"}}>
+      <div>
+        {t("regimes.title")}
+        <div className="page-sub">{t("regimes.subtitle")}</div>
+      </div>
+      <LivePulse intervalSec={5} />
+    </div>
     <div className="card">
+      {Object.keys(data || {}).length === 0 ? (
+        <div style={{padding:16, textAlign:"center", color:"#666", fontSize:12}}>{t("common.no_regimes_yet")}</div>
+      ) : (
       <table>
-        <thead><tr><th>Coin</th><th>Regime</th><th style={{textAlign:"right"}}>Confianza</th><th style={{textAlign:"right"}}>Trend</th><th style={{textAlign:"right"}}>Volatility</th></tr></thead>
+        <thead><tr><th>{t("regimes.col.coin")}</th><th>{t("regimes.col.regime")}</th><th style={{textAlign:"right"}}>{t("regimes.col.confidence")}</th><th style={{textAlign:"right"}}>{t("regimes.col.trend")}</th><th style={{textAlign:"right"}}>{t("regimes.col.volatility")}</th></tr></thead>
         <tbody>
           {Object.entries(data).map(([coin, s]) => (
             <tr key={coin}>
@@ -1808,58 +1949,69 @@ function RegimesTab() {
           ))}
         </tbody>
       </table>
+      )}
     </div>
   </>);
 }
 
 // ── Capture Tab ──
 function CaptureTab() {
-  const _title = "Captura";
+  const { t } = useI18n();
   const { data: status } = useFetch("/api/status", 3000);
   const { data: disk } = useFetch("/api/system/disk", 10000);
 
-  if (!status || !disk) return <div className="loading">Loading...</div>;
+  if (!status || !disk) return <div className="loading">{t("common.loading")}</div>;
 
   const dirs = disk.directories || {};
   const rawFiles = dirs.raw?.file_count || 0;
   const rawSize = dirs.raw?.size_gb || 0;
 
   return (<>
-    <div className="page-title">Captura de Datos<div className="page-sub">Eventos ingestados, archivos parquet, coins trackeados</div></div>
+    <div className="page-title">{t("capture.title")}<div className="page-sub">{t("capture.subtitle")}</div></div>
     <div className="grid">
-      <MC label="Events Ingested" value={(status.features?.events_ingested || 0).toLocaleString()} color="blue" />
-      <MC label="Raw Files" value={rawFiles} sub="parquet chunks" />
-      <MC label="Raw Size" value={rawSize + " GB"} />
-      <MC label="Coins Tracked" value={status.features?.coins_tracked || 0} color="purple" />
+      <MC label={t("system.events_ingested")} value={(status.features?.events_ingested || 0).toLocaleString()} color="blue" />
+      <MC label={t("system.raw_files")} value={rawFiles} sub={t("system.raw_files_sub")} />
+      <MC label={t("system.raw_size")} value={rawSize + " GB"} />
+      <MC label={t("capture.coins_tracked")} value={status.features?.coins_tracked || 0} color="purple" />
     </div>
 
-    <h3 className="section-title" style={{marginTop: 16}}>Calidad de Datos <Tip text="Metricas de computo de features y cache hits del sistema de captura." /></h3>
+    <h3 className="section-title" style={{marginTop: 16}}>{t("capture.quality_title")} <Tip text={t("capture.quality_tip")} /></h3>
     <div className="grid">
-      <MC label="Feature Computes" value={(status.features?.computes || 0).toLocaleString()} />
-      <MC label="Cache Hits" value={(status.features?.cache_hits || 0).toLocaleString()} />
+      <MC label={t("system.feature_computes")} value={(status.features?.computes || 0).toLocaleString()} />
+      <MC label={t("system.cache_hits")} value={(status.features?.cache_hits || 0).toLocaleString()} />
     </div>
   </>);
 }
 
 // ── Contract Tab ──
 function ContractTab() {
+  const { t } = useI18n();
   const { data } = useFetch("/api/feature-contract", 30000);
 
-  if (!data) return <div className="loading">Loading...</div>;
+  if (!data) return <div className="loading">{t("common.loading")}</div>;
 
   return (<>
-    <div className="page-title">Contrato de Features<div className="page-sub">Definicion formal de todas las features del sistema</div></div>
+    <div className="page-title" style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12, flexWrap:"wrap"}}>
+      <div>
+        {t("contract.title")}
+        <div className="page-sub">{t("contract.subtitle")}</div>
+      </div>
+      <LivePulse intervalSec={30} />
+    </div>
     <div className="grid">
-      <MC label="Total Features" value={data.total_features} color="blue" />
-      <MC label="Version" value={data.version?.substring(0, 30) + "..."} />
+      <MC label={t("contract.total_features")} value={data.total_features} color="blue" />
+      <MC label={t("contract.version")} value={data.version?.substring(0, 30) + "..."} />
       {Object.entries(data.groups || {}).map(([g, n]) => (
-        <MC key={g} label={g} value={n} sub="features" />
+        <MC key={g} label={g} value={n} sub={t("contract.features_sub")} />
       ))}
     </div>
 
     <div className="card scroll" style={{marginTop: 16}}>
+      {(data.features || []).length === 0 ? (
+        <div style={{padding:16, textAlign:"center", color:"#666", fontSize:12}}>{t("common.no_features_yet")}</div>
+      ) : (
       <table>
-        <thead><tr><th>Name</th><th>Group</th><th>Source</th><th style={{textAlign:"right"}}>Window</th><th>Description</th></tr></thead>
+        <thead><tr><th>{t("contract.col.name")}</th><th>{t("contract.col.group")}</th><th>{t("contract.col.source")}</th><th style={{textAlign:"right"}}>{t("contract.col.window")}</th><th>{t("contract.col.description")}</th></tr></thead>
         <tbody>
           {(data.features || []).map((f, i) => (
             <tr key={i}>
@@ -1872,21 +2024,25 @@ function ContractTab() {
           ))}
         </tbody>
       </table>
+      )}
     </div>
   </>);
 }
 
 // ── Daily Report Tab ──
 function DailyReportTab() {
+  const { t } = useI18n();
   const [reports, setReports] = useState({});  // date -> report
   const [selected, setSelected] = useState(null);  // selected date
   const [loading, setLoading] = useState(false);
   const [days, setDays] = useState([]);  // list of available dates
   const [page, setPage] = useState(0);  // pagination
   const PAGE_SIZE = 15;
-  const AUTO_LOAD_DAYS = 7;  // auto-load last 7 days
 
-  // Generate list of last 90 days, auto-load last 7
+  // Generate list of last 90 days. We do NOT auto-load any reports anymore —
+  // a "daily report" for a day with zero trades is just a wall of zeros that
+  // looks like stale data to the user. The UI now waits for an explicit
+  // click on a row before generating anything.
   useEffect(() => {
     const d = [];
     for (let i = 0; i < 90; i++) {
@@ -1894,10 +2050,6 @@ function DailyReportTab() {
       d.push(date.toISOString().split("T")[0]);
     }
     setDays(d);
-    // Auto-load last 7 days
-    for (let i = 0; i < AUTO_LOAD_DAYS && i < d.length; i++) {
-      loadDayQuiet(d[i]);
-    }
     setSelected(d[0]);
   }, []);
 
@@ -1924,15 +2076,15 @@ function DailyReportTab() {
   const scoreColor = (s) => s >= 7 ? "#22c55e" : s >= 4 ? "#eab308" : "#ef4444";
 
   return (<>
-    <div className="page-title">Informe Diario <Tip text="Informe diario automatico. Haz click en un dia para ver el detalle completo. Se genera al cargar." /><div className="page-sub">Resumen automatico por dia con comparativa historica</div></div>
+    <div className="page-title">{t("daily.title")} <Tip text={t("daily.tip")} /><div className="page-sub">{t("daily.subtitle")}</div></div>
     {/* Days table */}
     <div className="card" style={{marginBottom:16}}>
       <table>
         <thead><tr>
-          <th>Date</th><th>Day</th><th style={{textAlign:"right"}}>Score</th>
-          <th style={{textAlign:"right"}}>Trades</th><th style={{textAlign:"right"}}>Net PnL</th>
-          <th style={{textAlign:"right"}}>WR</th><th style={{textAlign:"right"}}>PF</th>
-          <th style={{textAlign:"right"}}>Issues</th><th></th>
+          <th>{t("daily.col.date")}</th><th>{t("daily.col.day")}</th><th style={{textAlign:"right"}}>{t("daily.col.score")}</th>
+          <th style={{textAlign:"right"}}>{t("daily.col.trades")}</th><th style={{textAlign:"right"}}>{t("daily.col.net_pnl")}</th>
+          <th style={{textAlign:"right"}}>{t("daily.col.wr")}</th><th style={{textAlign:"right"}}>{t("daily.col.pf")}</th>
+          <th style={{textAlign:"right"}}>{t("daily.col.issues")}</th><th></th>
         </tr></thead>
         <tbody>
           {days.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map(d => {
@@ -1941,18 +2093,23 @@ function DailyReportTab() {
             const g = r?.general || {};
             const p = r?.pnl || {};
             const s = r?.scores || {};
+            const noActivity = r && (g.trades || 0) === 0;
             const issueCount = r ? Object.values(r).reduce((sum, sec) => sum + (sec?.issues?.length || 0), 0) : 0;
             return (
               <tr key={d} onClick={() => loadDay(d)} style={{cursor:"pointer", background: isSelected ? "#1a1a3e" : "transparent"}}>
-                <td style={{fontWeight: isSelected ? 700 : 400, color: isSelected ? "#3b82f6" : "#e0e0e8"}}>{d}</td>
+                <td style={{fontWeight: isSelected ? 700 : 400, color: isSelected ? "#3b82f6" : noActivity ? "#666" : "#e0e0e8"}}>{d}</td>
                 <td style={{color:"#666"}}>{r ? r.day_of_week?.substring(0,3) : "..."}</td>
-                <td style={{textAlign:"right", color: r ? scoreColor(s.overall || 0) : "#444", fontWeight:600}}>{r ? (s.overall || 0) + "/10" : "-"}</td>
-                <td style={{textAlign:"right"}}>{r ? g.trades || 0 : "-"}</td>
-                <td style={{textAlign:"right", color: r ? (Number(g.net_pnl) >= 0 ? "#22c55e" : "#ef4444") : "#444"}}>{r ? "$" + (g.net_pnl || 0) : "-"}</td>
-                <td style={{textAlign:"right", color: r ? (p.win_rate >= 50 ? "#22c55e" : p.win_rate >= 40 ? "#eab308" : "#ef4444") : "#444"}}>{r ? (p.win_rate || 0) + "%" : "-"}</td>
-                <td style={{textAlign:"right"}}>{r ? (p.profit_factor || 0) : "-"}</td>
-                <td style={{textAlign:"right", color: issueCount > 0 ? "#eab308" : "#22c55e"}}>{r ? issueCount : "-"}</td>
-                <td style={{textAlign:"right"}}>{!r && <span onClick={(e) => { e.stopPropagation(); loadDay(d); }} style={{color:"#666", fontSize:10, cursor:"pointer"}}>cargar</span>}</td>
+                {noActivity ? (
+                  <td colSpan={6} style={{textAlign:"center", color:"#666", fontStyle:"italic"}}>{t("daily.no_activity")}</td>
+                ) : (<>
+                  <td style={{textAlign:"right", color: r ? scoreColor(s.overall || 0) : "#444", fontWeight:600}}>{r ? (s.overall || 0) + "/10" : "-"}</td>
+                  <td style={{textAlign:"right"}}>{r ? g.trades || 0 : "-"}</td>
+                  <td style={{textAlign:"right", color: r ? (Number(g.net_pnl) >= 0 ? "#22c55e" : "#ef4444") : "#444"}}>{r ? "$" + (g.net_pnl || 0) : "-"}</td>
+                  <td style={{textAlign:"right", color: r ? (p.win_rate >= 50 ? "#22c55e" : p.win_rate >= 40 ? "#eab308" : "#ef4444") : "#444"}}>{r ? (p.win_rate || 0) + "%" : "-"}</td>
+                  <td style={{textAlign:"right"}}>{r ? (p.profit_factor || 0) : "-"}</td>
+                  <td style={{textAlign:"right", color: issueCount > 0 ? "#eab308" : "#22c55e"}}>{r ? issueCount : "-"}</td>
+                </>)}
+                <td style={{textAlign:"right"}}>{!r && <span onClick={(e) => { e.stopPropagation(); loadDay(d); }} style={{color:"#666", fontSize:10, cursor:"pointer"}}>{t("daily.load_cell")}</span>}</td>
               </tr>
             );
           })}
@@ -1963,20 +2120,27 @@ function DailyReportTab() {
         <div style={{display:"flex", justifyContent:"center", alignItems:"center", gap:12, marginTop:12}}>
           <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}
             style={{padding:"4px 12px", fontSize:11, borderRadius:6, border:"1px solid #333", background:"#1a1a2e", color: page===0?"#444":"#aaa", cursor: page===0?"not-allowed":"pointer"}}>
-            ← Anterior
+            {t("daily.prev")}
           </button>
           <span style={{fontSize:11, color:"#666"}}>{page + 1} / {Math.ceil(days.length / PAGE_SIZE)}</span>
           <button onClick={() => setPage(Math.min(Math.ceil(days.length / PAGE_SIZE) - 1, page + 1))} disabled={page >= Math.ceil(days.length / PAGE_SIZE) - 1}
             style={{padding:"4px 12px", fontSize:11, borderRadius:6, border:"1px solid #333", background:"#1a1a2e", color: page>=Math.ceil(days.length/PAGE_SIZE)-1?"#444":"#aaa", cursor: page>=Math.ceil(days.length/PAGE_SIZE)-1?"not-allowed":"pointer"}}>
-            Siguiente →
+            {t("daily.next")}
           </button>
         </div>
       )}
     </div>
 
-    {loading && <div className="loading">Generating report for {selected}...</div>}
+    {loading && <div className="loading">{t("daily.generating", {date: selected})}</div>}
 
-    {report && !loading && (() => {
+    {report && !loading && (report.general?.trades || 0) === 0 && (
+      <div className="card" style={{padding:24, textAlign:"center", color:"#888"}}>
+        <div style={{fontSize:14, fontWeight:600, color:"#ccc", marginBottom:6}}>{t("daily.no_activity")} — {selected}</div>
+        <div style={{fontSize:12}}>{t("daily.no_activity_body")}</div>
+      </div>
+    )}
+
+    {report && !loading && (report.general?.trades || 0) > 0 && (() => {
       const g = report.general || {};
       const sys = report.system || {};
       const integ = report.integration || {};
@@ -1996,57 +2160,57 @@ function DailyReportTab() {
 
     {/* Scores */}
     <div className="grid" style={{gridTemplateColumns:"repeat(4, 1fr)"}}>
-      <MC label="Overall" value={scores.overall + "/10"} color={scores.overall >= 7 ? "green" : scores.overall >= 4 ? "yellow" : "red"} />
-      <MC label="Calidad de Datos" value={scores.data_quality + "/10"} color={scores.data_quality >= 7 ? "green" : "yellow"} />
-      <MC label="Trading" value={scores.trading + "/10"} color={scores.trading >= 6 ? "green" : scores.trading >= 4 ? "yellow" : "red"} />
-      <MC label="System" value={scores.system + "/10"} color={scores.system >= 8 ? "green" : "yellow"} />
+      <MC label={t("daily.score_overall")} value={scores.overall + "/10"} color={scores.overall >= 7 ? "green" : scores.overall >= 4 ? "yellow" : "red"} />
+      <MC label={t("daily.score_data_quality")} value={scores.data_quality + "/10"} color={scores.data_quality >= 7 ? "green" : "yellow"} />
+      <MC label={t("daily.score_trading")} value={scores.trading + "/10"} color={scores.trading >= 6 ? "green" : scores.trading >= 4 ? "yellow" : "red"} />
+      <MC label={t("daily.score_system")} value={scores.system + "/10"} color={scores.system >= 8 ? "green" : "yellow"} />
     </div>
 
     {/* 1. General */}
-    <h3 className="section-title" style={{marginTop:16}}>General</h3>
+    <h3 className="section-title" style={{marginTop:16}}>{t("daily.section.general")}</h3>
     <div className="grid">
-      <MC label="Mode" value={g.mode || "?"} color="purple" />
-      <MC label="Trades" value={g.trades || 0} />
-      <MC label="PnL Bruto" value={"$" + (g.total_pnl || 0)} color={Number(g.total_pnl) >= 0 ? "green" : "red"} />
-      <MC label="Fees" value={"$" + (g.total_fees || 0)} color="yellow" />
-      <MC label="PnL Neto" value={"$" + (g.net_pnl || 0)} color={Number(g.net_pnl) >= 0 ? "green" : "red"} />
+      <MC label={t("daily.mode")} value={g.mode || "?"} color="purple" />
+      <MC label={t("daily.trades")} value={g.trades || 0} />
+      <MC label={t("daily.gross_pnl")} value={"$" + (g.total_pnl || 0)} color={Number(g.total_pnl) >= 0 ? "green" : "red"} />
+      <MC label={t("daily.fees")} value={"$" + (g.total_fees || 0)} color="yellow" />
+      <MC label={t("daily.net_pnl")} value={"$" + (g.net_pnl || 0)} color={Number(g.net_pnl) >= 0 ? "green" : "red"} />
     </div>
 
     {/* 2. System */}
-    <h3 className="section-title" style={{marginTop:16}}>System</h3>
+    <h3 className="section-title" style={{marginTop:16}}>{t("daily.section.system")}</h3>
     <div className="card">
       <div style={{display:"flex", gap:24, flexWrap:"wrap", fontSize:12}}>
-        <span style={{color: checkColor(sys.bot_running)}}>{check(sys.bot_running)} Bot running</span>
-        <span style={{color: checkColor(sys.platform_running)}}>{check(sys.platform_running)} Platform running</span>
-        <span style={{color: checkColor(sys.ws_stable)}}>{check(sys.ws_stable)} WS stable</span>
-        <span style={{color: checkColor(sys.cpu_pct < 80)}}>{check(sys.cpu_pct < 80)} CPU {sys.cpu_pct}%</span>
-        <span style={{color: checkColor(sys.ram_pct < 85)}}>{check(sys.ram_pct < 85)} RAM {sys.ram_pct}%</span>
+        <span style={{color: checkColor(sys.bot_running)}}>{check(sys.bot_running)} {t("daily.sys.bot_running")}</span>
+        <span style={{color: checkColor(sys.platform_running)}}>{check(sys.platform_running)} {t("daily.sys.platform_running")}</span>
+        <span style={{color: checkColor(sys.ws_stable)}}>{check(sys.ws_stable)} {t("daily.sys.ws_stable")}</span>
+        <span style={{color: checkColor(sys.cpu_pct < 80)}}>{check(sys.cpu_pct < 80)} {t("daily.sys.cpu")} {sys.cpu_pct}%</span>
+        <span style={{color: checkColor(sys.ram_pct < 85)}}>{check(sys.ram_pct < 85)} {t("daily.sys.ram")} {sys.ram_pct}%</span>
       </div>
     </div>
 
     {/* 3. Integration */}
-    <h3 className="section-title" style={{marginTop:16}}>Integration</h3>
+    <h3 className="section-title" style={{marginTop:16}}>{t("daily.section.integration")}</h3>
     <div className="grid">
-      <MC label="Bot Trades" value={integ.bot_trades || 0} />
-      <MC label="Platform Trades" value={integ.platform_trades || 0} />
-      <MC label="Diff" value={integ.diff_trades || 0} color={integ.diff_trades === 0 ? "green" : "red"} />
-      <MC label="Signals" value={integ.signals_received || 0} />
-      <MC label="Duplicates" value={integ.duplicates || 0} color={integ.duplicates === 0 ? "green" : "red"} />
+      <MC label={t("daily.int.bot_trades")} value={integ.bot_trades || 0} />
+      <MC label={t("daily.int.platform_trades")} value={integ.platform_trades || 0} />
+      <MC label={t("daily.int.diff")} value={integ.diff_trades || 0} color={integ.diff_trades === 0 ? "green" : "red"} />
+      <MC label={t("daily.int.signals")} value={integ.signals_received || 0} />
+      <MC label={t("daily.int.duplicates")} value={integ.duplicates || 0} color={integ.duplicates === 0 ? "green" : "red"} />
     </div>
 
     {/* 4. PnL */}
-    <h3 className="section-title" style={{marginTop:16}}>PnL & Consistency</h3>
+    <h3 className="section-title" style={{marginTop:16}}>{t("daily.section.pnl")}</h3>
     <div className="grid">
-      <MC label="Wins" value={pnl.wins || 0} color="green" />
-      <MC label="Losses" value={pnl.losses || 0} color="red" />
-      <MC label="Win Rate" value={(pnl.win_rate || 0) + "%"} color={pnl.win_rate >= 50 ? "green" : pnl.win_rate >= 40 ? "yellow" : "red"} />
-      <MC label="Profit Factor" value={pnl.profit_factor || 0} color={pnl.profit_factor >= 1 ? "green" : "red"} />
-      <MC label="Avg W / L" value={"$" + (pnl.avg_win || 0) + " / $" + (pnl.avg_loss || 0)} />
-      <MC label="Fee Killed" value={pnl.fee_killed || 0} color={pnl.fee_killed === 0 ? "green" : "red"} />
+      <MC label={t("daily.pnl.wins")} value={pnl.wins || 0} color="green" />
+      <MC label={t("daily.pnl.losses")} value={pnl.losses || 0} color="red" />
+      <MC label={t("daily.pnl.win_rate")} value={(pnl.win_rate || 0) + "%"} color={pnl.win_rate >= 50 ? "green" : pnl.win_rate >= 40 ? "yellow" : "red"} />
+      <MC label={t("daily.pnl.pf")} value={pnl.profit_factor || 0} color={pnl.profit_factor >= 1 ? "green" : "red"} />
+      <MC label={t("daily.pnl.avg_wl")} value={"$" + (pnl.avg_win || 0) + " / $" + (pnl.avg_loss || 0)} />
+      <MC label={t("daily.pnl.fee_killed")} value={pnl.fee_killed || 0} color={pnl.fee_killed === 0 ? "green" : "red"} />
     </div>
 
     {/* 5. Signals */}
-    <h3 className="section-title" style={{marginTop:16}}>Signals</h3>
+    <h3 className="section-title" style={{marginTop:16}}>{t("daily.section.signals")}</h3>
     <div className="grid">
       <MC label="ENTER" value={sig.enter || 0} color="green" />
       <MC label="SKIP" value={sig.skip || 0} color="yellow" />
@@ -2056,43 +2220,43 @@ function DailyReportTab() {
     {/* 6-7. Features & Storage */}
     <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginTop:16}}>
       <div>
-        <h3 className="section-title">Features</h3>
+        <h3 className="section-title">{t("daily.section.features")}</h3>
         <div className="card">
           <div style={{fontSize:12, display:"flex", flexDirection:"column", gap:4}}>
-            <span>Snapshots today: {feat.snapshots_today || 0}</span>
-            <span>Coins tracked: {feat.coins_with_features || 0}</span>
+            <span>{t("daily.feat.snapshots_today", {n: feat.snapshots_today || 0})}</span>
+            <span>{t("daily.feat.coins_tracked", {n: feat.coins_with_features || 0})}</span>
           </div>
         </div>
       </div>
       <div>
-        <h3 className="section-title">Storage</h3>
+        <h3 className="section-title">{t("daily.section.storage")}</h3>
         <div className="card">
           <div style={{fontSize:12, display:"flex", flexDirection:"column", gap:4}}>
-            <span>Disk: {stor.disk_pct}% ({stor.disk_used_gb} GB used / {stor.disk_free_gb} GB free)</span>
-            <span>Parquet files today: {stor.parquet_files_today}</span>
+            <span>{t("daily.stor.disk", {pct: stor.disk_pct, used: stor.disk_used_gb, free: stor.disk_free_gb})}</span>
+            <span>{t("daily.stor.parquet_today", {n: stor.parquet_files_today})}</span>
           </div>
         </div>
       </div>
     </div>
 
     {/* 8. Trading Analysis */}
-    <h3 className="section-title" style={{marginTop:16}}>Trading Analysis</h3>
+    <h3 className="section-title" style={{marginTop:16}}>{t("daily.section.trading")}</h3>
     <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:12}}>
       <div className="card">
-        <div className="label" style={{marginBottom:8}}>Best Coins</div>
+        <div className="label" style={{marginBottom:8}}>{t("daily.trad.best_coins")}</div>
         {(trad.best_coins || []).map((c, i) => (
           <div key={i} style={{fontSize:11, display:"flex", justifyContent:"space-between"}}>
             <span className="purple">{c.coin}</span>
-            <span style={{color:"#22c55e"}}>${c.pnl} ({c.wr}% WR, {c.trades}t)</span>
+            <span style={{color:"#22c55e"}}>{t("daily.trad.coin_line", {pnl: c.pnl, wr: c.wr, trades: c.trades})}</span>
           </div>
         ))}
       </div>
       <div className="card">
-        <div className="label" style={{marginBottom:8}}>Worst Coins</div>
+        <div className="label" style={{marginBottom:8}}>{t("daily.trad.worst_coins")}</div>
         {(trad.worst_coins || []).map((c, i) => (
           <div key={i} style={{fontSize:11, display:"flex", justifyContent:"space-between"}}>
             <span className="purple">{c.coin}</span>
-            <span style={{color:"#ef4444"}}>${c.pnl} ({c.wr}% WR, {c.trades}t)</span>
+            <span style={{color:"#ef4444"}}>{t("daily.trad.coin_line", {pnl: c.pnl, wr: c.wr, trades: c.trades})}</span>
           </div>
         ))}
       </div>
@@ -2100,7 +2264,7 @@ function DailyReportTab() {
 
     {/* 9. Problems */}
     {allIssues.length > 0 && (<>
-      <h3 className="section-title" style={{marginTop:16}}>Problems Detected</h3>
+      <h3 className="section-title" style={{marginTop:16}}>{t("daily.section.problems")}</h3>
       <div className="card">
         {allIssues.map((p, i) => (
           <div key={i} style={{padding:"3px 0", fontSize:11, color:"#eab308"}}>
@@ -2112,15 +2276,15 @@ function DailyReportTab() {
 
     {allIssues.length === 0 && (
       <div className="card" style={{marginTop:16, textAlign:"center", color:"#22c55e", padding:20}}>
-        No problems detected today
+        {t("daily.no_problems")}
       </div>
     )}
 
     {/* Exit reasons */}
     {trad.by_exit_reason && trad.by_exit_reason.length > 0 && (<>
-      <h3 className="section-title" style={{marginTop:16}}>Exit Reasons</h3>
+      <h3 className="section-title" style={{marginTop:16}}>{t("daily.section.exit_reasons")}</h3>
       <div className="card">
-        <table><thead><tr><th>Reason</th><th style={{textAlign:"right"}}>Trades</th><th style={{textAlign:"right"}}>PnL</th></tr></thead>
+        <table><thead><tr><th>{t("daily.col.reason")}</th><th style={{textAlign:"right"}}>{t("daily.col.trades_r")}</th><th style={{textAlign:"right"}}>{t("daily.col.pnl")}</th></tr></thead>
         <tbody>
           {trad.by_exit_reason.map((r, i) => (
             <tr key={i}><td><span className={"tag " + (r.exit_reason === "SL" ? "tag-red" : "tag-green")}>{r.exit_reason}</span></td>
@@ -2137,6 +2301,7 @@ function DailyReportTab() {
 
 // ── Research Lab Tab ──
 function LabTab() {
+  const { t } = useI18n();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState("overview");
@@ -2157,8 +2322,8 @@ function LabTab() {
   };
   useEffect(() => { load(); }, []);
 
-  if (loading) return <div className="loading">Generating quant report...</div>;
-  if (!data) return <div className="loading"><button onClick={load} className="tab active">Load Research Lab</button></div>;
+  if (loading) return <div className="loading">{t("lab.generating")}</div>;
+  if (!data) return <div className="loading"><button onClick={load} className="tab active">{t("lab.load_btn")}</button></div>;
 
   const m = data.metrics?.global || {};
   const risk = data.metrics?.risk || {};
@@ -2172,10 +2337,10 @@ function LabTab() {
   const views = ["overview", "metrics", "analysis", "score", "mode", "config", "rejections", "counterfactual", "diagnostic", "quality", "decisions"];
 
   return (<>
-    <div className="page-title">Research Lab <Tip text="Vision general del rendimiento con KPIs principales y decisiones automaticas del sistema." /><div className="page-sub">Analisis cuantitativo: metricas, experiments, decisions</div></div>
+    <div className="page-title">{t("lab.title")} <Tip text={t("lab.tip")} /><div className="page-sub">{t("lab.subtitle")}</div></div>
     <div style={{display:"flex", gap:4, flexWrap:"wrap", marginBottom:16}}>
       {views.map(v => (
-        <button key={v} className={"tab " + (view === v ? "active" : "")} onClick={() => setView(v)}>{v.charAt(0).toUpperCase() + v.slice(1)}</button>
+        <button key={v} className={"tab " + (view === v ? "active" : "")} onClick={() => setView(v)}>{t("lab.view." + v)}</button>
       ))}
       <ExportBtn data={(() => {
         // Build comprehensive export with ALL research lab data
@@ -2222,8 +2387,8 @@ function LabTab() {
             total_signals: rejData?.totals ? Object.values(rejData.totals).reduce((s, t) => s + (t.cnt || 0), 0) : 0,
           },
         };
-      })()} filename={"research_lab_full_" + new Date().toISOString().split("T")[0] + ".json"} label="Export JSON Completo" />
-      <button className="tab" onClick={load}>Refresh</button>
+      })()} filename={"research_lab_full_" + new Date().toISOString().split("T")[0] + ".json"} label={t("lab.export_label")} />
+      <button className="tab" onClick={load}>{t("lab.refresh")}</button>
     </div>
 
     {view === "overview" && (<>
@@ -2243,7 +2408,7 @@ function LabTab() {
 
       {/* Decisions */}
       {decisions.length > 0 && (<>
-        <h3 className="section-title" style={{marginTop:16}}>Decisions ({decisions.length})</h3>
+        <h3 className="section-title" style={{marginTop:16}}>{t("lab.decisions_title", {n: decisions.length})}</h3>
         <div className="card scroll">
           {decisions.map((d, i) => (
             <div key={i} style={{padding:"8px 0", borderBottom:"1px solid #1a1a2e"}}>
@@ -2264,19 +2429,22 @@ function LabTab() {
 
       {/* Insights/Warnings */}
       {(insights.length > 0 || warnings.length > 0 || recommendations.length > 0) && (<>
-        <h3 className="section-title" style={{marginTop:16}}>Insights</h3>
+        <h3 className="section-title" style={{marginTop:16}}>{t("lab.insights_title")}</h3>
         <div className="card">
-          {insights.map((t, i) => <div key={"i"+i} style={{padding:"2px 0", fontSize:11, color:"#22c55e"}}>{t}</div>)}
-          {warnings.map((t, i) => <div key={"w"+i} style={{padding:"2px 0", fontSize:11, color:"#eab308"}}>{t}</div>)}
-          {recommendations.map((t, i) => <div key={"r"+i} style={{padding:"2px 0", fontSize:11, color:"#3b82f6"}}>{t}</div>)}
+          {insights.map((s, i) => <div key={"i"+i} style={{padding:"2px 0", fontSize:11, color:"#22c55e"}}>{s}</div>)}
+          {warnings.map((s, i) => <div key={"w"+i} style={{padding:"2px 0", fontSize:11, color:"#eab308"}}>{s}</div>)}
+          {recommendations.map((s, i) => <div key={"r"+i} style={{padding:"2px 0", fontSize:11, color:"#3b82f6"}}>{s}</div>)}
         </div>
       </>)}
     </>)}
 
     {view === "metrics" && (<>
       {/* By coin */}
-      <h3 className="section-title">By Coin</h3>
+      <h3 className="section-title">{t("lab.by_coin")}</h3>
       <div className="card scroll">
+        {Object.keys(data.metrics?.by_coin || {}).length === 0 ? (
+          <div style={{padding:16, textAlign:"center", color:"#666", fontSize:12}}>{t("common.no_data_yet")}</div>
+        ) : (
         <table>
           <thead><tr><th>Coin</th><th style={{textAlign:"right"}}>Trades</th><th style={{textAlign:"right"}}>WR</th><th style={{textAlign:"right"}}>Avg PnL</th><th style={{textAlign:"right"}}>Total PnL</th><th style={{textAlign:"right"}}>PF</th></tr></thead>
           <tbody>
@@ -2289,11 +2457,12 @@ function LabTab() {
             ))}
           </tbody>
         </table>
+        )}
       </div>
       {/* By side, score, exit */}
       {["by_side", "by_score", "by_exit", "by_mode"].map(key => {
         const section = data.metrics?.[key];
-        if (!section) return null;
+        if (!section || Object.keys(section).length === 0) return null;
         return (<div key={key}>
           <h3 className="section-title" style={{marginTop:12}}>{key.replace("by_", "By ").replace("_", " ")}</h3>
           <div className="card">
@@ -2315,6 +2484,9 @@ function LabTab() {
       {/* Score effectiveness */}
       <h3 className="section-title">Score Effectiveness</h3>
       <div className="card">
+        {Object.keys(analysis.score_effectiveness || {}).length === 0 ? (
+          <div style={{padding:16, textAlign:"center", color:"#666", fontSize:12}}>{t("common.no_data_yet")}</div>
+        ) : (
         <table><thead><tr><th>Bucket</th><th style={{textAlign:"right"}}>Trades</th><th style={{textAlign:"right"}}>WR</th><th style={{textAlign:"right"}}>Avg PnL</th><th style={{textAlign:"right"}}>Total PnL</th></tr></thead>
         <tbody>
           {Object.entries(analysis.score_effectiveness || {}).map(([b, d]) => (
@@ -2324,11 +2496,15 @@ function LabTab() {
             <td style={{textAlign:"right", color: d.total_pnl >= 0 ? "#22c55e" : "#ef4444"}}>{d.total_pnl}</td></tr>
           ))}
         </tbody></table>
+        )}
       </div>
 
       {/* Exit analysis */}
       <h3 className="section-title" style={{marginTop:12}}>Exit Analysis</h3>
       <div className="card">
+        {Object.keys(analysis.exit_analysis || {}).length === 0 ? (
+          <div style={{padding:16, textAlign:"center", color:"#666", fontSize:12}}>{t("common.no_data_yet")}</div>
+        ) : (
         <table><thead><tr><th>Type</th><th style={{textAlign:"right"}}>%</th><th style={{textAlign:"right"}}>WR</th><th style={{textAlign:"right"}}>Avg PnL</th><th style={{textAlign:"right"}}>Total PnL</th></tr></thead>
         <tbody>
           {Object.entries(analysis.exit_analysis || {}).map(([t, d]) => (
@@ -2339,11 +2515,15 @@ function LabTab() {
             <td style={{textAlign:"right", color: d.total_pnl >= 0 ? "#22c55e" : "#ef4444"}}>{d.total_pnl}</td></tr>
           ))}
         </tbody></table>
+        )}
       </div>
 
       {/* Holding time */}
       <h3 className="section-title" style={{marginTop:12}}>Holding Time</h3>
       <div className="card">
+        {Object.keys(analysis.holding_time || {}).length === 0 ? (
+          <div style={{padding:16, textAlign:"center", color:"#666", fontSize:12}}>{t("common.no_data_yet")}</div>
+        ) : (
         <table><thead><tr><th>Duration</th><th style={{textAlign:"right"}}>Trades</th><th style={{textAlign:"right"}}>WR</th><th style={{textAlign:"right"}}>Avg PnL</th></tr></thead>
         <tbody>
           {Object.entries(analysis.holding_time || {}).map(([b, d]) => (
@@ -2352,6 +2532,7 @@ function LabTab() {
             <td style={{textAlign:"right", color: d.avg_pnl >= 0 ? "#22c55e" : "#ef4444"}}>{d.avg_pnl}</td></tr>
           ))}
         </tbody></table>
+        )}
       </div>
 
       {/* Fee impact */}
@@ -2377,7 +2558,7 @@ function LabTab() {
       }, 0) / tradesWithScore).toFixed(1) : "N/A";
       const bucketOrder = ["<50", "50-55", "55-60", "60-65", "65-70", "70+"];
       return (<>
-        <h3 className="section-title">Analisis de Score <Tip text="Analisis del score de entrada. Muestra como el score influye en la calidad de los trades." /></h3>
+        <h3 className="section-title">{t("lab.score_analysis_title")} <Tip text={t("lab.score_analysis_tip")} /></h3>
         <div className="grid" style={{gridTemplateColumns:"repeat(4, 1fr)"}}>
           <MC label="Total Trades" value={totalTrades} />
           <MC label="Trades con Score" value={tradesWithScore} />
@@ -2443,7 +2624,7 @@ function LabTab() {
     })()}
 
     {view === "mode" && (<>
-      <h3 className="section-title">Rendimiento por Modo <Tip text="Comparativa de rendimiento entre modos: SCALP (agresivo), NORMAL (equilibrado), SWING (defensivo)." /></h3>
+      <h3 className="section-title">{t("lab.mode_performance_title")} <Tip text={t("lab.mode_performance_tip")} /></h3>
       {Object.keys(data.metrics?.by_mode || {}).length === 0 ? (
         <div className="card" style={{textAlign:"center", padding:30, color:"#555"}}>No hay datos de modos todavia.</div>
       ) : (<>
@@ -2512,7 +2693,7 @@ function LabTab() {
       });
       if (allUnknown) return <div className="card" style={{textAlign:"center", padding:30, color:"#555"}}>Los trades nuevos incluiran config snapshot. Los datos apareceran automaticamente.</div>;
       return (<>
-        <h3 className="section-title">Analisis de Configuracion <Tip text="Analisis del impacto de cada parametro de configuracion en el rendimiento." /></h3>
+        <h3 className="section-title">{t("lab.config_title")} <Tip text={t("lab.config_tip")} /></h3>
         {sections.map(section => {
           const sData = cfgData[section];
           if (!sData || Object.keys(sData).length === 0) return null;
@@ -2561,7 +2742,7 @@ function LabTab() {
       if (totalAll === 0) return <div className="card" style={{textAlign:"center", padding:30, color:"#555"}}>No hay senales bloqueadas todavia.</div>;
 
       return (<>
-        <h3 className="section-title">Analisis de Rechazos <Tip text="Senales que el bot detecto pero rechazo. Separadas por etapa: pre-candidato y post-candidato." /></h3>
+        <h3 className="section-title">{t("lab.rej_title")} <Tip text={t("lab.rej_tip")} /></h3>
         <div className="grid" style={{gridTemplateColumns:"repeat(4, 1fr)"}}>
           <MC label="Total Bloqueados" value={totalBlocked} color="red" />
           <MC label="Total Entradas" value={totalEntered} color="green" />
@@ -2683,7 +2864,7 @@ function LabTab() {
       const entries = Object.entries(cfData);
       const totalSignals = entries.length > 0 ? (Object.values(cfData)[0]?.total_signals || 0) : 0;
       return (<>
-        <h3 className="section-title">Analisis Contrafactual <Tip text="Simulacion de que pasaria con diferentes umbrales de score. Ayuda a decidir el threshold optimo." /></h3>
+        <h3 className="section-title">{t("lab.cf_title")} <Tip text={t("lab.cf_tip")} /></h3>
         <div className="grid" style={{gridTemplateColumns:"repeat(2, 1fr)"}}>
           <MC label="Senales Analizadas" value={totalSignals} color="blue" />
           <MC label="Umbrales Evaluados" value={entries.length} color="purple" />
@@ -2741,7 +2922,7 @@ function LabTab() {
 
       const pr = diagData.pass_rates || {};
       return (<>
-        <h3 className="section-title">Tasa de Filtros <Tip text="Evaluacion completa de todos los filtros para cada senal. Muestra el cuello de botella real." /> ({diagData.total_signals} senales)</h3>
+        <h3 className="section-title">{t("lab.diag_title")} <Tip text={t("lab.diag_tip")} /> ({diagData.total_signals})</h3>
         <div className="card scroll">
           <table>
             <thead><tr>
@@ -2807,7 +2988,7 @@ function LabTab() {
       const pnlColor = (v) => v > 0 ? "#22c55e" : v < 0 ? "#ef4444" : "rgba(255,255,255,0.5)";
 
       return (<>
-        <h3 className="section-title">Calidad de Entradas por Grado</h3>
+        <h3 className="section-title">{t("lab.quality_title")}</h3>
         <div className="grid">
           {qualityOrder.filter(k => ql[k]).map(k => {
             const v = ql[k];
@@ -2832,7 +3013,7 @@ function LabTab() {
           })}
         </div>
 
-        <h3 className="section-title" style={{marginTop:14}}>Riesgo de Entrada Tardia</h3>
+        <h3 className="section-title" style={{marginTop:14}}>{t("lab.late_risk_title")}</h3>
         <div className="grid">
           {riskOrder.filter(k => lr[k]).map(k => {
             const v = lr[k];
@@ -2853,10 +3034,10 @@ function LabTab() {
           })}
         </div>
 
-        <h3 className="section-title" style={{marginTop:14}}>Perfil: Ganadores vs Perdedores</h3>
+        <h3 className="section-title" style={{marginTop:14}}>{t("lab.profile_title")}</h3>
         <div className="grid" style={{gridTemplateColumns:"1fr 1fr"}}>
           <div className="card" style={{padding:14}}>
-            <div style={{fontWeight:700, fontSize:13, color:"#22c55e", marginBottom:10}}>Ganadores ({wp.count || 0})</div>
+            <div style={{fontWeight:700, fontSize:13, color:"#22c55e", marginBottom:10}}>{t("lab.winners_label")} ({wp.count || 0})</div>
             <div style={{fontSize:12, display:"flex", flexDirection:"column", gap:6}}>
               <div style={{display:"flex", justifyContent:"space-between"}}><span style={{color:"rgba(255,255,255,0.5)"}}>Avg Score</span><span>{wp.avg_score || 0}</span></div>
               <div style={{display:"flex", justifyContent:"space-between"}}><span style={{color:"rgba(255,255,255,0.5)"}}>Avg Spread %</span><span>{wp.avg_spread_pct || 0}</span></div>
@@ -2869,7 +3050,7 @@ function LabTab() {
             </div>
           </div>
           <div className="card" style={{padding:14}}>
-            <div style={{fontWeight:700, fontSize:13, color:"#ef4444", marginBottom:10}}>Perdedores ({lp.count || 0})</div>
+            <div style={{fontWeight:700, fontSize:13, color:"#ef4444", marginBottom:10}}>{t("lab.losers_label")} ({lp.count || 0})</div>
             <div style={{fontSize:12, display:"flex", flexDirection:"column", gap:6}}>
               <div style={{display:"flex", justifyContent:"space-between"}}><span style={{color:"rgba(255,255,255,0.5)"}}>Avg Score</span><span>{lp.avg_score || 0}</span></div>
               <div style={{display:"flex", justifyContent:"space-between"}}><span style={{color:"rgba(255,255,255,0.5)"}}>Avg Spread %</span><span>{lp.avg_spread_pct || 0}</span></div>
@@ -2884,7 +3065,7 @@ function LabTab() {
         </div>
 
         {(lf.length > 0 || wf.length > 0) && <>
-          <h3 className="section-title" style={{marginTop:14}}>Factores Principales</h3>
+          <h3 className="section-title" style={{marginTop:14}}>{t("lab.top_factors_title")}</h3>
           <div className="grid" style={{gridTemplateColumns:"1fr 1fr"}}>
             {lf.length > 0 && <div className="card" style={{padding:14}}>
               <div style={{fontWeight:700, fontSize:13, color:"#ef4444", marginBottom:10}}>Top Factores Perdedores</div>
@@ -2930,6 +3111,7 @@ function LabTab() {
 
 // ── Validation Tab ──
 function ValidationTab() {
+  const { t } = useI18n();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState("live_trades");
@@ -2945,22 +3127,22 @@ function ValidationTab() {
 
   if (!data) return (<div style={{textAlign:"center", padding:40}}>
     <div style={{display:"flex", justifyContent:"center", gap:8, marginBottom:12}}>
-      <button className={"tab " + (mode === "live_trades" ? "active" : "")} onClick={() => setMode("live_trades")}>Live Trades</button>
-      <button className={"tab " + (mode === "replay_historical" ? "active" : "")} onClick={() => setMode("replay_historical")}>Historical Replay</button>
+      <button className={"tab " + (mode === "live_trades" ? "active" : "")} onClick={() => setMode("live_trades")}>{t("validation.live_trades")}</button>
+      <button className={"tab " + (mode === "replay_historical" ? "active" : "")} onClick={() => setMode("replay_historical")}>{t("validation.historical_replay")}</button>
     </div>
-    <button onClick={run} className="tab active">{loading ? "Running experiments..." : "Run Full Validation"}</button>
-    <p style={{fontSize:10, color:"#555", marginTop:8}}>{mode === "live_trades" ? "Runs 12 experiments across 3 batches against real trade data" : "Replay mode: requires 7+ days of captured raw data"}</p>
+    <button onClick={run} className="tab active">{loading ? t("validation.running_exp") : t("validation.run_full")}</button>
+    <p style={{fontSize:10, color:"#555", marginTop:8}}>{mode === "live_trades" ? t("validation.desc_live") : t("validation.desc_replay")}</p>
   </div>);
 
   const b = data.baseline_summary || {};
 
   return (<>
-    <div className="page-title">Validacion <Tip text="Pruebas formales de cambios antes de aplicarlos al bot. Compara variantes contra el baseline actual." /><div className="page-sub">Pruebas formales de cambios antes de aplicar al bot</div></div>
+    <div className="page-title">{t("validation.title")} <Tip text={t("validation.tip")} /><div className="page-sub">{t("validation.subtitle")}</div></div>
     {/* Baseline */}
     <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12}}>
-      <h3 className="section-title" style={{margin:0}}>Baseline ({data.total_trades_baseline} trades)</h3>
+      <h3 className="section-title" style={{margin:0}}>{t("validation.baseline_title", {n: data.total_trades_baseline})}</h3>
       <div style={{display:"flex", gap:8}}>
-        <button onClick={run} className="tab">{loading ? "Running..." : "Re-run"}</button>
+        <button onClick={run} className="tab">{loading ? t("validation.running") : t("validation.rerun")}</button>
         <ExportBtn data={data} filename={"validation_" + new Date().toISOString().split("T")[0] + ".json"} />
       </div>
     </div>
@@ -3055,7 +3237,7 @@ function ValidationTab() {
     {/* Combination */}
     {data.combination_suggestion && (
       <div className="card" style={{marginTop:16, borderColor:"#3b82f6"}}>
-        <h3 className="section-title" style={{color:"#3b82f6"}}>Suggested Combined Config</h3>
+        <h3 className="section-title" style={{color:"#3b82f6"}}>{t("validation.combined_title")}</h3>
         <pre style={{fontSize:11, color:"#aaa", background:"#0a0a12", padding:12, borderRadius:8}}>{JSON.stringify(data.combination_suggestion.proposed_config, null, 2)}</pre>
         <p style={{fontSize:10, color:"#666", marginTop:4}}>{data.combination_suggestion.note}</p>
       </div>
@@ -3065,6 +3247,7 @@ function ValidationTab() {
 
 // ── Research Tab (old) ──
 function ResearchTab() {
+  const { t } = useI18n();
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState("daily_summary");
@@ -3078,19 +3261,19 @@ function ResearchTab() {
 
   const views = ["daily_summary", "wr_by_coin", "wr_by_side", "wr_by_hour", "pnl_by_mode", "pnl_by_tag", "pnl_by_exit_reason", "fee_analysis", "poison_coins", "rescuable_coins", "signal_blocked_vs_entered"];
 
-  if (loading) return <div className="loading">Generating reports...</div>;
-  if (!report) return <div className="loading">No data yet. <button onClick={loadReport} className="tab">Load</button></div>;
+  if (loading) return <div className="loading">{t("research.generating")}</div>;
+  if (!report) return <div className="loading">{t("research.no_data_yet")} <button onClick={loadReport} className="tab">{t("research.load")}</button></div>;
 
   const data = report[view] || [];
   const cols = data.length > 0 ? Object.keys(data[0]) : [];
 
   return (<>
-    <div className="page-title">Informes<div className="page-sub">Reports operativos: por coin, hora, modo, tags</div></div>
+    <div className="page-title">{t("research.title")}<div className="page-sub">{t("research.subtitle")}</div></div>
     <div style={{display:"flex", gap:4, flexWrap:"wrap", marginBottom:16}}>
       {views.map(v => (
         <button key={v} className={"tab " + (view === v ? "active" : "")} onClick={() => setView(v)}>{v.replace(/_/g, " ")}</button>
       ))}
-      <button className="tab" onClick={loadReport} style={{marginLeft:"auto"}}>Refresh</button>
+      <button className="tab" onClick={loadReport} style={{marginLeft:"auto"}}>{t("research.refresh")}</button>
     </div>
     <div className="card scroll">
       <table>
@@ -3108,13 +3291,14 @@ function ResearchTab() {
           ))}
         </tbody>
       </table>
-      {data.length === 0 && <div className="loading">No data for this report</div>}
+      {data.length === 0 && <div className="loading">{t("research.no_data_report")}</div>}
     </div>
   </>);
 }
 
 // ── Audit Tab ──
 function AuditTab() {
+  const { t } = useI18n();
   const { data: status } = useFetch("/api/audit/status", 10000);
   const { data: findings } = useFetch("/api/audit/findings", 10000);
   const [fullReport, setFullReport] = useState(null);
@@ -3129,20 +3313,26 @@ function AuditTab() {
   const sevColor = (s) => s === "critical" ? "tag-red" : s === "error" ? "tag-red" : s === "warning" ? "tag-yellow" : "tag-blue";
 
   return (<>
-    <div className="page-title">Auditoria <Tip text="Sistema de auditorias automaticas que verifica la integridad de datos cada 5-60 minutos." /><div className="page-sub">Calidad de datos, integridad, checks automaticos</div></div>
+    <div className="page-title" style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12, flexWrap:"wrap"}}>
+      <div>
+        {t("audit.title")} <Tip text={t("audit.tip")} />
+        <div className="page-sub">{t("audit.subtitle")}</div>
+      </div>
+      <LivePulse intervalSec={10} />
+    </div>
     {/* Global Score */}
     <div className="grid">
-      <MC label="Health Score" value={status?.global_score ?? "..."} color={scoreColor(status?.global_score || 0)} sub="0-100" />
-      <MC label="Active Findings" value={findings?.length || 0} color={findings?.length > 0 ? "yellow" : "green"} />
+      <MC label={t("audit.health_score")} value={status?.global_score ?? "..."} color={scoreColor(status?.global_score || 0)} sub="0-100" />
+      <MC label={t("audit.active_findings")} value={findings?.length || 0} color={findings?.length > 0 ? "yellow" : "green"} />
       <div className="card">
-        <div className="label">Run All</div>
-        <button onClick={runAll} className="tab active" style={{marginTop:8}}>{loading ? "Running..." : "Audit Now"}</button>
+        <div className="label">{t("audit.run_all")}</div>
+        <button onClick={runAll} className="tab active" style={{marginTop:8}}>{loading ? t("audit.running") : t("audit.audit_now")}</button>
       </div>
     </div>
 
     {/* Per-Check Status */}
     {status?.checks && (<>
-      <h3 className="section-title" style={{marginTop:16}}>Checks <Tip text="Cada check se ejecuta en intervalos distintos: integracion (5m), calidad (15m), storage (1h), consistencia (6h)." /></h3>
+      <h3 className="section-title" style={{marginTop:16}}>{t("audit.checks_title")} <Tip text={t("audit.checks_tip")} /></h3>
       <div className="card">
         <table>
           <thead><tr><th>Check</th><th>Status</th><th style={{textAlign:"right"}}>Score</th><th style={{textAlign:"right"}}>Findings</th><th style={{textAlign:"right"}}>Runs</th><th>Interval</th><th>Last Run</th></tr></thead>
@@ -3165,7 +3355,7 @@ function AuditTab() {
 
     {/* Current Findings */}
     {findings && findings.length > 0 && (<>
-      <h3 className="section-title" style={{marginTop:16}}>Current Findings</h3>
+      <h3 className="section-title" style={{marginTop:16}}>{t("audit.findings_title")}</h3>
       <div className="card scroll">
         <table>
           <thead><tr><th>Severity</th><th>Check</th><th>Code</th><th>Message</th></tr></thead>
@@ -3185,7 +3375,7 @@ function AuditTab() {
 
     {/* Full Report (after Run All) */}
     {fullReport && (<>
-      <h3 className="section-title" style={{marginTop:16}}>Full Report</h3>
+      <h3 className="section-title" style={{marginTop:16}}>{t("audit.full_report")}</h3>
       {Object.entries(fullReport.checks || {}).map(([name, c]) => (
         <div key={name} className="card" style={{marginBottom:8}}>
           <div style={{display:"flex", justifyContent:"space-between", marginBottom:8}}>
@@ -3212,6 +3402,8 @@ function AuditTab() {
 
 // ── Trades Tab (Trade Detail & Analysis) ──
 function TradesTab() {
+  const { t, lang } = useI18n();
+  const localeTag = lang === "en" ? "en-US" : "es-ES";
   const [trades, setTrades] = useState(null);
   const [selected, setSelected] = useState(null);
   const [detail, setDetail] = useState(null);
@@ -3230,9 +3422,9 @@ function TradesTab() {
   };
 
   const cleanSnapshots = (days) => {
-    if(!confirm("Borrar snapshots de mas de " + days + " dias?")) return;
+    if(!confirm(t("trades.confirm_clean_snapshots", {n: days}))) return;
     fetch("/api/trades/snapshots/cleanup?days=" + days, {method:"DELETE"}).then(r=>r.json()).then(d => {
-      alert("Eliminados: " + d.deleted + " snapshots");
+      alert(t("trades.cleaned_snapshots", {n: d.deleted}));
       fetch("/api/trades/snapshots/stats").then(r=>r.json()).then(setSnapStats);
     });
   };
@@ -3240,52 +3432,53 @@ function TradesTab() {
   const VC = {GOOD:"#22c55e", ACCEPTABLE:"#3b82f6", BAD:"#f59e0b", TERRIBLE:"#ef4444"};
 
   if (detail && selected) {
-    const t = detail.trade || {};
+    const tr = detail.trade || {};
     // verdict data (detail.verdict) removed from UI: the trade_verdicts table
     // hasn't been updated since 2026-04-17 so the section showed stale info.
     // Re-add when/if the verdict generator is wired back up.
     const snaps = detail.snapshots || [];
     const sig = detail.signal || {};
+    const v = detail.verdict || {};
     return (<div>
-      <button onClick={()=>{setSelected(null);setDetail(null);}} style={{marginBottom:12,padding:"6px 16px",background:"#1e1b4b",border:"1px solid #4c1d95",borderRadius:8,color:"#a78bfa",cursor:"pointer"}}>Volver a lista</button>
-      <h3 style={{fontSize:18,fontWeight:700,marginBottom:4}}>{t.coin} {t.side}</h3>
-      <p style={{fontSize:11,color:"#666",marginBottom:16}}>{t.mode} | {t.entry_tag} | {new Date(t.entry_time).toLocaleString("es-ES")}</p>
+      <button onClick={()=>{setSelected(null);setDetail(null);}} style={{marginBottom:12,padding:"6px 16px",background:"#1e1b4b",border:"1px solid #4c1d95",borderRadius:8,color:"#a78bfa",cursor:"pointer"}}>{t("trades.back_to_list")}</button>
+      <h3 style={{fontSize:18,fontWeight:700,marginBottom:4}}>{tr.coin} {tr.side}</h3>
+      <p style={{fontSize:11,color:"#666",marginBottom:16}}>{tr.mode} | {tr.entry_tag} | {new Date(tr.entry_time).toLocaleString(localeTag)}</p>
 
       {/* Entry / Exit */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:16}}>
         <div style={{background:"#111",borderRadius:8,padding:12,textAlign:"center"}}>
-          <div style={{fontSize:9,color:"#666",textTransform:"uppercase"}}>Entry</div>
-          <div style={{fontSize:16,fontWeight:700,fontFamily:"monospace"}}>${Number(t.entry_price).toFixed(5)}</div>
+          <div style={{fontSize:9,color:"#666",textTransform:"uppercase"}}>{t("trades.entry")}</div>
+          <div style={{fontSize:16,fontWeight:700,fontFamily:"monospace"}}>${Number(tr.entry_price).toFixed(5)}</div>
         </div>
         <div style={{background:"#111",borderRadius:8,padding:12,textAlign:"center"}}>
-          <div style={{fontSize:9,color:"#666",textTransform:"uppercase"}}>Exit ({t.exit_reason})</div>
-          <div style={{fontSize:16,fontWeight:700,fontFamily:"monospace",color:t.net_pnl>=0?"#22c55e":"#ef4444"}}>${Number(t.exit_price).toFixed(5)}</div>
+          <div style={{fontSize:9,color:"#666",textTransform:"uppercase"}}>{t("trades.exit_with_reason", {reason: tr.exit_reason})}</div>
+          <div style={{fontSize:16,fontWeight:700,fontFamily:"monospace",color:tr.net_pnl>=0?"#22c55e":"#ef4444"}}>${Number(tr.exit_price).toFixed(5)}</div>
         </div>
-        <div style={{background:t.net_pnl>=0?"rgba(34,197,94,0.1)":"rgba(239,68,68,0.1)",borderRadius:8,padding:12,textAlign:"center",border:"1px solid "+(t.net_pnl>=0?"#22c55e33":"#ef444433")}}>
-          <div style={{fontSize:9,color:"#666",textTransform:"uppercase"}}>PnL Neto</div>
-          <div style={{fontSize:18,fontWeight:700,fontFamily:"monospace",color:t.net_pnl>=0?"#22c55e":"#ef4444"}}>${Number(t.net_pnl).toFixed(4)}</div>
-          <div style={{fontSize:10,color:"#666"}}>Bruto: ${Number(t.gross_pnl).toFixed(4)} | Fee: ${Number(t.fee).toFixed(4)}</div>
+        <div style={{background:tr.net_pnl>=0?"rgba(34,197,94,0.1)":"rgba(239,68,68,0.1)",borderRadius:8,padding:12,textAlign:"center",border:"1px solid "+(tr.net_pnl>=0?"#22c55e33":"#ef444433")}}>
+          <div style={{fontSize:9,color:"#666",textTransform:"uppercase"}}>{t("trades.pnl_net")}</div>
+          <div style={{fontSize:18,fontWeight:700,fontFamily:"monospace",color:tr.net_pnl>=0?"#22c55e":"#ef4444"}}>${Number(tr.net_pnl).toFixed(4)}</div>
+          <div style={{fontSize:10,color:"#666"}}>{t("trades.gross_fee_line", {gross: Number(tr.gross_pnl).toFixed(4), fee: Number(tr.fee).toFixed(4)})}</div>
         </div>
       </div>
 
       {/* Scores */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8,marginBottom:16}}>
-        <MC label="Score" value={(t.signal_score||0).toFixed(1)} />
-        <MC label="Trend" value={(t.trend_score||0).toFixed(1)} />
-        <MC label="Micro" value={(t.micro_score||0).toFixed(0)} />
-        <MC label="MFE" value={(t.mfe_pct||0).toFixed(3)+"%"} />
-        <MC label="MAE" value={(t.mae_pct||0).toFixed(3)+"%"} />
+        <MC label={t("trades.score")} value={(tr.signal_score||0).toFixed(1)} />
+        <MC label={t("trades.trend")} value={(tr.trend_score||0).toFixed(1)} />
+        <MC label={t("trades.micro")} value={(tr.micro_score||0).toFixed(0)} />
+        <MC label={t("trades.mfe")} value={(tr.mfe_pct||0).toFixed(3)+"%"} />
+        <MC label={t("trades.mae")} value={(tr.mae_pct||0).toFixed(3)+"%"} />
       </div>
 
       {/* SL Movement from snapshots */}
       {snaps.length > 0 && (<div style={{marginBottom:16}}>
-        <h4 style={{fontSize:12,fontWeight:700,color:"#a78bfa",marginBottom:8}}>Timeline ({snaps.length} snapshots)</h4>
+        <h4 style={{fontSize:12,fontWeight:700,color:"#a78bfa",marginBottom:8}}>{t("trades.timeline_title", {n: snaps.length})}</h4>
         <div style={{maxHeight:200,overflowY:"auto",background:"#0a0a14",borderRadius:8,padding:8}}>
           <table style={{width:"100%",fontSize:10}}><thead><tr style={{color:"#666"}}>
-            <th style={{textAlign:"left"}}>Tiempo</th><th style={{textAlign:"right"}}>Precio</th><th style={{textAlign:"right"}}>SL</th><th style={{textAlign:"right"}}>HWM</th><th style={{textAlign:"right"}}>PnL%</th>
+            <th style={{textAlign:"left"}}>{t("trades.tl_time")}</th><th style={{textAlign:"right"}}>{t("trades.tl_price")}</th><th style={{textAlign:"right"}}>{t("trades.tl_sl")}</th><th style={{textAlign:"right"}}>{t("trades.tl_hwm")}</th><th style={{textAlign:"right"}}>{t("trades.tl_pnl_pct")}</th>
           </tr></thead><tbody>
           {snaps.map((s,i) => (<tr key={i} style={{borderTop:"1px solid #1a1a2e"}}>
-            <td style={{color:"#888"}}>{new Date(s.timestamp).toLocaleTimeString("es-ES")}</td>
+            <td style={{color:"#888"}}>{new Date(s.timestamp).toLocaleTimeString(localeTag)}</td>
             <td style={{textAlign:"right",fontFamily:"monospace"}}>{Number(s.mid_price).toFixed(5)}</td>
             <td style={{textAlign:"right",fontFamily:"monospace",color:"#ef4444"}}>{Number(s.sl_price).toFixed(5)}</td>
             <td style={{textAlign:"right",fontFamily:"monospace",color:"#a78bfa"}}>{Number(s.high_water_mark).toFixed(5)}</td>
@@ -3297,7 +3490,7 @@ function TradesTab() {
 
       {/* Improvements */}
       {v.improvements && (<div style={{marginBottom:16}}>
-        <h4 style={{fontSize:12,fontWeight:700,color:"#f59e0b",marginBottom:8}}>Que se puede mejorar</h4>
+        <h4 style={{fontSize:12,fontWeight:700,color:"#f59e0b",marginBottom:8}}>{t("trades.improvements_title")}</h4>
         {(typeof v.improvements === "string" ? JSON.parse(v.improvements) : v.improvements).map((imp,i) => (
           <div key={i} style={{background:"rgba(245,158,11,0.08)",border:"1px solid rgba(245,158,11,0.2)",borderRadius:8,padding:10,marginBottom:6,fontSize:12,color:"#ddd"}}>{imp}</div>
         ))}
@@ -3305,20 +3498,20 @@ function TradesTab() {
 
       {/* Counterfactual */}
       {v.counterfactual && (<div style={{marginBottom:16}}>
-        <h4 style={{fontSize:12,fontWeight:700,color:"#3b82f6",marginBottom:8}}>Que habria pasado si...</h4>
+        <h4 style={{fontSize:12,fontWeight:700,color:"#3b82f6",marginBottom:8}}>{t("trades.counterfactual_title")}</h4>
         {Object.entries(typeof v.counterfactual === "string" ? JSON.parse(v.counterfactual) : v.counterfactual).map(([k,val]) => {
           const obj = typeof val === "object" && val !== null ? val : {};
           const desc = obj.description || k;
-          const result = obj.survived != null ? (obj.survived ? "SI habria sobrevivido" : "NO habria sobrevivido")
-                       : obj.would_have_tp != null ? (obj.would_have_tp ? "SI habria cerrado en profit" : "NO habria llegado al TP")
+          const result = obj.survived != null ? (obj.survived ? t("trades.cf_survived_yes") : t("trades.cf_survived_no"))
+                       : obj.would_have_tp != null ? (obj.would_have_tp ? t("trades.cf_tp_yes") : t("trades.cf_tp_no"))
                        : JSON.stringify(val);
           const isGood = obj.survived === true || obj.would_have_tp === true;
           return (
             <div key={k} style={{background:isGood?"rgba(34,197,94,0.08)":"rgba(239,68,68,0.08)",border:"1px solid "+(isGood?"rgba(34,197,94,0.2)":"rgba(239,68,68,0.2)"),borderRadius:8,padding:12,marginBottom:6}}>
               <div style={{fontSize:12,fontWeight:700,color:isGood?"#22c55e":"#ef4444",marginBottom:4}}>{result}</div>
               <div style={{fontSize:11,color:"#aaa"}}>{desc}</div>
-              {obj.original_sl_pct && <div style={{fontSize:10,color:"#666",marginTop:4}}>SL original: {obj.original_sl_pct}% → SL ancho: {obj.wider_sl_pct}% | MAE: {obj.mae_pct}%</div>}
-              {obj.original_tp_pct && <div style={{fontSize:10,color:"#666",marginTop:4}}>TP original: {obj.original_tp_pct}% → TP corto: {obj.tighter_tp_pct}% | MFE: {obj.mfe_pct}%</div>}
+              {obj.original_sl_pct && <div style={{fontSize:10,color:"#666",marginTop:4}}>{t("trades.cf_sl_line", {orig: obj.original_sl_pct, wider: obj.wider_sl_pct, mae: obj.mae_pct})}</div>}
+              {obj.original_tp_pct && <div style={{fontSize:10,color:"#666",marginTop:4}}>{t("trades.cf_tp_line", {orig: obj.original_tp_pct, tighter: obj.tighter_tp_pct, mfe: obj.mfe_pct})}</div>}
             </div>
           );
         })}
@@ -3328,39 +3521,39 @@ function TradesTab() {
 
   return (<div>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-      <h3 style={{fontSize:16,fontWeight:700}}>Historial de Trades</h3>
+      <h3 style={{fontSize:16,fontWeight:700}}>{t("trades.history_title")}</h3>
       {snapStats && (<div style={{display:"flex",alignItems:"center",gap:12}}>
-        <span style={{fontSize:10,color:"#666"}}>Snapshots: {snapStats.total||0} ({snapStats.disk_size||"?"})</span>
-        <button onClick={()=>cleanSnapshots(7)} style={{padding:"4px 12px",fontSize:10,background:"#7f1d1d",border:"1px solid #991b1b",borderRadius:6,color:"#fca5a5",cursor:"pointer"}}>Limpiar +7d</button>
-        <button onClick={()=>cleanSnapshots(3)} style={{padding:"4px 12px",fontSize:10,background:"#7f1d1d",border:"1px solid #991b1b",borderRadius:6,color:"#fca5a5",cursor:"pointer"}}>Limpiar +3d</button>
+        <span style={{fontSize:10,color:"#666"}}>{t("trades.snapshots_meta", {n: snapStats.total||0, size: snapStats.disk_size||"?"})}</span>
+        <button onClick={()=>cleanSnapshots(7)} style={{padding:"4px 12px",fontSize:10,background:"#7f1d1d",border:"1px solid #991b1b",borderRadius:6,color:"#fca5a5",cursor:"pointer"}}>{t("trades.clean_plus7")}</button>
+        <button onClick={()=>cleanSnapshots(3)} style={{padding:"4px 12px",fontSize:10,background:"#7f1d1d",border:"1px solid #991b1b",borderRadius:6,color:"#fca5a5",cursor:"pointer"}}>{t("trades.clean_plus3")}</button>
       </div>)}
     </div>
-    {!trades ? <p style={{color:"#666"}}>Cargando...</p> : trades.length === 0 ? <p style={{color:"#666"}}>No hay trades</p> : (
+    {!trades ? <p style={{color:"#666"}}>{t("common.loading")}</p> : trades.length === 0 ? <p style={{color:"#666"}}>{t("trades.empty")}</p> : (
       <div style={{overflowX:"auto"}}>
         <table style={{width:"100%",fontSize:11,borderCollapse:"collapse"}}>
           <thead><tr style={{color:"#666",borderBottom:"1px solid #222"}}>
-            <th style={{textAlign:"left",padding:6}}>Fecha</th>
-            <th>Coin</th><th>Side</th><th>Modo</th>
-            <th style={{textAlign:"right"}}>Neto</th>
-            <th style={{textAlign:"right"}}>MFE</th>
-            <th style={{textAlign:"right"}}>MAE</th>
-            <th>Salida</th>
-            <th>Quality</th>
+            <th style={{textAlign:"left",padding:6}}>{t("trades.col.date")}</th>
+            <th>{t("trades.col.coin")}</th><th>{t("trades.col.side")}</th><th>{t("trades.col.mode")}</th>
+            <th style={{textAlign:"right"}}>{t("trades.col.net")}</th>
+            <th style={{textAlign:"right"}}>{t("trades.col.mfe")}</th>
+            <th style={{textAlign:"right"}}>{t("trades.col.mae")}</th>
+            <th>{t("trades.col.exit")}</th>
+            <th>{t("trades.col.quality")}</th>
             <th></th>
           </tr></thead>
           <tbody>
-          {trades.map((t,i) => (
-            <tr key={i} style={{borderBottom:"1px solid #111",cursor:"pointer"}} onClick={()=>loadDetail(t.id)}>
-              <td style={{padding:6,color:"#888",fontSize:10}}>{t.entry_time ? new Date(t.entry_time).toLocaleString("es-ES",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : "?"}</td>
-              <td style={{fontWeight:700,color:"#a78bfa"}}>{t.coin}</td>
-              <td><span style={{padding:"2px 8px",borderRadius:4,fontSize:10,fontWeight:700,background:t.side==="LONG"?"rgba(34,197,94,0.2)":"rgba(239,68,68,0.2)",color:t.side==="LONG"?"#22c55e":"#ef4444"}}>{t.side}</span></td>
-              <td style={{color:"#888"}}>{t.mode}</td>
-              <td style={{textAlign:"right",fontFamily:"monospace",fontWeight:700,color:t.net_pnl>=0?"#22c55e":"#ef4444"}}>${Number(t.net_pnl||0).toFixed(4)}</td>
-              <td style={{textAlign:"right",fontFamily:"monospace",color:"#22c55e"}}>{(t.mfe_pct||0).toFixed(3)}%</td>
-              <td style={{textAlign:"right",fontFamily:"monospace",color:"#ef4444"}}>{(t.mae_pct||0).toFixed(3)}%</td>
-              <td style={{fontSize:10,color:"#888"}}>{t.exit_reason}</td>
-              <td style={{fontSize:10,color:"#888"}}>{t.entry_quality_label||""}</td>
-              <td><span style={{color:"#4c1d95",fontSize:10}}>Ver</span></td>
+          {trades.map((row,i) => (
+            <tr key={i} style={{borderBottom:"1px solid #111",cursor:"pointer"}} onClick={()=>loadDetail(row.id)}>
+              <td style={{padding:6,color:"#888",fontSize:10}}>{row.entry_time ? new Date(row.entry_time).toLocaleString(localeTag,{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : "?"}</td>
+              <td style={{fontWeight:700,color:"#a78bfa"}}>{row.coin}</td>
+              <td><span style={{padding:"2px 8px",borderRadius:4,fontSize:10,fontWeight:700,background:row.side==="LONG"?"rgba(34,197,94,0.2)":"rgba(239,68,68,0.2)",color:row.side==="LONG"?"#22c55e":"#ef4444"}}>{row.side}</span></td>
+              <td style={{color:"#888"}}>{row.mode}</td>
+              <td style={{textAlign:"right",fontFamily:"monospace",fontWeight:700,color:row.net_pnl>=0?"#22c55e":"#ef4444"}}>${Number(row.net_pnl||0).toFixed(4)}</td>
+              <td style={{textAlign:"right",fontFamily:"monospace",color:"#22c55e"}}>{(row.mfe_pct||0).toFixed(3)}%</td>
+              <td style={{textAlign:"right",fontFamily:"monospace",color:"#ef4444"}}>{(row.mae_pct||0).toFixed(3)}%</td>
+              <td style={{fontSize:10,color:"#888"}}>{row.exit_reason}</td>
+              <td style={{fontSize:10,color:"#888"}}>{row.entry_quality_label||""}</td>
+              <td><span style={{color:"#4c1d95",fontSize:10}}>{t("trades.view")}</span></td>
             </tr>
           ))}
           </tbody>
@@ -3375,6 +3568,7 @@ function TradesTab() {
 // Lista de change markers (manuales y automaticos) con su impacto antes/despues calculado.
 // Permite ver el efecto real de cada cambio que has hecho en el bot.
 function CambiosTab() {
+  const { t, lang } = useI18n();
   const [items, setItems] = useState(null);
   const [loading, setLoading] = useState(true);
   const [days, setDays] = useState(30);
@@ -3398,7 +3592,7 @@ function CambiosTab() {
     } finally { setRecalcId(null); }
   };
 
-  if (loading) return <div className="loading">Cargando markers...</div>;
+  if (loading) return <div className="loading">{t("cambios.loading")}</div>;
 
   const categories = ["ALL", ...Array.from(new Set((items || []).map(m => m.category))).sort()];
   const filtered = (items || []).filter(m => filterCat === "ALL" || m.category === filterCat);
@@ -3420,26 +3614,27 @@ function CambiosTab() {
     const sign = v > 0 ? "+" : "";
     return sign + v + (suffix || "");
   };
+  const localeTag = lang === "en" ? "en-US" : "es-ES";
   const fmtTime = (ts) => {
     if (!ts) return "-";
-    try { return new Date(ts).toLocaleString("es-ES", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" }); }
+    try { return new Date(ts).toLocaleString(localeTag, { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" }); }
     catch { return ts; }
   };
 
   return (<>
     <div className="page-title" style={{display:"flex", justifyContent:"space-between", alignItems:"center"}}>
       <div>
-        <span>Cambios</span>
-        <div className="page-sub">Eventos que pueden cambiar el comportamiento del bot, con su impacto antes/despues calculado automaticamente</div>
+        <span>{t("cambios.title")}</span>
+        <div className="page-sub">{t("cambios.subtitle")}</div>
       </div>
       <div style={{display:"flex", gap:8, alignItems:"center"}}>
         <select value={days} onChange={e => setDays(Number(e.target.value))}
                 style={{background:"#1a1a1a", color:"#aaa", border:"1px solid #333", borderRadius:6, padding:"6px 10px", fontSize:11}}>
-          <option value={7}>Ultimos 7 dias</option>
-          <option value={30}>Ultimos 30 dias</option>
-          <option value={90}>Ultimos 90 dias</option>
+          <option value={7}>{t("cambios.days_7")}</option>
+          <option value={30}>{t("cambios.days_30")}</option>
+          <option value={90}>{t("cambios.days_90")}</option>
         </select>
-        <button className="tab" onClick={load}>Actualizar</button>
+        <button className="tab" onClick={load}>{t("cambios.refresh")}</button>
       </div>
     </div>
 
@@ -3456,21 +3651,21 @@ function CambiosTab() {
 
     {filtered.length === 0 ? (
       <div className="card" style={{textAlign:"center", padding:30, color:"#666"}}>
-        No hay markers en este periodo. Crea uno con el boton "Marcar cambio" del bot, o haz un cambio de modo / acepta una proposal.
+        {t("cambios.empty")}
       </div>
     ) : (
       <div className="card scroll">
         <table>
           <thead><tr>
-            <th>Cuando</th>
-            <th>Categoria</th>
-            <th>Etiqueta</th>
-            <th>Contexto</th>
-            <th style={{textAlign:"center"}}>Estado</th>
-            <th style={{textAlign:"right"}}>WR antes/despues</th>
-            <th style={{textAlign:"right"}}>Expectancy antes/despues</th>
-            <th style={{textAlign:"right"}}>Δ exp</th>
-            <th style={{textAlign:"right"}}>SL% antes/despues</th>
+            <th>{t("cambios.col.when")}</th>
+            <th>{t("cambios.col.category")}</th>
+            <th>{t("cambios.col.label")}</th>
+            <th>{t("cambios.col.context")}</th>
+            <th style={{textAlign:"center"}}>{t("cambios.col.status")}</th>
+            <th style={{textAlign:"right"}}>{t("cambios.col.wr_ba")}</th>
+            <th style={{textAlign:"right"}}>{t("cambios.col.exp_ba")}</th>
+            <th style={{textAlign:"right"}}>{t("cambios.col.delta_exp")}</th>
+            <th style={{textAlign:"right"}}>{t("cambios.col.sl_ba")}</th>
             <th></th>
           </tr></thead>
           <tbody>
@@ -3510,7 +3705,7 @@ function CambiosTab() {
                     <button onClick={() => recalc(m.id)}
                             disabled={recalcId === m.id}
                             style={{background:"#1a1a2e", border:"1px solid #2a3f5f", color:"#3b82f6", padding:"3px 8px", borderRadius:4, fontSize:9, cursor:"pointer"}}>
-                      {recalcId === m.id ? "..." : "Recalcular"}
+                      {recalcId === m.id ? "..." : t("cambios.recalc")}
                     </button>
                   </td>
                 </tr>
@@ -3521,44 +3716,48 @@ function CambiosTab() {
       </div>
     )}
 
-    <div style={{marginTop:12, fontSize:10, color:"#555", padding:12, background:"#0a0a0a", borderRadius:6}}>
-      <b>Como funciona:</b> cada marker compara las metricas (WR, expectancy, SL rate, profit factor) de los 20 trades antes vs los 20 trades despues del evento.
-      Si no hay 10 trades minimos en alguna ventana, hace fallback a las 6 horas antes/despues.
-      Si el marker tiene contexto (coin/side/mode) solo cuenta esos trades.
-      El estado se calcula con un score ponderado: <b style={{color:"#22c55e"}}>IMPROVED</b> si mejora &gt; 10%, <b style={{color:"#ef4444"}}>WORSENED</b> si empeora &gt; 10%, sino <b style={{color:"#eab308"}}>NEUTRAL</b>.
-    </div>
+    <div style={{marginTop:12, fontSize:10, color:"#555", padding:12, background:"#0a0a0a", borderRadius:6}}
+         dangerouslySetInnerHTML={{__html: t("cambios.how_it_works")}} />
   </>);
 }
 
 function BotLiveTab() {
+  const { t, lang } = useI18n();
   const { data: stats } = useFetch("/api/bot/trades/stats", 5000);
   const { data: trades } = useFetch("/api/bot/trades", 5000);
   const { data: sigStats } = useFetch("/api/bot/signals/stats", 10000);
   // V25: gate stats — telemetria de filtros que bloquean entradas
   const { data: gateStats } = useFetch("/api/bot/gate-stats", 10000);
 
-  if (!stats) return <div className="loading">Loading bot data...</div>;
+  if (!stats) return <div className="loading">{t("common.loading")}</div>;
 
   const s = stats;
   const winRate = s.win_rate ? (s.win_rate * 100).toFixed(0) + "%" : "0%";
+  const localeTag = lang === "en" ? "en-US" : "es-ES";
 
   return (<>
-    <div className="page-title">Bot Live<div className="page-sub">Estado del bot en tiempo real: trades, senales y PnL</div></div>
-    <h3 className="section-title">Resumen de Trades <Tip text="Resumen en tiempo real de los trades ejecutados por el bot. Los datos se actualizan automaticamente." /></h3>
+    <div className="page-title" style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12, flexWrap:"wrap"}}>
+      <div>
+        {t("botlive.title")}
+        <div className="page-sub">{t("botlive.subtitle")}</div>
+      </div>
+      <LivePulse intervalSec={5} />
+    </div>
+    <h3 className="section-title">{t("botlive.summary_title")} <Tip text={t("botlive.summary_tip")} /></h3>
     <div className="grid">
-      <MC label="Trades" value={s.total_trades || 0} sub={(s.wins || 0) + "W / " + (s.losses || 0) + "L"} />
-      <MC label="Win Rate" value={winRate} color={s.win_rate >= 0.5 ? "green" : "red"} />
-      <MC label="PnL Bruto" value={"$" + (s.total_gross || 0)} color={Number(s.total_gross) >= 0 ? "green" : "red"} />
-      <MC label="PnL Neto" value={"$" + (s.total_net || 0)} color={Number(s.total_net) >= 0 ? "green" : "red"} />
-      <MC label="Fees" value={"$" + (s.total_fees || 0)} color="yellow" />
-      <MC label="Avg W / L" value={"$" + (s.avg_win || 0) + " / $" + (s.avg_loss || 0)} />
+      <MC label={t("botlive.card.trades")} value={s.total_trades || 0} sub={t("botlive.wl_slash", {wins: s.wins || 0, losses: s.losses || 0})} />
+      <MC label={t("conclusions.win_rate")} value={winRate} color={s.win_rate >= 0.5 ? "green" : "red"} />
+      <MC label={t("botlive.card.pnl_gross")} value={"$" + (s.total_gross || 0)} color={Number(s.total_gross) >= 0 ? "green" : "red"} />
+      <MC label={t("botlive.card.pnl_net")} value={"$" + (s.total_net || 0)} color={Number(s.total_net) >= 0 ? "green" : "red"} />
+      <MC label={t("botlive.card.fees")} value={"$" + (s.total_fees || 0)} color="yellow" />
+      <MC label={t("botlive.card.avg_wl")} value={"$" + (s.avg_win || 0) + " / $" + (s.avg_loss || 0)} />
     </div>
 
     {sigStats && sigStats.actions && (<>
-      <h3 className="section-title" style={{marginTop: 16}}>Decisiones de Senales <Tip text="Desglose de senales: ENTER (ejecutadas), SKIP (ignoradas), BLOCKED (rechazadas por filtros)." /></h3>
+      <h3 className="section-title" style={{marginTop: 16}}>{t("botlive.signals_title")} <Tip text={t("botlive.signals_tip")} /></h3>
       <div className="grid">
         {sigStats.actions.map((a, i) => (
-          <MC key={i} label={a.action} value={a.total} sub={"avg score: " + (a.avg_score || 0)} color={a.action === "ENTER" ? "green" : a.action === "BLOCKED" ? "red" : "yellow"} />
+          <MC key={i} label={a.action} value={a.total} sub={t("botlive.signals_avg_score", {v: a.avg_score || 0})} color={a.action === "ENTER" ? "green" : a.action === "BLOCKED" ? "red" : "yellow"} />
         ))}
       </div>
     </>)}
@@ -3571,19 +3770,19 @@ function BotLiveTab() {
       const topCoins = g.sl_viability_top_coins || {};
       const uptime = g.uptime_sec || 0;
       const upMin = Math.round(uptime / 60);
-      const recvAt = gateStats.received_at ? new Date(gateStats.received_at).toLocaleTimeString("es-ES") : "?";
+      const recvAt = gateStats.received_at ? new Date(gateStats.received_at).toLocaleTimeString(localeTag) : "?";
       return (
         <>
-          <h3 className="section-title" style={{marginTop: 16}}>Gate Stats <Tip text="Contadores de rechazos por cada filtro de entrada del bot. Reemplaza los antiguos rechazos invisibles. Permite ver que filtro esta bloqueando las entradas. Snapshot enviado por el bot cada ~1 min." /> <span style={{fontSize:10,color:"#666",marginLeft:8,fontWeight:400}}>recibido {recvAt} · uptime {upMin}m · modo {g.mode}</span></h3>
+          <h3 className="section-title" style={{marginTop: 16}}>{t("botlive.gate_title")} <Tip text={t("botlive.gate_tip")} /> <span style={{fontSize:10,color:"#666",marginLeft:8,fontWeight:400}}>{t("botlive.gate_meta", {at: recvAt, min: upMin, mode: g.mode})}</span></h3>
           <div className="grid">
-            <MC label="SL Viability rejects" value={rej.sl_viability ?? 0} sub={"min ticks " + (cfg.min_ticks_in_sl ?? "?")} color={rej.sl_viability > 100 ? "red" : rej.sl_viability > 0 ? "yellow" : "green"} />
-            <MC label="Spread rejects" value={rej.spread ?? 0} sub="spread > 0.05% mid" color={rej.spread > 50 ? "red" : "yellow"} />
-            <MC label="Cooldown skips" value={rej.cooldown ?? 0} sub="coin en cooldown" />
-            <MC label="Coin blocked" value={rej.coin_blocked ?? 0} sub="loss streak block" />
+            <MC label={t("botlive.gate.sl_viability")} value={rej.sl_viability ?? 0} sub={t("botlive.gate.sl_viability_sub", {n: cfg.min_ticks_in_sl ?? "?"})} color={rej.sl_viability > 100 ? "red" : rej.sl_viability > 0 ? "yellow" : "green"} />
+            <MC label={t("botlive.gate.spread")} value={rej.spread ?? 0} sub={t("botlive.gate.spread_sub")} color={rej.spread > 50 ? "red" : "yellow"} />
+            <MC label={t("botlive.gate.cooldown")} value={rej.cooldown ?? 0} sub={t("botlive.gate.cooldown_sub")} />
+            <MC label={t("botlive.gate.coin_blocked")} value={rej.coin_blocked ?? 0} sub={t("botlive.gate.coin_blocked_sub")} />
           </div>
           <div className="card" style={{marginTop:8, padding:12}}>
             <div style={{fontSize:11,color:"#888",marginBottom:6}}>
-              <b style={{color:"#aaa"}}>SL Viability filter config:</b>{" "}
+              <b style={{color:"#aaa"}}>{t("botlive.gate.config_label")}</b>{" "}
               enabled <span className="purple">{String(cfg.enabled)}</span>{" · "}
               minTicks <span className="purple">{cfg.min_ticks_in_sl}</span>{" · "}
               floor <span className="purple">{cfg.sl_viability_floor_pct}%</span>{" · "}
@@ -3592,7 +3791,7 @@ function BotLiveTab() {
             </div>
             {Object.keys(topCoins).length > 0 ? (
               <>
-                <div style={{fontSize:11,color:"#888",marginBottom:4}}><b style={{color:"#aaa"}}>Top coins bloqueadas por SL Viability:</b></div>
+                <div style={{fontSize:11,color:"#888",marginBottom:4}}><b style={{color:"#aaa"}}>{t("botlive.gate.top_coins")}</b></div>
                 <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
                   {Object.entries(topCoins).map(([coin, count]) => (
                     <span key={coin} className="tag" style={{background:"rgba(239,68,68,0.12)",color:"#ef4444",border:"1px solid rgba(239,68,68,0.3)"}}>
@@ -3602,7 +3801,7 @@ function BotLiveTab() {
                 </div>
               </>
             ) : (
-              <div style={{fontSize:11,color:"#666"}}>Sin rechazos por SL Viability en esta ventana.</div>
+              <div style={{fontSize:11,color:"#666"}}>{t("botlive.gate.no_rejects")}</div>
             )}
           </div>
         </>
@@ -3610,29 +3809,29 @@ function BotLiveTab() {
     })()}
 
     {trades && trades.length > 0 && (<>
-      <h3 className="section-title" style={{marginTop: 16}}>Trades Recientes <Tip text="Ultimos trades ejecutados con detalle de PnL bruto, fees y neto por operacion." /></h3>
+      <h3 className="section-title" style={{marginTop: 16}}>{t("botlive.recent_title")} <Tip text={t("botlive.recent_tip")} /></h3>
       <div className="card scroll">
         <table>
           <thead><tr>
-            <th>Time</th><th>Coin</th><th>Side</th><th>Reason</th><th>Mode</th>
-            <th style={{textAlign:"right"}}>Gross</th><th style={{textAlign:"right"}}>Fee</th>
-            <th style={{textAlign:"right"}}>Net</th><th style={{textAlign:"right"}}>Hold</th>
+            <th>{t("botlive.col.time")}</th><th>{t("botlive.col.coin")}</th><th>{t("botlive.col.side")}</th><th>{t("botlive.col.reason")}</th><th>{t("botlive.col.mode")}</th>
+            <th style={{textAlign:"right"}}>{t("botlive.col.gross")}</th><th style={{textAlign:"right"}}>{t("botlive.col.fee")}</th>
+            <th style={{textAlign:"right"}}>{t("botlive.col.net")}</th><th style={{textAlign:"right"}}>{t("botlive.col.hold")}</th>
           </tr></thead>
           <tbody>
-            {trades.map((t, i) => {
-              const net = Number(t.net_pnl || 0);
-              const gross = Number(t.gross_pnl || 0);
-              const exitTime = t.exit_time ? new Date(t.exit_time).toLocaleString() : "-";
-              const holdMin = t.hold_seconds ? Math.round(t.hold_seconds / 60) + "m" : "-";
+            {trades.map((t_, i) => {
+              const net = Number(t_.net_pnl || 0);
+              const gross = Number(t_.gross_pnl || 0);
+              const exitTime = t_.exit_time ? new Date(t_.exit_time).toLocaleString(localeTag) : "-";
+              const holdMin = t_.hold_seconds ? Math.round(t_.hold_seconds / 60) + "m" : "-";
               return (
                 <tr key={i}>
                   <td style={{fontSize:10, color:"#555"}}>{exitTime}</td>
-                  <td className="purple">{t.coin}</td>
-                  <td><span className={"tag " + (t.side === "LONG" ? "tag-green" : "tag-red")}>{t.side}</span></td>
-                  <td><span className={"tag " + (t.exit_reason === "SL" ? "tag-red" : t.exit_reason === "TP" ? "tag-green" : "tag-yellow")}>{t.exit_reason}</span></td>
-                  <td style={{color:"#666"}}>{t.mode}</td>
+                  <td className="purple">{t_.coin}</td>
+                  <td><span className={"tag " + (t_.side === "LONG" ? "tag-green" : "tag-red")}>{t_.side}</span></td>
+                  <td><span className={"tag " + (t_.exit_reason === "SL" ? "tag-red" : t_.exit_reason === "TP" ? "tag-green" : "tag-yellow")}>{t_.exit_reason}</span></td>
+                  <td style={{color:"#666"}}>{t_.mode}</td>
                   <td style={{textAlign:"right", color: gross >= 0 ? "#22c55e" : "#ef4444"}}>{gross.toFixed(4)}</td>
-                  <td style={{textAlign:"right", color:"#888"}}>{Number(t.fee || 0).toFixed(4)}</td>
+                  <td style={{textAlign:"right", color:"#888"}}>{Number(t_.fee || 0).toFixed(4)}</td>
                   <td style={{textAlign:"right", fontWeight:600, color: net >= 0 ? "#22c55e" : "#ef4444"}}>{net.toFixed(4)}</td>
                   <td style={{textAlign:"right", color:"#666"}}>{holdMin}</td>
                 </tr>
@@ -3702,9 +3901,10 @@ const SHADOW_TEMPLATES = [
  * hits the primary action.
  */
 function Modal({ open, title, children, onCancel, onConfirm, confirmLabel, confirmStyle, cancelLabel, busy }) {
+  const { t } = useI18n();
   if (!open) return null;
-  const pConfirmLabel = confirmLabel || "Confirmar";
-  const pCancelLabel  = cancelLabel  || "Cancelar";
+  const pConfirmLabel = confirmLabel || t("shadow.confirm");
+  const pCancelLabel  = cancelLabel  || t("shadow.cancel");
   const confirmBg = confirmStyle === "danger" ? "#b91c1c" : confirmStyle === "primary" ? "#3b82f6" : "#3b82f6";
   return (
     <div onClick={onCancel}
@@ -3742,6 +3942,7 @@ function Modal({ open, title, children, onCancel, onConfirm, confirmLabel, confi
 }
 
 function ShadowModeTab() {
+  const { t } = useI18n();
   const [variants, setVariants] = useState([]);
   const [evaluations, setEvaluations] = useState([]);
   const [summary, setSummary] = useState({variants: [], totalEvaluations: 0, hours: 24});
@@ -3792,7 +3993,7 @@ function ShadowModeTab() {
       ]);
       if (vResp.status === 403 || eResp.status === 403 || sResp.status === 403
           || xResp.status === 403 || xsResp.status === 403 || iResp.status === 403) {
-        throw new Error("Acceso denegado — requiere rol ADMIN");
+        throw new Error(t("shadow.err_admin"));
       }
       // Defensive parsing: endpoint can be missing (404) while the bot /
       // platform is mid-deploy. Fall back to safe defaults so the tab still
@@ -3841,8 +4042,8 @@ function ShadowModeTab() {
   const submitVariant = async () => {
     setSubmitMsg("");
     const newName = form.name.trim();
-    if (!newName) { setSubmitMsg("✗ Falta nombre"); return; }
-    if (!hasAnyFilter())   { setSubmitMsg("✗ Activa al menos un filtro o un override"); return; }
+    if (!newName) { setSubmitMsg(t("shadow.missing_name")); return; }
+    if (!hasAnyFilter())   { setSubmitMsg(t("shadow.need_filter")); return; }
     try {
       const coinList = form.coins.split(",").map(s => s.trim().toUpperCase()).filter(Boolean);
       const base = {
@@ -3878,7 +4079,7 @@ function ShadowModeTab() {
       });
       const data = await r.json();
       if (data.success) {
-        setSubmitMsg(editingName ? "✓ Variante actualizada" : "✓ Variante guardada");
+        setSubmitMsg(editingName ? t("shadow.updated") : t("shadow.saved"));
         setForm(EMPTY_FORM());
         setEditingName(null);
         refresh();
@@ -3953,15 +4154,15 @@ function ShadowModeTab() {
       if (d.success) {
         setFlash({
           kind: "success",
-          msg: `Variante "${deleteModal.name}" borrada. Limpiadas ${d.deletedEvaluations ?? 0} evaluaciones y ${d.deletedExits ?? 0} salidas.`
+          msg: t("shadow.delete_success", {name: deleteModal.name, ev: d.deletedEvaluations ?? 0, ex: d.deletedExits ?? 0})
         });
       } else {
-        setFlash({ kind: "error", msg: "No se pudo borrar: " + (d.error || "variante no existe") });
+        setFlash({ kind: "error", msg: t("shadow.delete_failed", {err: d.error || t("shadow.variant_not_exists")}) });
       }
       setDeleteModal(null);
       refresh();
     } catch (e) {
-      setFlash({ kind: "error", msg: "Error de red al borrar: " + (e.message || e) });
+      setFlash({ kind: "error", msg: t("shadow.delete_network_err", {err: e.message || e}) });
     }
     setDeleteBusy(false);
   };
@@ -3979,8 +4180,12 @@ function ShadowModeTab() {
   );
 
   return (<>
-    <div className="page-title">Shadow Mode
-      <div className="page-sub">Variantes de config evaluadas en paralelo al motor real. Cero ordenes, solo observacion y log.</div>
+    <div className="page-title" style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12, flexWrap:"wrap"}}>
+      <div>
+        {t("shadow.title")}
+        <div className="page-sub">{t("shadow.subtitle")}</div>
+      </div>
+      <LivePulse intervalSec={15} />
     </div>
 
     {err && <div style={{padding:12, background:"#2a1010", border:"1px solid #ef4444", borderRadius:6, color:"#ef4444", marginBottom:12, fontSize:12}}>{err}</div>}
@@ -3992,37 +4197,30 @@ function ShadowModeTab() {
         ══════════════════════════════════════════════════════════════════ */}
     <div className="panel" style={{marginBottom:18}}>
       <div className="panel-title">
-        Análisis de impacto
+        {t("shadow.impact_title")}
         <span className="meta">
           <select value={impactDays} onChange={e => setImpactDays(Number(e.target.value))}
             style={{marginRight:10, padding:"3px 8px", fontSize:10, background:"var(--bg-panel)", border:"1px solid var(--border-subtle)", color:"var(--text-dim)", borderRadius:4}}>
-            <option value={1}>últ. 24 h</option>
-            <option value={3}>últ. 3 días</option>
-            <option value={7}>últ. 7 días</option>
-            <option value={14}>últ. 14 días</option>
-            <option value={30}>últ. 30 días</option>
+            <option value={1}>{t("shadow.impact.days_1")}</option>
+            <option value={3}>{t("shadow.impact.days_3")}</option>
+            <option value={7}>{t("shadow.impact.days_7")}</option>
+            <option value={14}>{t("shadow.impact.days_14")}</option>
+            <option value={30}>{t("shadow.impact.days_30")}</option>
           </select>
-          {impact.variants?.length || 0} variantes analizadas
+          {t("shadow.impact_meta", {n: impact.variants?.length || 0})}
         </span>
       </div>
 
       {/* Cómo leer esto — tooltip permanente arriba del todo */}
       <div className="diag info" style={{marginBottom:16}}>
-        <div className="diag-label">CÓMO LEER</div>
-        <div className="diag-text" style={{lineHeight:1.55}}>
-          Para cada variante mido <b>qué habría pasado si hubiera estado activa en prod</b> durante la ventana seleccionada.
-          En variantes de <b>filtro de entrada</b> (ej: score-62) cruzo los candidatos bloqueados con los trades reales y sumo el PnL que habrías ahorrado o costado.
-          En variantes de <b>salida</b> (ej: roi-patient) sumo las diferencias sim vs real de cada cierre.
-          El <b>veredicto</b> abajo se basa en esos números automáticamente — <span style={{color:"var(--pos-hi)"}}>CANDIDATA</span> = lista para aplicar al preset,
-          {" "}<span style={{color:"var(--warn-hi)"}}>NEUTRAL/POSITIVA</span> = seguir midiendo,
-          {" "}<span style={{color:"var(--neg-hi)"}}>NEGATIVA</span> = no aplicar,
-          {" "}<span style={{color:"var(--text-muted)"}}>DATOS INSUFICIENTES</span> = muestra menor de 10-20 trades.
-        </div>
+        <div className="diag-label">{t("shadow.how_to_read")}</div>
+        <div className="diag-text" style={{lineHeight:1.55}}
+             dangerouslySetInnerHTML={{__html: t("shadow.how_to_read_body")}} />
       </div>
 
       {(!impact.variants || impact.variants.length === 0) ? (
         <div style={{color:"var(--text-muted)", fontSize:12, padding:8}}>
-          Aún no hay datos suficientes. Espera a que el bot procese algunas entradas durante la ventana seleccionada.
+          {t("shadow.impact_empty")}
         </div>
       ) : (
         <div style={{display:"flex", flexDirection:"column", gap:10}}>
@@ -4043,12 +4241,12 @@ function ShadowModeTab() {
               OBSERVER: "info",
             }[v.verdict] || "info";
             const verdictLabel = {
-              CANDIDATE_STRONG: "CANDIDATA A PRODUCCIÓN",
-              POSITIVE: "SEÑAL POSITIVA",
-              NEUTRAL: "EMPATE / NEUTRO",
-              NEGATIVE: "NEGATIVA — NO APLICAR",
-              INSUFFICIENT_DATA: "DATOS INSUFICIENTES",
-              OBSERVER: "VARIANTE OBSERVADORA",
+              CANDIDATE_STRONG: t("shadow.verdict.candidate_strong"),
+              POSITIVE: t("shadow.verdict.positive"),
+              NEUTRAL: t("shadow.verdict.neutral"),
+              NEGATIVE: t("shadow.verdict.negative"),
+              INSUFFICIENT_DATA: t("shadow.verdict.insufficient"),
+              OBSERVER: t("shadow.verdict.observer"),
             }[v.verdict] || v.verdict;
 
             const isExit = v.kind === "EXIT";
@@ -4069,7 +4267,7 @@ function ShadowModeTab() {
                     padding:"2px 8px", borderRadius:3,
                     background: v.kind === "EXIT" ? "rgba(167,139,250,0.14)" : v.kind === "SIZING" ? "rgba(251,191,36,0.14)" : "rgba(56,189,248,0.14)",
                     color: v.kind === "EXIT" ? "var(--accent-violet)" : v.kind === "SIZING" ? "var(--warn-hi)" : "var(--accent-hi)",
-                  }}>{v.kind === "EXIT" ? "SALIDA" : v.kind === "SIZING" ? "SIZING" : "FILTRO ENTRADA"}</span>
+                  }}>{v.kind === "EXIT" ? t("shadow.kind.exit") : v.kind === "SIZING" ? t("shadow.kind.sizing") : t("shadow.kind.filter")}</span>
                   <span style={{marginLeft:"auto", padding:"3px 10px", borderRadius:4, fontSize:10, fontWeight:700, letterSpacing:0.6, textTransform:"uppercase",
                     background: verdictCls === "ok" ? "rgba(16,185,129,0.14)" : verdictCls === "bad" ? "rgba(244,63,94,0.14)" : verdictCls === "warn" ? "rgba(245,158,11,0.14)" : "rgba(56,189,248,0.12)",
                     color: verdictCls === "ok" ? "var(--pos-hi)" : verdictCls === "bad" ? "var(--neg-hi)" : verdictCls === "warn" ? "var(--warn-hi)" : "var(--accent-hi)",
@@ -4083,77 +4281,138 @@ function ShadowModeTab() {
                 {isExit ? (
                   <div className="kpi-strip" style={{marginBottom:12, background:"var(--bg-base)", borderRadius:6, padding:"8px 0"}}>
                     <div>
-                      <div className="k">Comparables</div>
+                      <div className="k">{t("shadow.kpi.comparable")}</div>
                       <div className="v">{v.simTotal ?? 0}</div>
-                      <div className="sub">BOTH_EVALUATED</div>
+                      <div className="sub">{t("shadow.kpi.both_evaluated")}</div>
                     </div>
                     <div>
-                      <div className="k">Ganó vs prod</div>
+                      <div className="k">{t("shadow.kpi.won_vs_prod")}</div>
                       <div className="v pos">{v.simWinsVsProd ?? 0}</div>
-                      <div className="sub">{v.simTotal ? Math.round(100*(v.simWinsVsProd||0)/v.simTotal) : 0}% win rate</div>
+                      <div className="sub">{v.simTotal ? Math.round(100*(v.simWinsVsProd||0)/v.simTotal) : 0}{t("shadow.kpi.win_rate")}</div>
                     </div>
                     <div>
-                      <div className="k">Perdió vs prod</div>
+                      <div className="k">{t("shadow.kpi.lost_vs_prod")}</div>
                       <div className="v neg">{v.simLossesVsProd ?? 0}</div>
-                      <div className="sub">delta &lt; 0</div>
+                      <div className="sub">{t("shadow.kpi.delta_neg")}</div>
                     </div>
                     <div>
-                      <div className="k">Σ ΔPnL</div>
+                      <div className="k">{t("shadow.kpi.sum_delta")}</div>
                       <div className={"v " + ((v.sumDeltaUsd||0) > 0 ? "pos" : (v.sumDeltaUsd||0) < 0 ? "neg" : "")}>
                         {(v.sumDeltaUsd||0) >= 0 ? "+" : ""}${(v.sumDeltaUsd||0).toFixed(2)}
                       </div>
-                      <div className="sub">total $ ganado/perdido vs prod</div>
+                      <div className="sub">{t("shadow.kpi.total_delta_sub")}</div>
                     </div>
                     <div>
-                      <div className="k">Mejor · Peor</div>
+                      <div className="k">{t("shadow.kpi.best_worst")}</div>
                       <div className="v" style={{fontSize:13}}>
                         <span style={{color:"var(--pos-hi)"}}>+${(v.bestDeltaUsd||0).toFixed(2)}</span>
                         <span style={{color:"var(--text-soft)"}}> · </span>
                         <span style={{color:"var(--neg-hi)"}}>${(v.worstDeltaUsd||0).toFixed(2)}</span>
                       </div>
-                      <div className="sub">{v.simPending||0} pending · {v.simRealFirst||0} real first</div>
+                      <div className="sub">{t("shadow.kpi.pending_realfirst", {p: v.simPending||0, r: v.simRealFirst||0})}</div>
                     </div>
                   </div>
                 ) : (
                   <div className="kpi-strip" style={{marginBottom:12, background:"var(--bg-base)", borderRadius:6, padding:"8px 0"}}>
                     <div>
-                      <div className="k">Evaluados</div>
+                      <div className="k">{t("shadow.kpi.evaluated")}</div>
                       <div className="v">{v.evalTotal ?? 0}</div>
-                      <div className="sub">candidatos totales</div>
+                      <div className="sub">{t("shadow.kpi.total_candidates")}</div>
                     </div>
                     <div>
-                      <div className="k">Dejaría pasar</div>
+                      <div className="k">{t("shadow.kpi.would_fire")}</div>
                       <div className="v">{v.evalFired ?? 0}</div>
-                      <div className="sub">{v.evalTotal ? Math.round(100*(v.evalFired||0)/v.evalTotal) : 0}% del flujo</div>
+                      <div className="sub">{t("shadow.kpi.flow_pct", {p: v.evalTotal ? Math.round(100*(v.evalFired||0)/v.evalTotal) : 0})}</div>
                     </div>
                     <div>
-                      <div className="k">Habría bloqueado</div>
+                      <div className="k">{t("shadow.kpi.would_block")}</div>
                       <div className="v warn">{v.evalBlocked ?? 0}</div>
-                      <div className="sub">emparejados: {v.matched ?? 0}</div>
+                      <div className="sub">{t("shadow.kpi.matched", {n: v.matched ?? 0})}</div>
                     </div>
                     <div>
-                      <div className="k">Pérdidas evitadas</div>
+                      <div className="k">{t("shadow.kpi.losses_saved")}</div>
                       <div className="v pos">{v.lossesSaved ?? 0}</div>
-                      <div className="sub">habrías esquivado</div>
+                      <div className="sub">{t("shadow.kpi.losses_saved_sub")}</div>
                     </div>
                     <div>
-                      <div className="k">Ganadores perdidos</div>
+                      <div className="k">{t("shadow.kpi.wins_missed")}</div>
                       <div className="v neg">{v.winsMissed ?? 0}</div>
-                      <div className="sub">coste de oportunidad</div>
+                      <div className="sub">{t("shadow.kpi.wins_missed_sub")}</div>
                     </div>
                     <div>
-                      <div className="k">Σ ahorrado</div>
+                      <div className="k">{t("shadow.kpi.sum_saved")}</div>
                       <div className={"v " + ((v.sumSavedUsd||0) > 0 ? "pos" : (v.sumSavedUsd||0) < 0 ? "neg" : "")}>
                         {(v.sumSavedUsd||0) >= 0 ? "+" : ""}${(v.sumSavedUsd||0).toFixed(2)}
                       </div>
-                      <div className="sub">impacto neto en $</div>
+                      <div className="sub">{t("shadow.kpi.sum_saved_sub")}</div>
                     </div>
                   </div>
                 )}
 
-                {/* Verdict text in plain Spanish */}
+                {/* Per-mode breakdown — so SCALP/NORMAL/SWING verdicts do not get washed out in the aggregate */}
+                {v.byMode && (() => {
+                  const MODES = ["SCALP", "NORMAL", "SWING"];
+                  const rows = MODES
+                    .map(m => ({mode: m, data: v.byMode[m] || {}}))
+                    .filter(r => (isExit ? (r.data.simTotal || 0) > 0 : (r.data.matched || 0) > 0));
+                  if (rows.length === 0) return null;
+                  const chipCls = (vrd) => ({
+                    CANDIDATE_STRONG: {bg:"rgba(16,185,129,0.14)", fg:"var(--pos-hi)"},
+                    POSITIVE: {bg:"rgba(16,185,129,0.10)", fg:"var(--pos)"},
+                    NEUTRAL: {bg:"rgba(56,189,248,0.10)", fg:"var(--accent-hi)"},
+                    NEGATIVE: {bg:"rgba(244,63,94,0.14)", fg:"var(--neg-hi)"},
+                    INSUFFICIENT_DATA: {bg:"rgba(245,158,11,0.12)", fg:"var(--warn-hi)"},
+                    OBSERVER: {bg:"rgba(148,163,184,0.10)", fg:"var(--text-muted)"},
+                  }[vrd] || {bg:"rgba(148,163,184,0.10)", fg:"var(--text-muted)"});
+                  return (
+                    <div style={{marginBottom:12, background:"var(--bg-base)", borderRadius:6, padding:"10px 12px"}}>
+                      <div style={{fontSize:10, color:"var(--text-muted)", textTransform:"uppercase", letterSpacing:0.8, marginBottom:8, fontWeight:600}}>
+                        {t("shadow.kpi.by_mode")}
+                      </div>
+                      <table style={{width:"100%", fontSize:11, borderCollapse:"collapse"}}>
+                        <thead>
+                          <tr style={{color:"var(--text-soft)", fontSize:10}}>
+                            <th style={{textAlign:"left", padding:"3px 6px", fontWeight:500}}>{t("shadow.kpi.mode")}</th>
+                            <th style={{textAlign:"right", padding:"3px 6px", fontWeight:500}}>{isExit ? t("shadow.kpi.comparable") : t("shadow.kpi.matched_col")}</th>
+                            <th style={{textAlign:"right", padding:"3px 6px", fontWeight:500}}>{isExit ? t("shadow.kpi.won_col") : t("shadow.kpi.saved_col")}</th>
+                            <th style={{textAlign:"right", padding:"3px 6px", fontWeight:500}}>{isExit ? t("shadow.kpi.lost_col") : t("shadow.kpi.missed_col")}</th>
+                            <th style={{textAlign:"right", padding:"3px 6px", fontWeight:500}}>{isExit ? t("shadow.kpi.sum_delta_col") : t("shadow.kpi.sum_saved_col")}</th>
+                            <th style={{textAlign:"right", padding:"3px 6px", fontWeight:500}}>{t("shadow.kpi.verdict_col")}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rows.map(r => {
+                            const d = r.data;
+                            const sum = isExit ? (d.sumDeltaUsd || 0) : (d.sumSavedUsd || 0);
+                            const chip = chipCls(d.verdict);
+                            return (
+                              <tr key={r.mode} style={{borderTop:"1px solid var(--border-subtle)"}}>
+                                <td style={{padding:"5px 6px", color:"var(--text)", fontFamily:"var(--font-mono)", fontWeight:600}}>{r.mode}</td>
+                                <td style={{padding:"5px 6px", textAlign:"right", color:"var(--text-dim)"}}>{isExit ? (d.simTotal || 0) : (d.matched || 0)}</td>
+                                <td style={{padding:"5px 6px", textAlign:"right", color:"var(--pos)"}}>{isExit ? (d.simWinsVsProd || 0) : (d.lossesSaved || 0)}</td>
+                                <td style={{padding:"5px 6px", textAlign:"right", color:"var(--neg)"}}>{isExit ? (d.simLossesVsProd || 0) : (d.winsMissed || 0)}</td>
+                                <td style={{padding:"5px 6px", textAlign:"right", fontWeight:600,
+                                  color: sum > 0 ? "var(--pos-hi)" : sum < 0 ? "var(--neg-hi)" : "var(--text-muted)"}}>
+                                  {sum >= 0 ? "+" : ""}${sum.toFixed(2)}
+                                </td>
+                                <td style={{padding:"5px 6px", textAlign:"right"}}>
+                                  <span style={{padding:"2px 7px", borderRadius:3, fontSize:9, fontWeight:700, letterSpacing:0.6, textTransform:"uppercase",
+                                    background: chip.bg, color: chip.fg}}>
+                                    {d.verdict || "—"}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()}
+
+                {/* Verdict text */}
                 <div style={{fontSize:12, color:"var(--text-dim)", lineHeight:1.6, background:"var(--bg-base)", borderRadius:6, padding:"10px 14px", borderLeft:"2px solid " + (verdictCls === "ok" ? "var(--pos)" : verdictCls === "bad" ? "var(--neg)" : verdictCls === "warn" ? "var(--warn)" : "var(--info)")}}>
-                  <b style={{color:"var(--text-muted)", fontSize:10, textTransform:"uppercase", letterSpacing:0.8}}>Interpretación:</b>{" "}
+                  <b style={{color:"var(--text-muted)", fontSize:10, textTransform:"uppercase", letterSpacing:0.8}}>{t("shadow.interpretation")}:</b>{" "}
                   {v.verdictText}
                 </div>
               </div>
@@ -4164,23 +4423,23 @@ function ShadowModeTab() {
     </div>
 
     {/* ── Active variants ── */}
-    <h3 className="section-title">Variantes activas ({variants.length}) <Tip text="Cada variante evalua en paralelo cada candidato de entrada y guarda su decision en hl_shadow_evaluations. Cero impacto sobre prod." /></h3>
+    <h3 className="section-title">{t("shadow.active_title", {n: variants.length})} <Tip text={t("shadow.active_tip")} /></h3>
     <div className="card" style={{marginBottom:12}}>
       {variants.length === 0 ? (
-        <div style={{color:"#666", fontSize:11, padding:8}}>Sin variantes. Usa un template abajo o rellena el formulario.</div>
+        <div style={{color:"#666", fontSize:11, padding:8}}>{t("shadow.active_empty")}</div>
       ) : (
         <table style={{width:"100%", fontSize:11}}>
           <thead><tr style={{textAlign:"left", color:"#888", borderBottom:"1px solid #222"}}>
-            <th style={{padding:"6px 4px"}}>Nombre</th>
-            <th>Late risks</th>
-            <th>Labels</th>
-            <th>Sides</th>
-            <th>Modes</th>
-            <th>Coins</th>
-            <th>Min score</th>
-            <th>Colat override</th>
-            <th>Exhausted</th>
-            <th>Exit overrides</th>
+            <th style={{padding:"6px 4px"}}>{t("shadow.col.name")}</th>
+            <th>{t("shadow.col.late_risks")}</th>
+            <th>{t("shadow.col.labels")}</th>
+            <th>{t("shadow.col.sides")}</th>
+            <th>{t("shadow.col.modes")}</th>
+            <th>{t("shadow.col.coins")}</th>
+            <th>{t("shadow.col.min_score")}</th>
+            <th>{t("shadow.col.collat_override")}</th>
+            <th>{t("shadow.col.exhausted")}</th>
+            <th>{t("shadow.col.exit_overrides")}</th>
             <th></th>
           </tr></thead>
           <tbody>
@@ -4206,11 +4465,11 @@ function ShadowModeTab() {
                   <td style={{textAlign:"right", whiteSpace:"nowrap"}}>
                     <button onClick={() => editVariant(v)}
                       style={{padding:"3px 10px", fontSize:10, background:"#1a1a2e", border:"1px solid #444", borderRadius:4, color:"#3b82f6", cursor:"pointer", marginRight:6}}>
-                      Editar
+                      {t("shadow.edit")}
                     </button>
                     <button onClick={() => openDeleteModal(v.name)}
                       style={{padding:"3px 10px", fontSize:10, background:"#1a1a2e", border:"1px solid #444", borderRadius:4, color:"#ef4444", cursor:"pointer"}}>
-                      Quitar
+                      {t("shadow.remove")}
                     </button>
                   </td>
                 </tr>
@@ -4222,16 +4481,16 @@ function ShadowModeTab() {
     </div>
 
     {/* ── Templates ── */}
-    <h3 className="section-title">Templates rapidos <Tip text="Click en un template para pre-rellenar el formulario. Despues puedes ajustar los valores antes de guardar." /></h3>
+    <h3 className="section-title">{t("shadow.templates_title")} <Tip text={t("shadow.templates_tip")} /></h3>
     <div className="card" style={{marginBottom:12, padding:12}}>
       <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(220px, 1fr))", gap:8}}>
-        {SHADOW_TEMPLATES.map(t => (
-          <button key={t.id} type="button"
-            onClick={() => { setForm(t.apply(EMPTY_FORM())); setSubmitMsg(""); }}
-            title={t.desc}
+        {SHADOW_TEMPLATES.map(tpl => (
+          <button key={tpl.id} type="button"
+            onClick={() => { setForm(tpl.apply(EMPTY_FORM())); setSubmitMsg(""); }}
+            title={tpl.desc}
             style={{padding:"8px 10px", textAlign:"left", background:"#0a0a13", border:"1px solid #333", borderRadius:6, color:"#ccc", cursor:"pointer", fontSize:11}}>
-            <div style={{fontWeight:600, color:"#e0e0e8", marginBottom:2}}>{t.icon} {t.label}</div>
-            <div style={{fontSize:10, color:"#666", lineHeight:1.3}}>{t.desc}</div>
+            <div style={{fontWeight:600, color:"#e0e0e8", marginBottom:2}}>{tpl.icon} {tpl.label}</div>
+            <div style={{fontSize:10, color:"#666", lineHeight:1.3}}>{tpl.desc}</div>
           </button>
         ))}
       </div>
@@ -4239,8 +4498,8 @@ function ShadowModeTab() {
 
     {/* ── New variant form ── */}
     <h3 className="section-title" id="shadow-variant-form">
-      {editingName ? <>Editando variante <span style={{color:"#3b82f6"}}>"{editingName}"</span></> : "Nueva variante"}
-      <Tip text="Al menos UN filtro o un override debe estar activo para guardar. Cambiar el nombre al editar una variante renombra la variante y toda su historial asociada (evaluaciones + salidas simuladas)." />
+      {editingName ? <>{t("shadow.editing")} <span style={{color:"#3b82f6"}}>"{editingName}"</span></> : t("shadow.new_variant")}
+      <Tip text={t("shadow.new_tip")} />
     </h3>
     <div className="card" style={{marginBottom:12, padding:12, borderColor: editingName ? "#3b82f6" : undefined}}>
 
@@ -4352,17 +4611,17 @@ function ShadowModeTab() {
       <div style={{display:"flex", alignItems:"center", gap:12}}>
         <button onClick={submitVariant} disabled={!form.name.trim() || !hasAnyFilter()}
           style={{padding:"7px 18px", fontSize:12, background: (form.name.trim() && hasAnyFilter()) ? "#3b82f6" : "#222", border:"none", borderRadius:4, color:"white", cursor: (form.name.trim() && hasAnyFilter()) ? "pointer" : "not-allowed", fontWeight:600}}>
-          {editingName ? "Guardar cambios" : "Guardar variante"}
+          {editingName ? t("shadow.save_changes") : t("shadow.save")}
         </button>
         {editingName ? (
           <button type="button" onClick={cancelEdit}
             style={{padding:"7px 14px", fontSize:11, background:"#1a1a2e", border:"1px solid #333", borderRadius:4, color:"#888", cursor:"pointer"}}>
-            Cancelar edición
+            {t("shadow.cancel_edit")}
           </button>
         ) : (
           <button type="button" onClick={() => { setForm(EMPTY_FORM()); setSubmitMsg(""); }}
             style={{padding:"7px 14px", fontSize:11, background:"#1a1a2e", border:"1px solid #333", borderRadius:4, color:"#888", cursor:"pointer"}}>
-            Limpiar
+            {t("shadow.clear")}
           </button>
         )}
         {submitMsg && <span style={{fontSize:11, color: submitMsg.startsWith("✓") ? "#22c55e" : "#ef4444"}}>{submitMsg}</span>}
@@ -4370,7 +4629,7 @@ function ShadowModeTab() {
     </div>
 
     {/* ── Summary ── */}
-    <h3 className="section-title">Resumen agregado
+    <h3 className="section-title">{t("shadow.summary_title")}
       <select value={hours} onChange={e => setHours(Number(e.target.value))} style={{marginLeft:10, padding:"2px 6px", fontSize:10, background:"#0a0a13", border:"1px solid #333", color:"#ccc", borderRadius:3}}>
         <option value={1}>1h</option>
         <option value={6}>6h</option>
@@ -4378,12 +4637,12 @@ function ShadowModeTab() {
         <option value={72}>72h</option>
         <option value={168}>7d</option>
       </select>
-      <Tip text="Agregado por variante sobre las ultimas N horas. fireRate = % de candidatos que la variante habria disparado. Compara con el prod: si variante tiene fireRate bajo, es mas estricta; si es alto, es mas laxa." />
+      <Tip text={t("shadow.summary_tip")} />
     </h3>
     <div className="card" style={{marginBottom:12, padding:8}}>
-      <div style={{fontSize:10, color:"#666", marginBottom:6}}>Total evaluaciones en {summary.hours}h: <span style={{color:"#e0e0e8", fontWeight:600}}>{summary.totalEvaluations || 0}</span></div>
+      <div style={{fontSize:10, color:"#666", marginBottom:6}}>{t("shadow.summary_total", {h: summary.hours})} <span style={{color:"#e0e0e8", fontWeight:600}}>{summary.totalEvaluations || 0}</span></div>
       {(!summary.variants || summary.variants.length === 0) ? (
-        <div style={{color:"#666", fontSize:11, padding:8}}>Sin evaluaciones aun. Las variantes solo se ejecutan cuando el prod pasa los gates y esta a punto de entrar.</div>
+        <div style={{color:"#666", fontSize:11, padding:8}}>{t("shadow.summary_empty")}</div>
       ) : (
         <table style={{width:"100%", fontSize:11}}>
           <thead><tr style={{textAlign:"left", color:"#888", borderBottom:"1px solid #222"}}>
@@ -4413,16 +4672,16 @@ function ShadowModeTab() {
     </div>
 
     {/* ── Recent evaluations ── */}
-    <h3 className="section-title">Ultimas decisiones
+    <h3 className="section-title">{t("shadow.decisions_title")}
       <select value={filterVariant} onChange={e => setFilterVariant(e.target.value)} style={{marginLeft:10, padding:"2px 6px", fontSize:10, background:"#0a0a13", border:"1px solid #333", color:"#ccc", borderRadius:3}}>
-        <option value="">Todas las variantes</option>
+        <option value="">{t("shadow.all_variants")}</option>
         {variants.map(v => <option key={v.name} value={v.name}>{v.name}</option>)}
       </select>
-      <Tip text="Cada fila = una decision de una variante sobre un candidato de prod. prodFired siempre true (solo evaluamos cuando prod entra). Compara would-fire de la variante vs prod para detectar divergencia." />
+      <Tip text={t("shadow.decisions_tip")} />
     </h3>
     <div className="card" style={{padding:8}}>
       {(!evaluations || evaluations.length === 0) ? (
-        <div style={{color:"#666", fontSize:11, padding:8}}>{loading ? "Cargando..." : "Sin decisiones. Espera a que el bot dispare una entrada con alguna variante activa."}</div>
+        <div style={{color:"#666", fontSize:11, padding:8}}>{loading ? t("common.loading") : t("shadow.decisions_empty")}</div>
       ) : (
         <div style={{maxHeight:500, overflowY:"auto"}}>
           <table style={{width:"100%", fontSize:10}}>
@@ -4460,7 +4719,7 @@ function ShadowModeTab() {
     </div>
 
     {/* ── Shadow Exits — resumen por variante ── */}
-    <h3 className="section-title">Comparativa de salidas
+    <h3 className="section-title">{t("shadow.exits_title")}
       <select value={exitsHours} onChange={e => setExitsHours(Number(e.target.value))} style={{marginLeft:10, padding:"2px 6px", fontSize:10, background:"#0a0a13", border:"1px solid #333", color:"#ccc", borderRadius:3}}>
         <option value={24}>24h</option>
         <option value={72}>72h</option>
@@ -4468,12 +4727,12 @@ function ShadowModeTab() {
         <option value={336}>14d</option>
         <option value={720}>30d</option>
       </select>
-      <Tip text="Cada variante con overrides de salida (ROI/SL/TP/maxHold) genera una fila 'hipotetica' por cada entrada real. Cuando ambos lados (variante y real) estan evaluados se calcula delta. winRate = %% de trades donde la variante hubiera cerrado mejor que prod." />
+      <Tip text={t("shadow.exits_tip")} />
     </h3>
     <div className="card" style={{marginBottom:12, padding:8}}>
-      <div style={{fontSize:10, color:"#666", marginBottom:6}}>Total simulaciones en {exitsSummary.hours}h: <span style={{color:"#e0e0e8", fontWeight:600}}>{exitsSummary.totalExits || 0}</span></div>
+      <div style={{fontSize:10, color:"#666", marginBottom:6}}>{t("shadow.exits_total", {h: exitsSummary.hours})} <span style={{color:"#e0e0e8", fontWeight:600}}>{exitsSummary.totalExits || 0}</span></div>
       {(!exitsSummary.variants || exitsSummary.variants.length === 0) ? (
-        <div style={{color:"#666", fontSize:11, padding:8}}>Sin simulaciones aun. Crea una variante con overrides de salida (ROI paciente, TP alternativo, etc.) y espera la proxima entrada del bot.</div>
+        <div style={{color:"#666", fontSize:11, padding:8}}>{t("shadow.exits_empty")}</div>
       ) : (
         <table style={{width:"100%", fontSize:11}}>
           <thead><tr style={{textAlign:"left", color:"#888", borderBottom:"1px solid #222"}}>
@@ -4487,35 +4746,62 @@ function ShadowModeTab() {
             <th>Σ ΔPnL ($)</th>
           </tr></thead>
           <tbody>
-            {exitsSummary.variants.map(s => (
-              <tr key={s.variant} style={{borderBottom:"1px solid #181828"}}>
-                <td style={{padding:"6px 4px", fontWeight:600, color:"#e0e0e8"}}>{s.variant}</td>
-                <td style={{color:"#aaa"}}>{s.total}</td>
-                <td style={{color:"#888"}}>{s.pending}</td>
-                <td style={{color:"#22d3ee"}}>{s.variantFirst}</td>
-                <td style={{color:"#f59e0b"}}>{s.realFirst}</td>
-                <td style={{color:"#ccc"}}>{s.bothEvaluated}</td>
-                <td style={{color: s.winRate > 50 ? "#22c55e" : s.winRate > 0 ? "#f59e0b" : "#888", fontWeight:600}}>
-                  {s.comparable > 0 ? s.winRate + "%" : "—"}
-                  {s.comparable > 0 && <span style={{color:"#555", marginLeft:4, fontSize:9}}>({s.variantWins}/{s.comparable})</span>}
-                </td>
-                <td style={{color: s.sumDeltaPnlUsd > 0 ? "#22c55e" : s.sumDeltaPnlUsd < 0 ? "#ef4444" : "#888", fontWeight:600}}>
-                  ${s.sumDeltaPnlUsd}
-                </td>
-              </tr>
-            ))}
+            {exitsSummary.variants.map(s => {
+              const MODES = ["SCALP", "NORMAL", "SWING"];
+              const byMode = s.byMode || {};
+              return (
+                <React.Fragment key={s.variant}>
+                  <tr style={{borderBottom:"1px dotted #181828"}}>
+                    <td style={{padding:"6px 4px", fontWeight:600, color:"#e0e0e8"}}>{s.variant}</td>
+                    <td style={{color:"#aaa"}}>{s.total}</td>
+                    <td style={{color:"#888"}}>{s.pending}</td>
+                    <td style={{color:"#22d3ee"}}>{s.variantFirst}</td>
+                    <td style={{color:"#f59e0b"}}>{s.realFirst}</td>
+                    <td style={{color:"#ccc"}}>{s.bothEvaluated}</td>
+                    <td style={{color: s.winRate > 50 ? "#22c55e" : s.winRate > 0 ? "#f59e0b" : "#888", fontWeight:600}}>
+                      {s.comparable > 0 ? s.winRate + "%" : "—"}
+                      {s.comparable > 0 && <span style={{color:"#555", marginLeft:4, fontSize:9}}>({s.variantWins}/{s.comparable})</span>}
+                    </td>
+                    <td style={{color: s.sumDeltaPnlUsd > 0 ? "#22c55e" : s.sumDeltaPnlUsd < 0 ? "#ef4444" : "#888", fontWeight:600}}>
+                      ${s.sumDeltaPnlUsd}
+                    </td>
+                  </tr>
+                  {MODES.map(m => {
+                    const ms = byMode[m] || {};
+                    if (!ms.total) return null;
+                    return (
+                      <tr key={s.variant + ":" + m} style={{borderBottom:"1px solid #181828", background:"#0b0b13"}}>
+                        <td style={{padding:"3px 4px 3px 18px", color:"#6b7280", fontSize:10, fontFamily:"var(--font-mono)"}}>↳ {m}</td>
+                        <td style={{color:"#6b7280", fontSize:10}}>{ms.total}</td>
+                        <td style={{color:"#4b5563", fontSize:10}}>{ms.pending}</td>
+                        <td style={{color:"#22d3ee", fontSize:10, opacity:0.7}}>{ms.variantFirst}</td>
+                        <td style={{color:"#f59e0b", fontSize:10, opacity:0.7}}>{ms.realFirst}</td>
+                        <td style={{color:"#6b7280", fontSize:10}}>{ms.bothEvaluated}</td>
+                        <td style={{color: ms.winRate > 50 ? "#22c55e" : ms.winRate > 0 ? "#f59e0b" : "#6b7280", fontSize:10, opacity:0.8}}>
+                          {ms.comparable > 0 ? ms.winRate + "%" : "—"}
+                          {ms.comparable > 0 && <span style={{color:"#374151", marginLeft:3, fontSize:9}}>({ms.variantWins}/{ms.comparable})</span>}
+                        </td>
+                        <td style={{color: ms.sumDeltaPnlUsd > 0 ? "#22c55e" : ms.sumDeltaPnlUsd < 0 ? "#ef4444" : "#6b7280", fontSize:10, opacity:0.85}}>
+                          ${ms.sumDeltaPnlUsd}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </React.Fragment>
+              );
+            })}
           </tbody>
         </table>
       )}
     </div>
 
     {/* ── Shadow Exits — filas recientes ── */}
-    <h3 className="section-title">Salidas hipoteticas recientes
-      <Tip text="PENDING = variante aun no ha cerrado. VARIANT_FIRST = variante cerro antes que prod (sim lleno). REAL_FIRST = prod cerro antes (Fase 3 rellenara sim con precio post-cierre). BOTH_EVALUATED = hay delta comparable." />
+    <h3 className="section-title">{t("shadow.recent_exits_title")}
+      <Tip text={t("shadow.recent_exits_tip")} />
     </h3>
     <div className="card" style={{padding:8}}>
       {(!exits || exits.length === 0) ? (
-        <div style={{color:"#666", fontSize:11, padding:8}}>{loading ? "Cargando..." : "Sin filas. Las variantes con overrides de salida se materializan al entrar el bot en una posicion."}</div>
+        <div style={{color:"#666", fontSize:11, padding:8}}>{loading ? t("common.loading") : t("shadow.recent_exits_empty")}</div>
       ) : (
         <div style={{maxHeight:500, overflowY:"auto"}}>
           <table style={{width:"100%", fontSize:10}}>
@@ -4595,30 +4881,27 @@ function ShadowModeTab() {
     {/* ── Delete confirmation modal ────────────────────────────────── */}
     <Modal
       open={!!deleteModal}
-      title="Borrar variante"
+      title={t("shadow.delete_title")}
       busy={deleteBusy}
       confirmStyle="danger"
-      confirmLabel="Borrar todo"
+      confirmLabel={t("shadow.delete_all")}
+      cancelLabel={t("shadow.cancel")}
       onCancel={() => deleteBusy ? null : setDeleteModal(null)}
       onConfirm={confirmDelete}>
       {deleteModal && (
         <>
           <p style={{marginBottom:10}}>
-            Vas a borrar la variante <b style={{color:"#e0e0e8"}}>"{deleteModal.name}"</b> y
-            todos sus datos asociados:
+            {t("shadow.delete_body_p1")} <b style={{color:"#e0e0e8"}}>"{deleteModal.name}"</b> {t("shadow.delete_body_p2")}
           </p>
           {deleteModal.loading ? (
-            <p style={{color:"#666", fontStyle:"italic"}}>Contando filas a limpiar…</p>
+            <p style={{color:"#666", fontStyle:"italic"}}>{t("shadow.delete_counting")}</p>
           ) : (
             <ul style={{paddingLeft:20, marginBottom:10, color:"#ccc"}}>
-              <li><b style={{color:"#f59e0b"}}>{deleteModal.evaluations ?? "?"}</b> evaluaciones de entrada (<code>hl_shadow_evaluations</code>)</li>
-              <li><b style={{color:"#f59e0b"}}>{deleteModal.exits ?? "?"}</b> salidas simuladas (<code>hl_shadow_exits</code>)</li>
+              <li><b style={{color:"#f59e0b"}}>{deleteModal.evaluations ?? "?"}</b> {t("shadow.delete_evaluations")} (<code>hl_shadow_evaluations</code>)</li>
+              <li><b style={{color:"#f59e0b"}}>{deleteModal.exits ?? "?"}</b> {t("shadow.delete_exits")} (<code>hl_shadow_exits</code>)</li>
             </ul>
           )}
-          <p style={{color:"#f59e0b", fontSize:11}}>
-            ⚠ Esta acción no se puede deshacer. Si solo quieres cambiar nombre o valores, usa <b>Editar</b>
-            — el historial se conserva.
-          </p>
+          <p style={{color:"#f59e0b", fontSize:11}} dangerouslySetInnerHTML={{__html: t("shadow.delete_warning")}} />
         </>
       )}
     </Modal>
@@ -5884,6 +6167,7 @@ const HELP_CONTENT = {
 };
 
 function HelpTab() {
+  const { t, lang } = useI18n();
   const [sectionId, setSectionId] = useState("intro");
   const goTo = (id) => {
     if (HELP_CONTENT[id]) {
@@ -5893,35 +6177,35 @@ function HelpTab() {
   };
 
   const nav = [
-    { group: "Empezar", items: [
-      ["intro", "🚀", "Visión general"],
-      ["arquitectura", "🏛️", "Arquitectura"],
-      ["flujo", "🌊", "Flujo de datos"],
-      ["primeros-pasos", "🧭", "Primeros pasos"],
+    { group: t("help.group_start"), items: [
+      ["intro", "🚀", t("help.intro")],
+      ["arquitectura", "🏛️", t("help.architecture")],
+      ["flujo", "🌊", t("help.flow")],
+      ["primeros-pasos", "🧭", t("help.first_steps")],
     ]},
-    { group: "Operations", items: [
-      ["conclusions", "◆", "Conclusiones"],
-      ["botlive", "▶", "Bot Live"],
-      ["trades", "📈", "Trades"],
-      ["shadow", "◐", "Shadow Mode"],
-      ["regimes", "🌡", "Regímenes"],
-      ["cambios", "✎", "Cambios"],
-      ["daily", "📋", "Daily Report"],
-      ["system", "⚙", "Sistema"],
+    { group: t("help.group_operations"), items: [
+      ["conclusions", "◆", t("nav.conclusions")],
+      ["botlive", "▶", t("nav.botlive")],
+      ["trades", "📈", t("nav.trades")],
+      ["shadow", "◐", t("nav.shadow")],
+      ["regimes", "🌡", t("nav.regimes")],
+      ["cambios", "✎", t("nav.cambios")],
+      ["daily", "📋", t("nav.daily")],
+      ["system", "⚙", t("nav.system")],
     ]},
-    { group: "Research", items: [
-      ["lab", "🔬", "Research Lab"],
-      ["validation", "✓", "Validation"],
-      ["reports", "📊", "Reports"],
-      ["features", "◎", "Features"],
+    { group: t("help.group_research"), items: [
+      ["lab", "🔬", t("nav.lab")],
+      ["validation", "✓", t("nav.validation")],
+      ["reports", "📊", t("nav.research")],
+      ["features", "◎", t("nav.features")],
     ]},
-    { group: "Governance", items: [
-      ["audit", "🛡", "Audit"],
-      ["contract", "📄", "Contrato"],
+    { group: t("help.group_governance"), items: [
+      ["audit", "🛡", t("nav.audit")],
+      ["contract", "📄", t("nav.contract")],
     ]},
-    { group: "Extras", items: [
-      ["glosario", "📚", "Glosario"],
-      ["faq", "❔", "FAQ"],
+    { group: t("help.group_extras"), items: [
+      ["glosario", "📚", t("help.glossary")],
+      ["faq", "❔", t("help.faq")],
     ]},
   ];
 
@@ -5930,9 +6214,15 @@ function HelpTab() {
   return (
     <>
       <div className="page-title">
-        ❓ Ayuda
-        <div className="page-sub">Guía completa de la plataforma — orientada a trader</div>
+        ❓ {t("help.title")}
+        <div className="page-sub">{t("help.subtitle")}</div>
       </div>
+
+      {lang === "en" && (
+        <div className="card" style={{marginBottom:12, padding:"10px 14px", fontSize:11, color:"#eab308", borderColor:"rgba(234,179,8,0.25)"}}>
+          {t("help.body_notice")}
+        </div>
+      )}
 
       <div className="help-layout">
         <aside className="help-sidenav">
@@ -5998,6 +6288,7 @@ function useAuthFetch(url, interval = 5000) {
 
 // ── Login Page ──
 function LoginPage({ onLogin }) {
+  const { t } = useI18n();
   const [user, setUser] = useState("");
   const [pass, setPass] = useState("");
   const [err, setErr] = useState("");
@@ -6011,11 +6302,11 @@ function LoginPage({ onLogin }) {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username: user, password: pass }),
       });
-      if (!r.ok) { setErr("Usuario o contrasena incorrectos"); return; }
+      if (!r.ok) { setErr(t("login.error_invalid")); return; }
       const data = await r.json();
       setTokenLS(data.token);
       onLogin(data.username);
-    } catch { setErr("Error de conexion"); } finally { setLoading(false); }
+    } catch { setErr(t("login.error_network")); } finally { setLoading(false); }
   };
 
   return (
@@ -6023,17 +6314,22 @@ function LoginPage({ onLogin }) {
       {/* Third concentric reactor ring — CSS handles the other two + pulse */}
       <div className="login-core" aria-hidden="true"></div>
 
+      {/* Language toggle available before login too */}
+      <div style={{position:"absolute", top:16, right:16, zIndex:2}}>
+        <LangToggle />
+      </div>
+
       <form className="login-box" onSubmit={submit}>
         <div className="brand">
           <div className="brand-logo">AP</div>
           <div style={{textAlign:"center"}}>
-            <h1>Alchimia Platform</h1>
-            <div className="sub">AI Trading Command Center</div>
+            <h1>{t("login.brand_title")}</h1>
+            <div className="sub">{t("login.brand_sub")}</div>
           </div>
         </div>
-        <input type="text" placeholder="Usuario" value={user} onChange={e => setUser(e.target.value)} autoFocus />
-        <input type="password" placeholder="Contraseña" value={pass} onChange={e => setPass(e.target.value)} />
-        <button type="submit" disabled={loading || !user || !pass}>{loading ? "Entrando…" : "Entrar"}</button>
+        <input type="text" placeholder={t("login.user_placeholder")} value={user} onChange={e => setUser(e.target.value)} autoFocus />
+        <input type="password" placeholder={t("login.pass_placeholder")} value={pass} onChange={e => setPass(e.target.value)} />
+        <button type="submit" disabled={loading || !user || !pass}>{loading ? t("login.submit_loading") : t("login.submit")}</button>
         {err && <div className="err">{err}</div>}
       </form>
     </div>
@@ -6042,6 +6338,7 @@ function LoginPage({ onLogin }) {
 
 // ── Main App ──
 function App() {
+  const { t, lang } = useI18n();
   const [authed, setAuthed] = useState(!!getToken());
   const [username, setUsername] = useState("");
   const [tab, setTab] = useState("conclusions");
@@ -6061,7 +6358,7 @@ function App() {
           if (r.status === 401) { clearToken(); setAuthed(false); }
           return null;
         })
-        .then(d => { if (d) { setAuthed(true); setUsername(d.username); } })
+        .then(d => { if (d) { setAuthed(true); if (d.username) setUsername(d.username); } })
         .catch(() => {}); // Network error — don't clear token
     };
     checkSession();
@@ -6074,27 +6371,27 @@ function App() {
   const logout = () => { clearToken(); setAuthed(false); };
 
   const nav = [
-    { id: "conclusions", label: "Conclusiones", icon: "◆", gold: true },
-    { group: "Operations", color: "#3b82f6", items: [
-      { id: "botlive", label: "Bot Live", icon: "▶" },
-      { id: "trades", label: "Trades", icon: "📈" },
-      { id: "shadow", label: "Shadow Mode", icon: "◐" },
-      { id: "regimes", label: "Regimenes", icon: "🌡" },
-      { id: "cambios", label: "Cambios", icon: "✎" },
-      { id: "daily", label: "Daily Report", icon: "📋" },
-      { id: "system", label: "Sistema", icon: "⚙" },
+    { id: "conclusions", label: t("nav.conclusions"), icon: "◆", gold: true },
+    { group: t("nav.group_operations"), color: "#3b82f6", items: [
+      { id: "botlive", label: t("nav.botlive"), icon: "▶" },
+      { id: "trades", label: t("nav.trades"), icon: "📈" },
+      { id: "shadow", label: t("nav.shadow"), icon: "◐" },
+      { id: "regimes", label: t("nav.regimes"), icon: "🌡" },
+      { id: "cambios", label: t("nav.cambios"), icon: "✎" },
+      { id: "daily", label: t("nav.daily"), icon: "📋" },
+      { id: "system", label: t("nav.system"), icon: "⚙" },
     ]},
-    { group: "Research", color: "#a855f7", items: [
-      { id: "lab", label: "Research Lab", icon: "🔬" },
-      { id: "validation", label: "Validation", icon: "✓" },
-      { id: "research", label: "Reports", icon: "📊" },
-      { id: "features", label: "Features", icon: "◎" },
+    { group: t("nav.group_research"), color: "#a855f7", items: [
+      { id: "lab", label: t("nav.lab"), icon: "🔬" },
+      { id: "validation", label: t("nav.validation"), icon: "✓" },
+      { id: "research", label: t("nav.research"), icon: "📊" },
+      { id: "features", label: t("nav.features"), icon: "◎" },
     ]},
-    { group: "Governance", color: "#22c55e", items: [
-      { id: "audit", label: "Audit", icon: "🛡" },
-      { id: "contract", label: "Contrato", icon: "📄" },
+    { group: t("nav.group_governance"), color: "#22c55e", items: [
+      { id: "audit", label: t("nav.audit"), icon: "🛡" },
+      { id: "contract", label: t("nav.contract"), icon: "📄" },
     ]},
-    { id: "help", label: "Ayuda", icon: "?" },
+    { id: "help", label: t("nav.help"), icon: "?" },
   ];
 
   return (
@@ -6106,8 +6403,8 @@ function App() {
         <div className="sidebar-header">
           <div className="logo">AP</div>
           <div>
-            <h1>Alchimia</h1>
-            <div className="sub">Quant Platform</div>
+            <h1>{t("sidebar.brand_title")}</h1>
+            <div className="sub">{t("sidebar.brand_sub")}</div>
           </div>
         </div>
 
@@ -6140,14 +6437,19 @@ function App() {
 
       {/* Main content */}
       <div className="main-content">
-        <div className="topbar" style={{justifyContent:"space-between"}}>
-          <button className="mobile-menu-btn" onClick={() => setMobileOpen(!mobileOpen)}>☰</button>
-          <div className="topbar-user">
-            <span className="status-pill" title="Platform online"><span className="dot"></span>ONLINE</span>
-            <span style={{color:"var(--text-soft)"}}>{new Date().toLocaleDateString("es-ES", {weekday:"short", day:"numeric", month:"short"})}</span>
-            <div className="avatar">{(username || "U")[0].toUpperCase()}</div>
-            <span style={{color:"var(--text-dim)"}}>{username || "User"}</span>
-            <button className="logout-btn" onClick={logout}>Salir</button>
+        <div className="topbar" style={{justifyContent:"space-between", alignItems:"center"}}>
+          <div style={{display:"flex", alignItems:"center", gap:10}}>
+            <button className="mobile-menu-btn" onClick={() => setMobileOpen(!mobileOpen)}>☰</button>
+            <span className="status-pill" title={t("topbar.online_title")}><span className="dot"></span>{t("topbar.online")}</span>
+            <span style={{color:"var(--text-soft)"}}>{new Date().toLocaleDateString(lang === "en" ? "en-US" : "es-ES", {weekday:"short", day:"numeric", month:"short"})}</span>
+          </div>
+          <div className="topbar-user" style={{marginLeft:"auto", display:"flex", alignItems:"center", gap:10}}>
+            <div style={{display:"flex", alignItems:"center", gap:8}}>
+              <div className="avatar">{(username || t("topbar.default_user"))[0].toUpperCase()}</div>
+              <span style={{color:"var(--text-dim)"}}>{username || t("topbar.default_user")}</span>
+            </div>
+            <LangToggle />
+            <button className="logout-btn" onClick={logout}>{t("topbar.logout")}</button>
           </div>
         </div>
         <div className="content-area">
@@ -6172,7 +6474,9 @@ function App() {
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+ReactDOM.createRoot(document.getElementById("root")).render(
+  <I18nProvider><App /></I18nProvider>
+);
 </script>
 </body>
 </html>

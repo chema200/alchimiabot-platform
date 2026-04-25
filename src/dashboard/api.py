@@ -5,7 +5,9 @@ metrics, and alerts via REST API.
 """
 
 import os
+import threading
 import time
+from collections import deque
 from pathlib import Path
 
 import jwt as pyjwt
@@ -16,14 +18,43 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from typing import Any
 
+# Sliding-window login rate limit: N attempts per window-seconds per client IP.
+_LOGIN_RATE_MAX = 10
+_LOGIN_RATE_WINDOW = 60.0
+_login_attempts: dict[str, deque[float]] = {}
+_login_attempts_lock = threading.Lock()
+
+
+def _client_ip(request: Request) -> str:
+    cf = request.headers.get("cf-connecting-ip")
+    if cf:
+        return cf.strip()
+    fwd = request.headers.get("x-forwarded-for")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _login_rate_ok(request: Request) -> bool:
+    ip = _client_ip(request)
+    now = time.monotonic()
+    cutoff = now - _LOGIN_RATE_WINDOW
+    with _login_attempts_lock:
+        dq = _login_attempts.setdefault(ip, deque())
+        while dq and dq[0] < cutoff:
+            dq.popleft()
+        if len(dq) >= _LOGIN_RATE_MAX:
+            return False
+        dq.append(now)
+        return True
+
 # ── JWT Auth: same secret as the bot, validates the bot's tokens ──
 _JWT_SECRET = os.getenv("JWT_SECRET", "")
 _BOT_API_URL = os.getenv("BOT_API_URL", "http://localhost:8180")
 
 
-def _extract_user_id(request: Request) -> int | None:
-    """Extract userId from JWT in Authorization header or cookie.
-    Returns None if no valid token found."""
+def _decode_jwt(request: Request) -> dict | None:
+    """Return the decoded JWT payload, or None if no valid token."""
     auth = request.headers.get("Authorization", "")
     token = request.cookies.get("platform_token", "")
     if auth.startswith("Bearer "):
@@ -34,13 +65,32 @@ def _extract_user_id(request: Request) -> int | None:
         secret = _JWT_SECRET
         if not secret:
             return None
-        # Bot uses Keys.hmacShaKeyFor(secret.getBytes(UTF-8)) — raw bytes, not hex
-        # Key length determines algorithm: >=64 bytes = HS512, >=48 = HS384, >=32 = HS256
         key_bytes = secret.encode("utf-8")
-        payload = pyjwt.decode(token, key_bytes, algorithms=["HS256", "HS384", "HS512"])
-        return int(payload.get("uid", 0)) or None
+        # HMAC variants only — the bot picks HS256/HS384/HS512 automatically
+        # based on JWT_SECRET length, so we accept all three. We never accept
+        # `none` or RSA/ECDSA variants (different key type), so the classic
+        # "alg=none" / "alg=HS256 signed with RSA public key" confusions
+        # don't apply here.
+        return pyjwt.decode(token, key_bytes, algorithms=["HS256", "HS384", "HS512"])
     except Exception:
         return None
+
+
+def _extract_user_id(request: Request) -> int | None:
+    """Extract userId from JWT in Authorization header or cookie.
+    Returns None if no valid token found."""
+    payload = _decode_jwt(request)
+    if not payload:
+        return None
+    return int(payload.get("uid", 0)) or None
+
+
+def _extract_username(request: Request) -> str | None:
+    """Extract username from JWT (bot signs it into the 'sub' claim)."""
+    payload = _decode_jwt(request)
+    if not payload:
+        return None
+    return payload.get("sub") or None
 
 
 def _require_user_id(request: Request) -> int:
@@ -79,6 +129,12 @@ def create_app(
 
     # Bot receiver API key (shared secret between bot and platform)
     _BOT_API_KEY = os.getenv("BOT_API_KEY", "")
+    if not _BOT_API_KEY:
+        import logging
+        logging.getLogger(__name__).error(
+            "BOT_API_KEY is not configured — /api/bot/* will reject unauthenticated "
+            "bot traffic. Set BOT_API_KEY in the environment to allow the bot to push data."
+        )
 
     # Auth middleware — protect all /api/ endpoints
     @app.middleware("http")
@@ -96,8 +152,6 @@ def create_app(
             if uid is not None:
                 request.state.user_id = uid
                 return await call_next(request)  # dashboard frontend with valid JWT
-            if not _BOT_API_KEY:
-                return await call_next(request)  # no key configured, allow all
             return JSONResponse(status_code=403, content={"error": "Invalid bot API key"})
 
         # Dashboard endpoints: validate JWT
@@ -109,7 +163,9 @@ def create_app(
 
     # Login endpoint — proxies to bot API for credential validation
     @app.post("/api/platform/login")
-    async def platform_login(body: dict):
+    async def platform_login(body: dict, request: Request):
+        if not _login_rate_ok(request):
+            raise HTTPException(429, "Too many attempts, try again later")
         username = body.get("username", "")
         password = body.get("password", "")
         try:
@@ -126,7 +182,14 @@ def create_app(
                 raise HTTPException(401, "Invalid credentials")
             # Return the bot's JWT — platform validates it with the same secret
             response = JSONResponse({"token": token, "username": username})
-            response.set_cookie("platform_token", token, max_age=3600, httponly=False, samesite="lax")
+            response.set_cookie(
+                "platform_token",
+                token,
+                max_age=3600,
+                httponly=True,
+                secure=True,
+                samesite="lax",
+            )
             return response
         except httpx.RequestError:
             raise HTTPException(502, "Bot API unreachable")
@@ -136,7 +199,7 @@ def create_app(
         uid = _extract_user_id(request)
         if uid is None:
             raise HTTPException(401, "Unauthorized")
-        return {"user_id": uid, "username": "user"}
+        return {"user_id": uid, "username": _extract_username(request) or ""}
 
     @app.get("/api/status")
     def status() -> dict[str, Any]:
@@ -351,36 +414,45 @@ def create_app(
         _counterfactual_analyzer = CounterfactualAnalyzer()
         _decision_engine = DecisionEngine()
 
+        # Optional `?mode=SCALP|NORMAL|SWING` filter: when present the
+        # aggregates below are restricted to trades taken in that preset,
+        # which is the only honest way to compare SCALP/NORMAL/SWING
+        # performance (their SL/TP/timeouts are not comparable directly).
+
         @app.get("/api/quant/dataset")
-        async def quant_dataset(request: Request, date_from: str | None = None) -> dict:
-            data = await _enriched_builder.build_with_signals(date_from=date_from, user_id=_uid(request))
+        async def quant_dataset(request: Request, date_from: str | None = None,
+                                mode: str | None = None) -> dict:
+            data = await _enriched_builder.build_with_signals(date_from=date_from, mode=mode, user_id=_uid(request))
             return {"trades": len(data["trades"]), "signals": data["signals"]}
 
         @app.get("/api/quant/metrics")
-        async def quant_metrics(request: Request, date_from: str | None = None) -> dict:
-            trades = await _enriched_builder.build(date_from=date_from, user_id=_uid(request))
+        async def quant_metrics(request: Request, date_from: str | None = None,
+                                mode: str | None = None) -> dict:
+            trades = await _enriched_builder.build(date_from=date_from, mode=mode, user_id=_uid(request))
             return _metrics_engine.compute(trades)
 
         @app.post("/api/quant/experiment")
-        async def quant_experiment(config: dict, request: Request) -> dict:
-            trades = await _enriched_builder.build(user_id=_uid(request))
+        async def quant_experiment(config: dict, request: Request, mode: str | None = None) -> dict:
+            trades = await _enriched_builder.build(mode=mode, user_id=_uid(request))
             exp_config = ExperimentConfig(**config)
             result = _experiment_engine.run(trades, exp_config)
             return result.to_dict()
 
         @app.get("/api/quant/analysis")
-        async def quant_analysis(request: Request, date_from: str | None = None) -> dict:
-            data = await _enriched_builder.build_with_signals(date_from=date_from, user_id=_uid(request))
+        async def quant_analysis(request: Request, date_from: str | None = None,
+                                 mode: str | None = None) -> dict:
+            data = await _enriched_builder.build_with_signals(date_from=date_from, mode=mode, user_id=_uid(request))
             return _analysis_engine.analyze(data["trades"], data["signals"])
 
         @app.get("/api/quant/feature-importance")
-        async def quant_feature_importance(request: Request) -> dict:
-            trades = await _enriched_builder.build(user_id=_uid(request))
+        async def quant_feature_importance(request: Request, mode: str | None = None) -> dict:
+            trades = await _enriched_builder.build(mode=mode, user_id=_uid(request))
             return _feature_analyzer.analyze(trades)
 
         @app.get("/api/quant/decisions")
-        async def quant_decisions(request: Request, date_from: str | None = None) -> list[dict]:
-            data = await _enriched_builder.build_with_signals(date_from=date_from, user_id=_uid(request))
+        async def quant_decisions(request: Request, date_from: str | None = None,
+                                  mode: str | None = None) -> list[dict]:
+            data = await _enriched_builder.build_with_signals(date_from=date_from, mode=mode, user_id=_uid(request))
             trades = data["trades"]
             metrics = _metrics_engine.compute(trades)
             analysis = _analysis_engine.analyze(trades, data["signals"])
@@ -388,9 +460,10 @@ def create_app(
             return [d.to_dict() for d in decisions]
 
         @app.get("/api/quant/full")
-        async def quant_full(request: Request, date_from: str | None = None) -> dict:
+        async def quant_full(request: Request, date_from: str | None = None,
+                             mode: str | None = None) -> dict:
             """Complete quant report: metrics + analysis + decisions in one call."""
-            data = await _enriched_builder.build_with_signals(date_from=date_from, user_id=_uid(request))
+            data = await _enriched_builder.build_with_signals(date_from=date_from, mode=mode, user_id=_uid(request))
             trades = data["trades"]
             metrics = _metrics_engine.compute(trades)
             analysis = _analysis_engine.analyze(trades, data["signals"])
@@ -404,16 +477,18 @@ def create_app(
             }
 
         @app.get("/api/quant/entry-quality")
-        async def quant_entry_quality(request: Request, date_from: str | None = None) -> dict:
+        async def quant_entry_quality(request: Request, date_from: str | None = None,
+                                      mode: str | None = None) -> dict:
             from ..quant.analysis.entry_quality import EntryQualityAnalyzer
-            trades = await _enriched_builder.build(date_from=date_from, user_id=_uid(request))
+            trades = await _enriched_builder.build(date_from=date_from, mode=mode, user_id=_uid(request))
             analyzer = EntryQualityAnalyzer()
             return analyzer.analyze(trades)
 
         @app.get("/api/quant/config-analysis")
-        async def quant_config_analysis(request: Request, date_from: str | None = None) -> dict:
+        async def quant_config_analysis(request: Request, date_from: str | None = None,
+                                        mode: str | None = None) -> dict:
             from ..quant.analysis.config_analysis import ConfigAnalyzer
-            trades = await _enriched_builder.build(date_from=date_from, user_id=_uid(request))
+            trades = await _enriched_builder.build(date_from=date_from, mode=mode, user_id=_uid(request))
             analyzer = ConfigAnalyzer()
             return analyzer.analyze(trades)
 

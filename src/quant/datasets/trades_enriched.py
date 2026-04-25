@@ -47,10 +47,17 @@ class TradesEnrichedBuilder:
         self._sf = session_factory
 
     async def build(self, date_from: str | None = None, date_to: str | None = None,
-                    coins: list[str] | None = None, user_id: int = 1) -> list[dict[str, Any]]:
+                    coins: list[str] | None = None, mode: str | None = None,
+                    user_id: int = 1) -> list[dict[str, Any]]:
         """Build enriched trades dataset.
 
         Each row = one completed trade with full context at entry.
+
+        When ``mode`` is supplied (SCALP / NORMAL / SWING), the dataset is
+        restricted to trades taken while that preset was active. Mixing modes
+        in aggregates is usually misleading because their SL/TP/timeouts are
+        not comparable, so handlers should thread this through whenever the
+        downstream analysis can answer different questions per mode.
         """
         filters = ["t.user_id = :user_id"]
         params: dict[str, Any] = {"user_id": user_id}
@@ -66,6 +73,9 @@ class TradesEnrichedBuilder:
         if coins:
             filters.append("t.coin = ANY(:coins)")
             params["coins"] = coins
+        if mode:
+            filters.append("t.mode = :mode")
+            params["mode"] = mode
 
         where = "WHERE " + " AND ".join(filters) if filters else ""
 
@@ -235,9 +245,11 @@ class TradesEnrichedBuilder:
         logger.info("trades_enriched.built", count=len(enriched))
         return enriched
 
-    async def build_with_signals(self, date_from: str | None = None, user_id: int = 1) -> dict[str, Any]:
+    async def build_with_signals(self, date_from: str | None = None,
+                                 mode: str | None = None,
+                                 user_id: int = 1) -> dict[str, Any]:
         """Build enriched dataset including blocked/skipped signals."""
-        trades = await self.build(date_from=date_from, user_id=user_id)
+        trades = await self.build(date_from=date_from, mode=mode, user_id=user_id)
 
         # Get signal evaluations
         params: dict[str, Any] = {"user_id": user_id}
@@ -246,6 +258,9 @@ class TradesEnrichedBuilder:
         if df is not None:
             filters.append("timestamp >= :date_from")
             params["date_from"] = df
+        if mode:
+            filters.append("mode = :mode")
+            params["mode"] = mode
         where = "WHERE " + " AND ".join(filters)
 
         async with self._sf() as s:
