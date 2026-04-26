@@ -335,6 +335,87 @@ def create_app(
             d["win_rate"] = round(float(d["wins"] or 0) / total, 4) if total else 0
             return d
 
+    @app.get("/api/bot/trades/by-strategy")
+    async def get_trade_stats_by_strategy(request: Request) -> list[dict]:
+        """Aggregated trade performance grouped by strategy.
+
+        Returns one row per (strategy_id, strategy_name, strategy_template).
+        Trades fired before Phase A (no strategy attribution) are bucketed
+        under strategy_template = 'UNATTRIBUTED' so the user can see the
+        share of historical data lacking the new field.
+        """
+        if not session_factory:
+            return []
+        uid = _uid(request)
+        from sqlalchemy import text
+        async with session_factory() as session:
+            result = await session.execute(text("""
+                SELECT
+                    strategy_id,
+                    coalesce(strategy_name, '—') as strategy_name,
+                    coalesce(strategy_template, 'UNATTRIBUTED') as strategy_template,
+                    count(*) as trades,
+                    sum(case when net_pnl > 0 then 1 else 0 end) as wins,
+                    sum(case when net_pnl <= 0 then 1 else 0 end) as losses,
+                    round(sum(net_pnl)::numeric, 4) as total_pnl,
+                    round(avg(net_pnl)::numeric, 4) as avg_pnl,
+                    round(avg(case when net_pnl > 0 then net_pnl end)::numeric, 4) as avg_win,
+                    round(avg(case when net_pnl <= 0 then net_pnl end)::numeric, 4) as avg_loss,
+                    round(avg(mfe_pct)::numeric, 4) as avg_mfe_pct,
+                    round(avg(mae_pct)::numeric, 4) as avg_mae_pct,
+                    round(avg(hold_seconds)::numeric, 0) as avg_hold_sec,
+                    sum(case when exit_reason like 'ROI%' then 1 else 0 end) as exits_roi,
+                    sum(case when exit_reason = 'TP' then 1 else 0 end) as exits_tp,
+                    sum(case when exit_reason like 'SL%' then 1 else 0 end) as exits_sl,
+                    sum(case when exit_reason like '%TIMEOUT%' then 1 else 0 end) as exits_timeout
+                FROM trade_outcomes
+                WHERE user_id = :uid
+                GROUP BY strategy_id, strategy_name, strategy_template
+                ORDER BY trades DESC
+            """), {"uid": uid})
+            rows = []
+            for r in result.mappings():
+                d = dict(r)
+                trades = d["trades"] or 0
+                d["win_rate"] = round(float(d["wins"] or 0) / trades, 4) if trades else 0
+                # Profit factor: sum gross wins / sum gross losses (using net_pnl)
+                rows.append(d)
+            return rows
+
+    @app.get("/api/bot/trades/by-template")
+    async def get_trade_stats_by_template(request: Request) -> list[dict]:
+        """Aggregated trade performance grouped by strategy_template archetype
+        (RELAX / NORMAL / ABIERTO / UNATTRIBUTED). Useful when the user has
+        renamed their strategies — keeps the comparison stable across
+        re-namings since the template field is fixed at the engine level."""
+        if not session_factory:
+            return []
+        uid = _uid(request)
+        from sqlalchemy import text
+        async with session_factory() as session:
+            result = await session.execute(text("""
+                SELECT
+                    coalesce(strategy_template, 'UNATTRIBUTED') as strategy_template,
+                    count(*) as trades,
+                    sum(case when net_pnl > 0 then 1 else 0 end) as wins,
+                    sum(case when net_pnl <= 0 then 1 else 0 end) as losses,
+                    round(sum(net_pnl)::numeric, 4) as total_pnl,
+                    round(avg(net_pnl)::numeric, 4) as avg_pnl,
+                    round(avg(mfe_pct)::numeric, 4) as avg_mfe_pct,
+                    round(avg(mae_pct)::numeric, 4) as avg_mae_pct
+                FROM trade_outcomes
+                WHERE user_id = :uid
+                GROUP BY strategy_template
+                ORDER BY trades DESC
+            """), {"uid": uid})
+            rows = []
+            for r in result.mappings():
+                d = dict(r)
+                trades = d["trades"] or 0
+                d["win_rate"] = round(float(d["wins"] or 0) / trades, 4) if trades else 0
+                rows.append(d)
+            return rows
+
     @app.get("/api/bot/signals")
     async def get_bot_signals(request: Request) -> list[dict]:
         if not session_factory:

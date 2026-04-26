@@ -57,6 +57,12 @@ class TradeOutcome(Base):
     # Entry quality diagnostics (observability only)
     entry_quality_label = Column(String(20))
     late_entry_risk = Column(String(20))
+    # Strategy attribution (Phase A, 2026-04-26): which user-defined strategy
+    # fired this trade. strategy_template is the archetype (RELAX/NORMAL/
+    # ABIERTO) so labs can roll up across user-renamed strategies.
+    strategy_id = Column(BigInteger)
+    strategy_name = Column(String(60))
+    strategy_template = Column(String(20))
     # Timestamps
     entry_time = Column(DateTime(timezone=True), nullable=False, index=True)
     exit_time = Column(DateTime(timezone=True), index=True)
@@ -66,6 +72,8 @@ class TradeOutcome(Base):
         Index("idx_trade_coin_entry", "coin", "entry_time"),
         Index("idx_trade_regime", "regime"),
         Index("idx_trade_mode", "mode"),
+        Index("idx_trade_strategy_id", "user_id", "strategy_id"),
+        Index("idx_trade_strategy_template", "user_id", "strategy_template"),
     )
 
 

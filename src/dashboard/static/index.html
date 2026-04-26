@@ -3409,10 +3409,14 @@ function TradesTab() {
   const [detail, setDetail] = useState(null);
   const [snapStats, setSnapStats] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [byStrategy, setByStrategy] = useState(null);
+  const [byTemplate, setByTemplate] = useState(null);
 
   useEffect(() => {
     fetch("/api/trades?limit=100").then(r=>r.json()).then(setTrades).catch(()=>{});
     fetch("/api/trades/snapshots/stats").then(r=>r.json()).then(setSnapStats).catch(()=>{});
+    fetch("/api/bot/trades/by-strategy").then(r=>r.json()).then(setByStrategy).catch(()=>{});
+    fetch("/api/bot/trades/by-template").then(r=>r.json()).then(setByTemplate).catch(()=>{});
   }, []);
 
   const loadDetail = (id) => {
@@ -3442,7 +3446,23 @@ function TradesTab() {
     return (<div>
       <button onClick={()=>{setSelected(null);setDetail(null);}} style={{marginBottom:12,padding:"6px 16px",background:"#1e1b4b",border:"1px solid #4c1d95",borderRadius:8,color:"#a78bfa",cursor:"pointer"}}>{t("trades.back_to_list")}</button>
       <h3 style={{fontSize:18,fontWeight:700,marginBottom:4}}>{tr.coin} {tr.side}</h3>
-      <p style={{fontSize:11,color:"#666",marginBottom:16}}>{tr.mode} | {tr.entry_tag} | {new Date(tr.entry_time).toLocaleString(localeTag)}</p>
+      <p style={{fontSize:11,color:"#666",marginBottom:8}}>{tr.mode} | {tr.entry_tag} | {new Date(tr.entry_time).toLocaleString(localeTag)}</p>
+      {tr.strategy_name && (() => {
+        const tpl = (tr.strategy_template || "").toUpperCase();
+        const colors = tpl === "RELAX" ? {bg:"#10b98122",fg:"#34d399",bd:"#10b98166"} :
+                       tpl === "ABIERTO" ? {bg:"#f9731622",fg:"#fb923c",bd:"#f9731666"} :
+                       tpl === "NORMAL" ? {bg:"#eab30822",fg:"#fbbf24",bd:"#eab30866"} :
+                       {bg:"#7c3aed22",fg:"#a78bfa",bd:"#7c3aed66"};
+        return <div style={{marginBottom:16,display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:9,color:"#666",textTransform:"uppercase"}}>Strategy:</span>
+          <span style={{padding:"2px 10px",borderRadius:6,background:colors.bg,color:colors.fg,border:"1px solid "+colors.bd,fontSize:11,fontWeight:700}}>
+            {tr.strategy_name}
+          </span>
+          {tr.strategy_template && tr.strategy_template !== tr.strategy_name && (
+            <span style={{fontSize:10,color:"#666"}}>(template: {tr.strategy_template})</span>
+          )}
+        </div>;
+      })()}
 
       {/* Entry / Exit */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:16}}>
@@ -3519,7 +3539,82 @@ function TradesTab() {
     </div>);
   }
 
+  // Render the Strategy Performance panel (Phase A 2026-04-26): rolls up
+  // PnL, win-rate and exit-reason mix per strategy / per template archetype
+  // so the user can compare which entry rules are paying off.
+  const tplColor = (tpl) => {
+    const T = (tpl||"").toUpperCase();
+    return T==="RELAX"   ? {fg:"#34d399",bg:"#10b98122",bd:"#10b98166"} :
+           T==="ABIERTO" ? {fg:"#fb923c",bg:"#f9731622",bd:"#f9731666"} :
+           T==="NORMAL"  ? {fg:"#fbbf24",bg:"#eab30822",bd:"#eab30866"} :
+                            {fg:"#a78bfa",bg:"#7c3aed22",bd:"#7c3aed66"};
+  };
+  const StrategyPanel = () => {
+    const hasData = (byStrategy && byStrategy.length > 0) || (byTemplate && byTemplate.length > 0);
+    if (!hasData) return null;
+    return (<div style={{background:"#0a0a14",border:"1px solid #1a1a2e",borderRadius:8,padding:12,marginBottom:16}}>
+      <h4 style={{fontSize:13,fontWeight:700,color:"#a78bfa",marginBottom:10}}>📊 Strategy Performance</h4>
+      {/* By template (archetype) — stable across rename */}
+      {byTemplate && byTemplate.length > 0 && (
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:10,color:"#888",marginBottom:6,textTransform:"uppercase"}}>By template</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:8}}>
+            {byTemplate.map((r,i) => {
+              const c = tplColor(r.strategy_template);
+              return (<div key={i} style={{background:c.bg,border:"1px solid "+c.bd,borderRadius:6,padding:10}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                  <span style={{color:c.fg,fontSize:11,fontWeight:700}}>{r.strategy_template}</span>
+                  <span style={{fontSize:10,color:"#666"}}>{r.trades} trades</span>
+                </div>
+                <div style={{fontSize:18,fontWeight:700,fontFamily:"monospace",color:Number(r.total_pnl)>=0?"#22c55e":"#ef4444"}}>${Number(r.total_pnl||0).toFixed(2)}</div>
+                <div style={{fontSize:10,color:"#888",marginTop:4}}>
+                  WR {Math.round(Number(r.win_rate||0)*100)}% · MFE {Number(r.avg_mfe_pct||0).toFixed(2)}% · MAE {Number(r.avg_mae_pct||0).toFixed(2)}%
+                </div>
+              </div>);
+            })}
+          </div>
+        </div>
+      )}
+      {/* By strategy name (user-defined) */}
+      {byStrategy && byStrategy.length > 0 && (
+        <div>
+          <div style={{fontSize:10,color:"#888",marginBottom:6,textTransform:"uppercase"}}>By strategy</div>
+          <table style={{width:"100%",fontSize:10,borderCollapse:"collapse"}}>
+            <thead><tr style={{color:"#666",borderBottom:"1px solid #222"}}>
+              <th style={{textAlign:"left",padding:4}}>Strategy</th>
+              <th>Template</th>
+              <th style={{textAlign:"right"}}>Trades</th>
+              <th style={{textAlign:"right"}}>WR</th>
+              <th style={{textAlign:"right"}}>Net PnL</th>
+              <th style={{textAlign:"right"}}>Avg PnL</th>
+              <th style={{textAlign:"right"}}>MFE</th>
+              <th style={{textAlign:"right"}}>MAE</th>
+              <th title="ROI/TP/SL/TIMEOUT distribution">Exits</th>
+            </tr></thead>
+            <tbody>
+              {byStrategy.map((r,i) => {
+                const c = tplColor(r.strategy_template);
+                return (<tr key={i} style={{borderBottom:"1px solid #111"}}>
+                  <td style={{padding:4,fontWeight:700}}>{r.strategy_name}</td>
+                  <td><span style={{padding:"1px 6px",borderRadius:3,background:c.bg,color:c.fg,fontSize:9,fontWeight:700}}>{r.strategy_template}</span></td>
+                  <td style={{textAlign:"right",fontFamily:"monospace"}}>{r.trades}</td>
+                  <td style={{textAlign:"right",fontFamily:"monospace"}}>{Math.round(Number(r.win_rate||0)*100)}%</td>
+                  <td style={{textAlign:"right",fontFamily:"monospace",fontWeight:700,color:Number(r.total_pnl)>=0?"#22c55e":"#ef4444"}}>${Number(r.total_pnl||0).toFixed(2)}</td>
+                  <td style={{textAlign:"right",fontFamily:"monospace",color:Number(r.avg_pnl)>=0?"#22c55e":"#ef4444"}}>${Number(r.avg_pnl||0).toFixed(3)}</td>
+                  <td style={{textAlign:"right",fontFamily:"monospace",color:"#22c55e"}}>{Number(r.avg_mfe_pct||0).toFixed(2)}%</td>
+                  <td style={{textAlign:"right",fontFamily:"monospace",color:"#ef4444"}}>{Number(r.avg_mae_pct||0).toFixed(2)}%</td>
+                  <td style={{fontSize:9,color:"#888"}}>ROI:{r.exits_roi||0} TP:{r.exits_tp||0} SL:{r.exits_sl||0} TO:{r.exits_timeout||0}</td>
+                </tr>);
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>);
+  };
+
   return (<div>
+    {StrategyPanel()}
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
       <h3 style={{fontSize:16,fontWeight:700}}>{t("trades.history_title")}</h3>
       {snapStats && (<div style={{display:"flex",alignItems:"center",gap:12}}>
@@ -3534,6 +3629,7 @@ function TradesTab() {
           <thead><tr style={{color:"#666",borderBottom:"1px solid #222"}}>
             <th style={{textAlign:"left",padding:6}}>{t("trades.col.date")}</th>
             <th>{t("trades.col.coin")}</th><th>{t("trades.col.side")}</th><th>{t("trades.col.mode")}</th>
+            <th title="Strategy that fired">Strategy</th>
             <th style={{textAlign:"right"}}>{t("trades.col.net")}</th>
             <th style={{textAlign:"right"}}>{t("trades.col.mfe")}</th>
             <th style={{textAlign:"right"}}>{t("trades.col.mae")}</th>
@@ -3548,6 +3644,12 @@ function TradesTab() {
               <td style={{fontWeight:700,color:"#a78bfa"}}>{row.coin}</td>
               <td><span style={{padding:"2px 8px",borderRadius:4,fontSize:10,fontWeight:700,background:row.side==="LONG"?"rgba(34,197,94,0.2)":"rgba(239,68,68,0.2)",color:row.side==="LONG"?"#22c55e":"#ef4444"}}>{row.side}</span></td>
               <td style={{color:"#888"}}>{row.mode}</td>
+              <td>{row.strategy_name ? (() => {
+                const tpl=(row.strategy_template||"").toUpperCase();
+                const fg = tpl==="RELAX"?"#34d399": tpl==="ABIERTO"?"#fb923c": tpl==="NORMAL"?"#fbbf24":"#a78bfa";
+                const bg = tpl==="RELAX"?"#10b98122": tpl==="ABIERTO"?"#f9731622": tpl==="NORMAL"?"#eab30822":"#7c3aed22";
+                return <span style={{padding:"2px 6px",borderRadius:4,fontSize:9,fontWeight:700,background:bg,color:fg}}>{row.strategy_name}</span>;
+              })() : <span style={{color:"#444"}}>—</span>}</td>
               <td style={{textAlign:"right",fontFamily:"monospace",fontWeight:700,color:row.net_pnl>=0?"#22c55e":"#ef4444"}}>${Number(row.net_pnl||0).toFixed(4)}</td>
               <td style={{textAlign:"right",fontFamily:"monospace",color:"#22c55e"}}>{(row.mfe_pct||0).toFixed(3)}%</td>
               <td style={{textAlign:"right",fontFamily:"monospace",color:"#ef4444"}}>{(row.mae_pct||0).toFixed(3)}%</td>

@@ -79,6 +79,10 @@ class TradeOutcomePayload(BaseModel):
     entry_features: dict[str, Any] = {}
     entry_quality_label: str | None = None
     late_entry_risk: str | None = None
+    # Phase A — strategy attribution (2026-04-26).
+    strategy_id: int | None = None
+    strategy_name: str | None = None
+    strategy_template: str | None = None
     entry_time: str  # ISO format
     exit_time: str   # ISO format
 
@@ -304,6 +308,9 @@ async def receive_trade(payload: TradeOutcomePayload) -> dict:
         config_snapshot=payload.config_snapshot or None,
         entry_quality_label=payload.entry_quality_label,
         late_entry_risk=payload.late_entry_risk,
+        strategy_id=payload.strategy_id,
+        strategy_name=payload.strategy_name,
+        strategy_template=payload.strategy_template,
         entry_time=entry_time,
         exit_time=exit_time,
     )
