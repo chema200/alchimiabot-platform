@@ -1131,6 +1131,14 @@ def create_app(
         suffix = f"?{qs}" if qs else ""
         return await _shadow_proxy("GET", f"/api/admin/shadow/exits/summary{suffix}", request)
 
+    @app.get("/api/shadow/exits/by-strategy")
+    async def shadow_exits_by_strategy(request: Request):
+        # Phase C — A/B by strategy. Proxies to the bot's roll-up that groups
+        # shadow rows by (strategy_id_real, strategy_id_shadow).
+        qs = request.url.query
+        suffix = f"?{qs}" if qs else ""
+        return await _shadow_proxy("GET", f"/api/admin/shadow/exits/by-strategy{suffix}", request)
+
     # ── Strategies (Fase P del engine overhaul, 2026-04-25) ──
     # Proxy a /api/strategies del bot. El platform muestra las strategies del
     # user logueado (mismo JWT) + permite crear desde plantillas o importar

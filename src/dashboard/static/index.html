@@ -4055,6 +4055,10 @@ function ShadowModeTab() {
   // trade outcomes so the user sees what each variant would have saved/cost.
   const [impact, setImpact] = useState({variants: [], windowDays: 7});
   const [impactDays, setImpactDays] = useState(7);
+  // Phase C — A/B by strategy. Each row groups shadow exits by
+  // (strategy_id_real, strategy_id_shadow) so the user sees which
+  // strategies would close better than the one that actually fired.
+  const [byStrategy, setByStrategy] = useState([]);
   const [hours, setHours] = useState(24);
   const [filterVariant, setFilterVariant] = useState("");
   const [err, setErr] = useState(null);
@@ -4085,13 +4089,14 @@ function ShadowModeTab() {
     setLoading(true); setErr(null);
     try {
       const qs = filterVariant ? ("?variant=" + encodeURIComponent(filterVariant)) : "";
-      const [vResp, eResp, sResp, xResp, xsResp, iResp] = await Promise.all([
+      const [vResp, eResp, sResp, xResp, xsResp, iResp, bsResp] = await Promise.all([
         fetch(API + "/api/shadow/variants", {credentials:"include"}),
         fetch(API + "/api/shadow/evaluations" + qs, {credentials:"include"}),
         fetch(API + "/api/shadow/summary?hours=" + hours, {credentials:"include"}),
         fetch(API + "/api/shadow/exits" + qs, {credentials:"include"}),
         fetch(API + "/api/shadow/exits/summary?hours=" + exitsHours, {credentials:"include"}),
         fetch(API + "/api/shadow/variants/impact?days=" + impactDays, {credentials:"include"}),
+        fetch(API + "/api/shadow/exits/by-strategy?hours=" + exitsHours, {credentials:"include"}),
       ]);
       if (vResp.status === 403 || eResp.status === 403 || sResp.status === 403
           || xResp.status === 403 || xsResp.status === 403 || iResp.status === 403) {
@@ -4110,12 +4115,14 @@ function ShadowModeTab() {
       const xData  = await jsonOrDefault(xResp, []);
       const xsData = await jsonOrDefault(xsResp, {variants: [], totalExits: 0, hours: exitsHours});
       const iData  = await jsonOrDefault(iResp, {variants: [], windowDays: impactDays});
+      const bsData = await jsonOrDefault(bsResp, []);
       setVariants(Array.isArray(vData) ? vData : []);
       setEvaluations(Array.isArray(eData) ? eData : []);
       setSummary(sData && typeof sData === "object" && Array.isArray(sData.variants) ? sData : {variants: [], totalEvaluations: 0, hours});
       setExits(Array.isArray(xData) ? xData : []);
       setExitsSummary(xsData && typeof xsData === "object" && Array.isArray(xsData.variants) ? xsData : {variants: [], totalExits: 0, hours: exitsHours});
       setImpact(iData && typeof iData === "object" && Array.isArray(iData.variants) ? iData : {variants: [], windowDays: impactDays});
+      setByStrategy(Array.isArray(bsData) ? bsData : []);
     } catch (e) { setErr(e.message || String(e)); }
     setLoading(false);
   }, [hours, filterVariant, exitsHours, impactDays]);
@@ -4896,6 +4903,58 @@ function ShadowModeTab() {
         </table>
       )}
     </div>
+
+    {/* ── A/B Strategy Test (Phase C, 2026-04-26) ─────────────────────
+         Compares shadow exits grouped by (real_strategy, shadow_strategy).
+         Same row when sameStrategy=true means the variant tracks the same
+         strategy with different exit params (legacy use). Different rows
+         show the head-to-head: "if Relax had been active for trades that
+         Abierto fired, would it have closed better?". */}
+    {byStrategy && byStrategy.length > 0 && (<>
+      <h3 className="section-title">📊 A/B Strategy Test</h3>
+      <div className="card" style={{marginBottom:12, padding:8}}>
+        <div style={{fontSize:10, color:"#888", marginBottom:6}}>
+          Roll-up of shadow exits over the last {exitsHours}h, grouped by the
+          strategy that fired the real trade vs the strategy the variant tested.
+          Positive Σ ΔPnL = the shadow strategy would have closed better than
+          the real one on these same entries. {byStrategy.length} group(s).
+        </div>
+        <table style={{width:"100%", fontSize:11}}>
+          <thead><tr style={{textAlign:"left", color:"#888", borderBottom:"1px solid #222"}}>
+            <th style={{padding:"6px 4px"}}>Real strategy</th>
+            <th>Shadow strategy</th>
+            <th>Total</th>
+            <th>Both eval</th>
+            <th>Variant wins</th>
+            <th>Win rate</th>
+            <th>Σ ΔPnL ($)</th>
+          </tr></thead>
+          <tbody>
+            {byStrategy.map((row, i) => {
+              const sameKey = row.sameStrategy;
+              const delta = Number(row.sumDeltaPnlUsd || 0);
+              const wr = Number(row.winRate || 0);
+              return (
+                <tr key={i} style={{borderBottom:"1px dotted #181828"}}>
+                  <td style={{padding:"6px 4px", fontWeight:600, color:"#e0e0e8"}}>{row.strategyNameReal}</td>
+                  <td style={{color: sameKey ? "#888" : "#a78bfa", fontWeight: sameKey ? 400 : 700}}>
+                    {row.strategyNameShadow}
+                    {!sameKey && <span style={{fontSize:9, marginLeft:4, color:"#666"}}>(override)</span>}
+                  </td>
+                  <td style={{color:"#aaa"}}>{row.total}</td>
+                  <td style={{color:"#ccc"}}>{row.bothEvaluated}</td>
+                  <td style={{color:"#22c55e"}}>{row.variantWins}/<span style={{color:"#ef4444"}}>{row.variantLosses}</span></td>
+                  <td style={{color: wr >= 50 ? "#22c55e" : "#888"}}>{wr.toFixed(1)}%</td>
+                  <td style={{color: delta >= 0 ? "#22c55e" : "#ef4444", fontWeight:700, fontFamily:"monospace"}}>
+                    {delta >= 0 ? "+" : ""}{delta.toFixed(4)}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </>)}
 
     {/* ── Shadow Exits — filas recientes ── */}
     <h3 className="section-title">{t("shadow.recent_exits_title")}
