@@ -169,10 +169,14 @@ def create_app(
         username = body.get("username", "")
         password = body.get("password", "")
         try:
+            # X-Bot-Api-Key bypasses the bot's Turnstile gate — labs has no
+            # captcha widget, so we authenticate as a trusted internal service.
+            login_headers = {"X-Bot-Api-Key": _BOT_API_KEY} if _BOT_API_KEY else {}
             async with httpx.AsyncClient(timeout=5.0) as client:
                 resp = await client.post(
                     f"{_BOT_API_URL}/api/auth/login",
                     json={"username": username, "password": password},
+                    headers=login_headers,
                 )
             if resp.status_code != 200:
                 raise HTTPException(401, "Invalid credentials")
