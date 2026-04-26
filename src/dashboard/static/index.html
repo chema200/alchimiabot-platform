@@ -4085,6 +4085,65 @@ function ShadowModeTab() {
     return () => clearTimeout(t);
   }, [flash]);
 
+  // Auto-wizard state — siguiente / siguiente / finalizar style.
+  // step 1 = pick template, 2 = pick mode + preview, 3 = done flash
+  const [wizard, setWizard] = useState(null); // null | {step, template, mode, preview, busy, error}
+  const wizardOpen = (template) => setWizard({step: 2, template, mode: "NORMAL", preview: null, busy: false, error: null});
+  const wizardClose = () => setWizard(null);
+  const wizardLoadPreview = useCallback(async (template, mode) => {
+    setWizard(w => ({...w, busy: true, error: null, preview: null}));
+    try {
+      const r = await fetch(API + "/api/shadow/variants/auto/preview?template=" + template + "&mode=" + mode, {credentials:"include"});
+      const j = await r.json();
+      if (!r.ok || j.success === false) throw new Error(j.error || "preview failed");
+      setWizard(w => ({...w, busy: false, preview: j}));
+    } catch (e) {
+      setWizard(w => ({...w, busy: false, error: e.message || String(e)}));
+    }
+  }, []);
+  const wizardFinalize = useCallback(async () => {
+    if (!wizard) return;
+    setWizard(w => ({...w, busy: true, error: null}));
+    try {
+      const r = await fetch(API + "/api/shadow/variants/auto", {
+        method: "POST", credentials: "include",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({template: wizard.template, mode: wizard.mode}),
+      });
+      const j = await r.json();
+      if (!r.ok || j.success === false) throw new Error(j.error || "finalize failed");
+      setFlash(`✅ ${j.variants.length} variantes creadas (${j.template} / ${j.mode})`);
+      setWizard(null);
+      // Reload variants list so the user sees them immediately.
+      // refresh is captured below — we call it in the same tick.
+      setTimeout(() => { try { refresh(); } catch {} }, 50);
+    } catch (e) {
+      setWizard(w => ({...w, busy: false, error: e.message || String(e)}));
+    }
+  }, [wizard]);
+
+  // Promote a winning variant to a real bot strategy. Prompts for a name.
+  const promoteToBot = useCallback(async (variantName) => {
+    const proposed = window.prompt(
+      "Nombre para la nueva estrategia (puedes dejarlo igual o cambiarlo):",
+      "promoted-" + variantName);
+    if (proposed === null) return;
+    const newName = proposed.trim();
+    if (!newName) return;
+    try {
+      const r = await fetch(API + "/api/shadow/variants/" + encodeURIComponent(variantName) + "/promote", {
+        method: "POST", credentials: "include",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({newName, mode: ""}),
+      });
+      const j = await r.json();
+      if (!r.ok || j.success === false) throw new Error(j.error || "promote failed");
+      setFlash(`✅ Estrategia "${j.name}" creada en modo ${j.mode}`);
+    } catch (e) {
+      setFlash("❌ " + (e.message || String(e)));
+    }
+  }, []);
+
   const refresh = useCallback(async () => {
     setLoading(true); setErr(null);
     try {
@@ -4531,6 +4590,101 @@ function ShadowModeTab() {
       )}
     </div>
 
+    {/* ── Auto-wizard (siguiente / siguiente / finalizar) ─────────────
+         Generates a coherent batch of variants from a high-level preset.
+         Designed for non-technical users: pick a template, pick a mode,
+         confirm preview, done. Each preset card explains the experiment
+         in one line. */}
+    <h3 className="section-title">⚡ Generar variantes automáticas
+      <Tip text="Genera 1 click 3-5 variantes coherentes para un experimento. No pierdes el form manual: estos botones rellenan a Shadow Mode listo para correr." />
+    </h3>
+    <div className="card" style={{marginBottom:12, padding:12}}>
+      <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(220px, 1fr))", gap:8}}>
+        {[
+          {id:"STRATEGY_AB",    icon:"🧬", label:"A/B de estrategias",   desc:"Una variante por estrategia activa del modo. Mide cuál cierra mejor."},
+          {id:"SL_SWEEP",       icon:"🛡️", label:"Barrido de Stop Loss", desc:"3 variantes: SL 0.30 / 0.40 / 0.50 %. ¿SL más ajustado o más amplio?"},
+          {id:"TP_SWEEP",       icon:"🎯", label:"Barrido de Take Profit", desc:"3 variantes: TP 0.40 / 0.60 / 0.80 %. ¿Cerramos demasiado pronto?"},
+          {id:"PATIENCE",       icon:"⏱️", label:"Paciencia (ROI)",     desc:"3 perfiles ROI: rápida / normal / paciente. ¿Aguantamos más?"},
+          {id:"QUALITY_FILTER", icon:"🔎", label:"Filtros de calidad",   desc:"3 variantes bloqueando entradas HIGH / MED+HIGH / WEAK."},
+        ].map(card => (
+          <button key={card.id} type="button" onClick={() => { wizardOpen(card.id); wizardLoadPreview(card.id, "NORMAL"); }}
+            style={{padding:"10px 12px", textAlign:"left", background:"#0a0a13", border:"1px solid #333", borderRadius:6, color:"#ccc", cursor:"pointer", fontSize:11}}>
+            <div style={{fontWeight:600, color:"#a78bfa", marginBottom:3}}>{card.icon} {card.label}</div>
+            <div style={{fontSize:10, color:"#888", lineHeight:1.4}}>{card.desc}</div>
+          </button>
+        ))}
+      </div>
+    </div>
+
+    {/* ── Wizard modal — preview + confirm ──────────────────────────── */}
+    {wizard && (
+      <div onClick={wizardClose}
+        style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center"}}>
+        <div onClick={(e) => e.stopPropagation()}
+          style={{background:"#0a0a13", border:"1px solid #333", borderRadius:8, padding:20, maxWidth:680, width:"90%", maxHeight:"85vh", overflow:"auto"}}>
+          <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12}}>
+            <h3 style={{margin:0, color:"#e0e0e8"}}>Asistente: {wizard.template}</h3>
+            <button onClick={wizardClose} style={{background:"transparent", border:"none", color:"#888", fontSize:22, cursor:"pointer"}}>×</button>
+          </div>
+
+          <div style={{marginBottom:12}}>
+            <label style={{fontSize:11, color:"#888", display:"block", marginBottom:6}}>Modo</label>
+            <div style={{display:"flex", gap:8}}>
+              {["SCALP", "NORMAL", "SWING"].map(m => (
+                <button key={m} type="button"
+                  onClick={() => { setWizard(w => ({...w, mode: m})); wizardLoadPreview(wizard.template, m); }}
+                  disabled={wizard.busy}
+                  style={{flex:1, padding:"6px 10px", fontSize:11, background: wizard.mode === m ? "#3b1d8a" : "#1a1a2e",
+                          border:"1px solid " + (wizard.mode === m ? "#a78bfa" : "#333"), borderRadius:4,
+                          color: wizard.mode === m ? "#e0e0e8" : "#888", cursor: wizard.busy ? "default" : "pointer"}}>
+                  {m}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {wizard.busy && <div style={{color:"#888", fontSize:11, padding:12}}>Cargando previsualización…</div>}
+          {wizard.error && <div style={{color:"#ef4444", fontSize:11, padding:12, background:"#2a1a1a", borderRadius:4}}>❌ {wizard.error}</div>}
+
+          {wizard.preview && !wizard.busy && (
+            <div>
+              <div style={{fontSize:11, color:"#a78bfa", padding:"8px 0", borderBottom:"1px solid #222", marginBottom:8}}>
+                {wizard.preview.description}
+              </div>
+              <div style={{fontSize:10, color:"#666", marginBottom:6}}>Se crearán {wizard.preview.variants.length} variante(s):</div>
+              <div style={{maxHeight:280, overflow:"auto", fontFamily:"monospace", fontSize:10, color:"#ccc"}}>
+                {wizard.preview.variants.map((v, i) => (
+                  <div key={i} style={{padding:"6px 8px", borderBottom:"1px dotted #181828"}}>
+                    <div style={{color:"#e0e0e8", fontWeight:600}}>{v.name}</div>
+                    <div style={{color:"#888", fontSize:9, marginTop:2}}>
+                      {v.slPctOverride != null && <span>SL={v.slPctOverride}%  </span>}
+                      {v.tpPctOverride != null && <span>TP={v.tpPctOverride}%  </span>}
+                      {v.roiTableOverride && <span>ROI={v.roiTableOverride}  </span>}
+                      {v.maxHoldMinutesOverride && <span>maxHold={v.maxHoldMinutesOverride}m  </span>}
+                      {v.strategyOverrideId && <span>strategyId={v.strategyOverrideId}  </span>}
+                      {v.blockLateEntryRisks && v.blockLateEntryRisks.length > 0 && <span>blockRisks={v.blockLateEntryRisks.join(",")}  </span>}
+                      {v.blockQualityLabels && v.blockQualityLabels.length > 0 && <span>blockLabels={v.blockQualityLabels.join(",")}  </span>}
+                      {v.blockModes && v.blockModes.length > 0 && <span>onlyMode={["SCALP","NORMAL","SWING"].filter(x => !v.blockModes.includes(x)).join("/")}  </span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{marginTop:12, display:"flex", gap:8, justifyContent:"flex-end"}}>
+                <button onClick={wizardClose} disabled={wizard.busy}
+                  style={{padding:"6px 14px", fontSize:11, background:"#1a1a2e", border:"1px solid #333", color:"#888", borderRadius:4, cursor:"pointer"}}>
+                  Cancelar
+                </button>
+                <button onClick={wizardFinalize} disabled={wizard.busy || wizard.preview.variants.length === 0}
+                  style={{padding:"6px 14px", fontSize:11, background:"#3b1d8a", border:"1px solid #a78bfa", color:"#e0e0e8", borderRadius:4, cursor:"pointer", fontWeight:600}}>
+                  Finalizar — crear {wizard.preview.variants.length}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    )}
+
     {/* ── Active variants ── */}
     <h3 className="section-title">{t("shadow.active_title", {n: variants.length})} <Tip text={t("shadow.active_tip")} /></h3>
     <div className="card" style={{marginBottom:12}}>
@@ -4572,6 +4726,11 @@ function ShadowModeTab() {
                   <td style={{color: v.blockImpulseExhausted ? "#f59e0b" : "#555"}}>{v.blockImpulseExhausted ? "ON" : "off"}</td>
                   <td style={{color:"#22d3ee", fontSize:10}}>{exitChips.length > 0 ? exitChips.join(" · ") : <span style={{color:"#555"}}>—</span>}</td>
                   <td style={{textAlign:"right", whiteSpace:"nowrap"}}>
+                    <button onClick={() => promoteToBot(v.name)}
+                      title="Clonar esta variante como una estrategia real del bot"
+                      style={{padding:"3px 10px", fontSize:10, background:"#1a1a2e", border:"1px solid #a78bfa", borderRadius:4, color:"#a78bfa", cursor:"pointer", marginRight:6, fontWeight:600}}>
+                      → Bot
+                    </button>
                     <button onClick={() => editVariant(v)}
                       style={{padding:"3px 10px", fontSize:10, background:"#1a1a2e", border:"1px solid #444", borderRadius:4, color:"#3b82f6", cursor:"pointer", marginRight:6}}>
                       {t("shadow.edit")}

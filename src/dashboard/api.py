@@ -1139,6 +1139,24 @@ def create_app(
         suffix = f"?{qs}" if qs else ""
         return await _shadow_proxy("GET", f"/api/admin/shadow/exits/by-strategy{suffix}", request)
 
+    # Auto-wizard: generate a coherent batch of variants from a high-level
+    # preset (siguiente-siguiente-finalizar). The bot side validates the
+    # template name and rejects unknown values.
+    @app.post("/api/shadow/variants/auto")
+    async def shadow_variants_auto(body: dict, request: Request):
+        return await _shadow_proxy("POST", "/api/admin/shadow/variants/auto", request, body=body)
+
+    @app.get("/api/shadow/variants/auto/preview")
+    async def shadow_variants_auto_preview(request: Request):
+        qs = request.url.query
+        suffix = f"?{qs}" if qs else ""
+        return await _shadow_proxy("GET", f"/api/admin/shadow/variants/auto/preview{suffix}", request)
+
+    # Promote a winning shadow variant to a real bot strategy (one-click).
+    @app.post("/api/shadow/variants/{name}/promote")
+    async def shadow_variant_promote(name: str, body: dict, request: Request):
+        return await _shadow_proxy("POST", f"/api/admin/shadow/variants/{name}/promote", request, body=body)
+
     # ── Strategies (Fase P del engine overhaul, 2026-04-25) ──
     # Proxy a /api/strategies del bot. El platform muestra las strategies del
     # user logueado (mismo JWT) + permite crear desde plantillas o importar
