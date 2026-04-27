@@ -4076,6 +4076,46 @@ function ShadowModeTab() {
   const [deleteModal, setDeleteModal] = useState(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
 
+  // Mobile-friendly modals (2026-04-26): the manual create form + templates
+  // picker live in a modal triggered from "+ Nueva variante" so the page is
+  // not a 4-screen wall. Row click on the variants table opens a details
+  // modal where Edit / Delete / → Bot live; the row itself is just a chip.
+  const [showFormModal, setShowFormModal] = useState(false);
+  const [detailsModal, setDetailsModal] = useState(null);
+
+  // Strategy library (2026-04-27): browse curated presets and install any
+  // as a shadow variant in one click. Same backend as the bot's library
+  // modal — single source of truth in StrategyLibraryService.java.
+  const [showLibrary, setShowLibrary] = useState(false);
+  const [libraryPresets, setLibraryPresets] = useState([]);
+  const [libraryMode, setLibraryMode] = useState("ALL");
+  const [libraryCat, setLibraryCat] = useState("ALL");
+  const libraryOpen = useCallback(async () => {
+    setShowLibrary(true);
+    try {
+      const r = await fetch(API + "/api/strategies/library", {credentials:"include"});
+      const j = await r.json();
+      setLibraryPresets(Array.isArray(j) ? j : []);
+    } catch (e) {
+      setFlash({kind:"error", msg: "❌ No se pudo cargar la biblioteca: " + (e.message || e)});
+    }
+  }, []);
+  const libraryInstallShadow = useCallback(async (presetId) => {
+    try {
+      const r = await fetch(API + "/api/strategies/library/install-as-shadow", {
+        method: "POST", credentials: "include",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({presetId}),
+      });
+      const j = await r.json();
+      if (!r.ok || j.error) throw new Error(j.error || "install failed");
+      setFlash({kind:"success", msg:`✅ Shadow variant "${j.shadowVariant}" creada (no afecta producción)`});
+      setTimeout(() => { try { refresh(); } catch {} }, 50);
+    } catch (e) {
+      setFlash({kind:"error", msg: "❌ " + (e.message || e)});
+    }
+  }, []);
+
   // Lightweight info toast, shown after destructive actions with a summary
   // of what happened. Auto-dismisses after 4s.
   const [flash, setFlash] = useState(null);
@@ -4112,7 +4152,7 @@ function ShadowModeTab() {
       });
       const j = await r.json();
       if (!r.ok || j.success === false) throw new Error(j.error || "finalize failed");
-      setFlash(`✅ ${j.variants.length} variantes creadas (${j.template} / ${j.mode})`);
+      setFlash({kind:"success", msg:`✅ ${j.variants.length} variantes creadas (${j.template} / ${j.mode})`});
       setWizard(null);
       // Reload variants list so the user sees them immediately.
       // refresh is captured below — we call it in the same tick.
@@ -4138,9 +4178,9 @@ function ShadowModeTab() {
       });
       const j = await r.json();
       if (!r.ok || j.success === false) throw new Error(j.error || "promote failed");
-      setFlash(`✅ Estrategia "${j.name}" creada en modo ${j.mode}`);
+      setFlash({kind:"success", msg:`✅ Estrategia "${j.name}" creada en modo ${j.mode}`});
     } catch (e) {
-      setFlash("❌ " + (e.message || String(e)));
+      setFlash({kind:"error", msg:"❌ " + (e.message || String(e))});
     }
   }, []);
 
@@ -4278,17 +4318,15 @@ function ShadowModeTab() {
     });
     setEditingName(v.name);
     setSubmitMsg("");
-    // Scroll the form into view so the user sees their fields populated.
-    setTimeout(() => {
-      const el = document.getElementById("shadow-variant-form");
-      if (el) el.scrollIntoView({behavior:"smooth", block:"start"});
-    }, 50);
+    setDetailsModal(null);
+    setShowFormModal(true);
   };
 
   const cancelEdit = () => {
     setForm(EMPTY_FORM());
     setEditingName(null);
     setSubmitMsg("");
+    setShowFormModal(false);
   };
 
   /**
@@ -4420,13 +4458,25 @@ function ShadowModeTab() {
             const isExit = v.kind === "EXIT";
             return (
               <div key={v.name}
+                onClick={() => {
+                  // Find the corresponding variant config from `variants` list and open
+                  // the detail modal. Bug 2026-04-27 user request: cards showed
+                  // "ganamos" but had no way to drill down into config/decisions/exits.
+                  const variantCfg = variants.find(x => x.name === v.name);
+                  if (variantCfg) setDetailsModal(variantCfg);
+                  else setDetailsModal({name: v.name, _impactOnly: true, _impact: v});
+                }}
                 style={{
                   background: "var(--bg-panel)",
                   border: "1px solid var(--border-subtle)",
                   borderLeft: "3px solid " + (verdictCls === "ok" ? "var(--pos)" : verdictCls === "bad" ? "var(--neg)" : verdictCls === "warn" ? "var(--warn)" : "var(--info)"),
                   borderRadius: 8,
                   padding: "14px 18px",
-                }}>
+                  cursor: "pointer",
+                  transition: "border-color 0.15s, transform 0.15s",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.borderColor = "#3a3a55"; }}
+                onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.borderColor = "var(--border-subtle)"; }}>
                 {/* Header row: name + kind tag + verdict chip */}
                 <div style={{display:"flex", alignItems:"center", gap:10, flexWrap:"wrap", marginBottom:10}}>
                   <div style={{fontSize:14, fontWeight:600, color:"var(--text)", fontFamily:"var(--font-mono)"}}>{v.name}</div>
@@ -4590,6 +4640,21 @@ function ShadowModeTab() {
       )}
     </div>
 
+    {/* ── Library: catálogo de presets curados, instalable como shadow ─ */}
+    <h3 className="section-title">📚 Biblioteca de strategies (Shadow)
+      <Tip text="Catálogo de 78 presets curados (26 por modo). Cada uno se puede registrar como shadow variant para A/B test sin riesgo. Si te gusta lo que ves, lo promocionas a producción luego desde el bot." />
+    </h3>
+    <div className="card" style={{marginBottom:12, padding:12}}>
+      <button type="button" onClick={() => { libraryOpen(); }}
+        style={{padding:"10px 14px", fontSize:12, background:"#1a1a2e", border:"1px solid #22d3ee",
+                borderRadius:6, color:"#67e8f9", cursor:"pointer", fontWeight:600}}>
+        🔍 Abrir biblioteca completa
+      </button>
+      <span style={{marginLeft:10, fontSize:10, color:"#666"}}>
+        FAST_ROI · PATIENT · TIGHT_SL · WIDE_TP · QUALITY_FILTER · AGGRESSIVE · CONSERVATIVE · HYBRID · EXPERIMENTAL
+      </span>
+    </div>
+
     {/* ── Auto-wizard (siguiente / siguiente / finalizar) ─────────────
          Generates a coherent batch of variants from a high-level preset.
          Designed for non-technical users: pick a template, pick a mode,
@@ -4685,6 +4750,18 @@ function ShadowModeTab() {
       </div>
     )}
 
+    {/* ── Action button: open the manual create form in a modal ─────── */}
+    <div style={{display:"flex", gap:8, flexWrap:"wrap", marginBottom:14}}>
+      <button type="button" onClick={() => { setForm(EMPTY_FORM()); setEditingName(null); setSubmitMsg(""); setShowFormModal(true); }}
+        style={{padding:"8px 14px", fontSize:12, background:"#3b1d8a", border:"1px solid #a78bfa",
+                color:"#e0e0e8", borderRadius:6, cursor:"pointer", fontWeight:600}}>
+        + Nueva variante manual
+      </button>
+      <span style={{alignSelf:"center", fontSize:10, color:"#666"}}>
+        (o usa los preset de "Generar variantes automáticas" arriba)
+      </span>
+    </div>
+
     {/* ── Active variants ── */}
     <h3 className="section-title">{t("shadow.active_title", {n: variants.length})} <Tip text={t("shadow.active_tip")} /></h3>
     <div className="card" style={{marginBottom:12}}>
@@ -4714,7 +4791,10 @@ function ShadowModeTab() {
               if (v.tpPctOverride != null)    exitChips.push("TP=" + v.tpPctOverride + "%");
               if (v.maxHoldMinutesOverride)   exitChips.push("max=" + v.maxHoldMinutesOverride + "m");
               return (
-                <tr key={v.name} style={{borderBottom:"1px solid #181828"}}>
+                <tr key={v.name} onClick={() => setDetailsModal(v)}
+                  style={{borderBottom:"1px solid #181828", cursor:"pointer"}}
+                  onMouseEnter={e => e.currentTarget.style.background = "#0e0e18"}
+                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                   <td style={{padding:"6px 4px", fontWeight:600, color:"#e0e0e8"}}>{v.name}</td>
                   <td style={{color:"#f59e0b"}}>{setStr(v.blockLateEntryRisks) || <span style={{color:"#555"}}>—</span>}</td>
                   <td style={{color:"#f59e0b"}}>{setStr(v.blockQualityLabels) || <span style={{color:"#555"}}>—</span>}</td>
@@ -4725,21 +4805,7 @@ function ShadowModeTab() {
                   <td style={{color:"#aaa"}}>{v.collateralOverrideUsd > 0 ? ("$" + v.collateralOverrideUsd) : <span style={{color:"#555"}}>prod</span>}</td>
                   <td style={{color: v.blockImpulseExhausted ? "#f59e0b" : "#555"}}>{v.blockImpulseExhausted ? "ON" : "off"}</td>
                   <td style={{color:"#22d3ee", fontSize:10}}>{exitChips.length > 0 ? exitChips.join(" · ") : <span style={{color:"#555"}}>—</span>}</td>
-                  <td style={{textAlign:"right", whiteSpace:"nowrap"}}>
-                    <button onClick={() => promoteToBot(v.name)}
-                      title="Clonar esta variante como una estrategia real del bot"
-                      style={{padding:"3px 10px", fontSize:10, background:"#1a1a2e", border:"1px solid #a78bfa", borderRadius:4, color:"#a78bfa", cursor:"pointer", marginRight:6, fontWeight:600}}>
-                      → Bot
-                    </button>
-                    <button onClick={() => editVariant(v)}
-                      style={{padding:"3px 10px", fontSize:10, background:"#1a1a2e", border:"1px solid #444", borderRadius:4, color:"#3b82f6", cursor:"pointer", marginRight:6}}>
-                      {t("shadow.edit")}
-                    </button>
-                    <button onClick={() => openDeleteModal(v.name)}
-                      style={{padding:"3px 10px", fontSize:10, background:"#1a1a2e", border:"1px solid #444", borderRadius:4, color:"#ef4444", cursor:"pointer"}}>
-                      {t("shadow.remove")}
-                    </button>
-                  </td>
+                  <td style={{textAlign:"right", color:"#666", fontSize:14, whiteSpace:"nowrap"}}>›</td>
                 </tr>
               );
             })}
@@ -4748,28 +4814,47 @@ function ShadowModeTab() {
       )}
     </div>
 
-    {/* ── Templates ── */}
-    <h3 className="section-title">{t("shadow.templates_title")} <Tip text={t("shadow.templates_tip")} /></h3>
-    <div className="card" style={{marginBottom:12, padding:12}}>
-      <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(220px, 1fr))", gap:8}}>
-        {SHADOW_TEMPLATES.map(tpl => (
-          <button key={tpl.id} type="button"
-            onClick={() => { setForm(tpl.apply(EMPTY_FORM())); setSubmitMsg(""); }}
-            title={tpl.desc}
-            style={{padding:"8px 10px", textAlign:"left", background:"#0a0a13", border:"1px solid #333", borderRadius:6, color:"#ccc", cursor:"pointer", fontSize:11}}>
-            <div style={{fontWeight:600, color:"#e0e0e8", marginBottom:2}}>{tpl.icon} {tpl.label}</div>
-            <div style={{fontSize:10, color:"#666", lineHeight:1.3}}>{tpl.desc}</div>
-          </button>
-        ))}
-      </div>
-    </div>
+    {/* ── New variant form — wrapped in a modal (2026-04-26 mobile UX) ── */}
+    {showFormModal && (
+      <div onClick={() => { if (!editingName) setShowFormModal(false); }}
+        style={{position:"fixed", inset:0, background:"rgba(3,4,10,0.78)", zIndex:1000,
+                display:"flex", alignItems:"center", justifyContent:"center",
+                backdropFilter:"blur(3px)", padding:"4vh 4vw"}}>
+        <div onClick={e => e.stopPropagation()}
+          style={{background:"#0d0d17", border:"1px solid #2a2a40", borderRadius:10,
+                  width:"100%", maxWidth:680, maxHeight:"92vh", overflow:"auto",
+                  boxShadow:"0 20px 60px rgba(0,0,0,0.6)"}}>
 
-    {/* ── New variant form ── */}
-    <h3 className="section-title" id="shadow-variant-form">
-      {editingName ? <>{t("shadow.editing")} <span style={{color:"#3b82f6"}}>"{editingName}"</span></> : t("shadow.new_variant")}
-      <Tip text={t("shadow.new_tip")} />
-    </h3>
-    <div className="card" style={{marginBottom:12, padding:12, borderColor: editingName ? "#3b82f6" : undefined}}>
+          {/* Modal header */}
+          <div style={{display:"flex", alignItems:"center", justifyContent:"space-between",
+                       padding:"12px 16px", borderBottom:"1px solid #1f1f30",
+                       position:"sticky", top:0, background:"#0d0d17", zIndex:1}}>
+            <div style={{fontSize:13, fontWeight:600, color: editingName ? "#3b82f6" : "#e0e0e8"}}>
+              {editingName ? <>{t("shadow.editing")} "{editingName}"</> : t("shadow.new_variant")}
+            </div>
+            <button onClick={() => { cancelEdit(); setShowFormModal(false); }}
+              style={{background:"transparent", border:"none", color:"#888", fontSize:22, cursor:"pointer", lineHeight:1}}>×</button>
+          </div>
+
+          <div style={{padding:14}}>
+
+            {/* Templates picker (collapsed inline so the form is shorter) */}
+            <details style={{marginBottom:14, background:"#0a0a13", border:"1px solid #2a2a40", borderRadius:6}}>
+              <summary style={{padding:"8px 12px", cursor:"pointer", fontSize:11, fontWeight:600, color:"#a78bfa"}}>
+                📋 {t("shadow.templates_title")} (rellenar el formulario con un preset)
+              </summary>
+              <div style={{padding:"4px 8px 10px", display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(220px, 1fr))", gap:8}}>
+                {SHADOW_TEMPLATES.map(tpl => (
+                  <button key={tpl.id} type="button"
+                    onClick={() => { setForm(tpl.apply(EMPTY_FORM())); setSubmitMsg(""); }}
+                    title={tpl.desc}
+                    style={{padding:"8px 10px", textAlign:"left", background:"#0d0d17", border:"1px solid #333", borderRadius:6, color:"#ccc", cursor:"pointer", fontSize:11}}>
+                    <div style={{fontWeight:600, color:"#e0e0e8", marginBottom:2}}>{tpl.icon} {tpl.label}</div>
+                    <div style={{fontSize:10, color:"#666", lineHeight:1.3}}>{tpl.desc}</div>
+                  </button>
+                ))}
+              </div>
+            </details>
 
       {/* Nombre */}
       <label style={{fontSize:10, color:"#888", display:"block", marginBottom:10}}>Nombre (unico)
@@ -4894,7 +4979,11 @@ function ShadowModeTab() {
         )}
         {submitMsg && <span style={{fontSize:11, color: submitMsg.startsWith("✓") ? "#22c55e" : "#ef4444"}}>{submitMsg}</span>}
       </div>
-    </div>
+
+          </div>
+        </div>
+      </div>
+    )}
 
     {/* ── Summary ── */}
     <h3 className="section-title">{t("shadow.summary_title")}
@@ -5180,6 +5269,229 @@ function ShadowModeTab() {
       )}
     </div>
 
+    {/* ── Variant details modal — opens when a row is clicked ───────── */}
+    {detailsModal && (() => {
+      const v = detailsModal;
+      const setStr = (s) => (s && s.length > 0 ? (Array.isArray(s) ? s : Array.from(s)).join(", ") : "—");
+      const Row = ({label, value, color}) => (
+        <div style={{display:"flex", justifyContent:"space-between", padding:"6px 0", borderBottom:"1px solid #181828", fontSize:11}}>
+          <span style={{color:"#888"}}>{label}</span>
+          <span style={{color: color || "#e0e0e8", fontFamily:"monospace", textAlign:"right", maxWidth:"60%", wordBreak:"break-all"}}>{value}</span>
+        </div>
+      );
+      return (
+        <div onClick={() => setDetailsModal(null)}
+          style={{position:"fixed", inset:0, background:"rgba(3,4,10,0.78)", zIndex:1000,
+                  display:"flex", alignItems:"center", justifyContent:"center",
+                  backdropFilter:"blur(3px)", padding:"4vh 4vw"}}>
+          <div onClick={e => e.stopPropagation()}
+            style={{background:"#0d0d17", border:"1px solid #2a2a40", borderRadius:10,
+                    width:"100%", maxWidth:560, maxHeight:"92vh", overflow:"auto",
+                    boxShadow:"0 20px 60px rgba(0,0,0,0.6)"}}>
+            <div style={{display:"flex", alignItems:"center", justifyContent:"space-between",
+                         padding:"12px 16px", borderBottom:"1px solid #1f1f30",
+                         position:"sticky", top:0, background:"#0d0d17", zIndex:1}}>
+              <div style={{fontSize:13, fontWeight:600, color:"#e0e0e8"}}>{v.name}</div>
+              <button onClick={() => setDetailsModal(null)}
+                style={{background:"transparent", border:"none", color:"#888", fontSize:22, cursor:"pointer", lineHeight:1}}>×</button>
+            </div>
+
+            <div style={{padding:"10px 16px"}}>
+              {/* Section: Config (always shown) */}
+              <div style={{fontSize:10, fontWeight:600, color:"#a78bfa", marginBottom:6, textTransform:"uppercase", letterSpacing:0.6}}>
+                Config
+              </div>
+              {v._impactOnly ? (
+                <div style={{fontSize:11, color:"#888", padding:8, background:"#0a0a13", borderRadius:4}}>
+                  Esta variante no está activa actualmente — solo aparece en datos de Impact (probablemente cerrada/eliminada).
+                </div>
+              ) : (
+                <>
+                  <Row label="late_entry_risk bloqueados" value={setStr(v.blockLateEntryRisks)} color="#f59e0b" />
+                  <Row label="quality_label bloqueados" value={setStr(v.blockQualityLabels)} color="#f59e0b" />
+                  <Row label="sides bloqueados" value={setStr(v.blockSides)} color="#f59e0b" />
+                  <Row label="modes bloqueados" value={setStr(v.blockModes)} color="#f59e0b" />
+                  <Row label="coins bloqueadas" value={setStr(v.blockCoins)} color="#f59e0b" />
+                  <Row label="min_score override" value={v.minScoreOverride > 0 ? v.minScoreOverride : "—"} />
+                  <Row label="collateral override" value={v.collateralOverrideUsd > 0 ? ("$" + v.collateralOverrideUsd) : "prod"} />
+                  <Row label="block exhausted (AGOTADA)" value={v.blockImpulseExhausted ? "ON" : "off"} color={v.blockImpulseExhausted ? "#f59e0b" : "#666"} />
+                  <Row label="ROI table override" value={v.roiTableOverride || "—"} color="#22d3ee" />
+                  <Row label="SL % override" value={v.slPctOverride != null ? (v.slPctOverride + "%") : "—"} color="#22d3ee" />
+                  <Row label="TP % override" value={v.tpPctOverride != null ? (v.tpPctOverride + "%") : "—"} color="#22d3ee" />
+                  <Row label="Max hold (min)" value={v.maxHoldMinutesOverride != null ? v.maxHoldMinutesOverride : "—"} color="#22d3ee" />
+                  {v.strategyOverrideId != null && <Row label="Strategy override id" value={v.strategyOverrideId} color="#a78bfa" />}
+                </>
+              )}
+
+              {/* Section: Recent decisions for this variant — filtered from main evaluations state */}
+              {(() => {
+                const myDecisions = (evaluations || []).filter(e => e.variant === v.name).slice(0, 8);
+                if (myDecisions.length === 0) return null;
+                return (
+                  <>
+                    <div style={{fontSize:10, fontWeight:600, color:"#a78bfa", margin:"14px 0 6px", textTransform:"uppercase", letterSpacing:0.6}}>
+                      Últimas decisiones ({myDecisions.length})
+                    </div>
+                    <table style={{width:"100%", fontSize:10, fontFamily:"monospace"}}>
+                      <thead><tr style={{color:"#666"}}>
+                        <th style={{textAlign:"left", padding:"3px 4px"}}>cuándo</th>
+                        <th style={{textAlign:"left"}}>coin</th>
+                        <th style={{textAlign:"left"}}>side</th>
+                        <th style={{textAlign:"left"}}>decisión</th>
+                      </tr></thead>
+                      <tbody>
+                        {myDecisions.map((e, i) => (
+                          <tr key={i} style={{borderTop:"1px solid #181828"}}>
+                            <td style={{padding:"3px 4px", color:"#888"}}>{e.evaluatedAt ? new Date(e.evaluatedAt).toLocaleTimeString("es") : "—"}</td>
+                            <td style={{color:"#e0e0e8"}}>{e.coin}</td>
+                            <td style={{color: e.side === "LONG" ? "#22c55e" : "#ef4444"}}>{e.side}</td>
+                            <td style={{color: e.wouldBlock ? "#ef4444" : "#22c55e"}}>{e.wouldBlock ? "blocked" : "would_fire"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </>
+                );
+              })()}
+
+              {/* Section: Recent exits for this variant — filtered from main exits state */}
+              {(() => {
+                const myExits = (exits || []).filter(x => x.variant === v.name).slice(0, 8);
+                if (myExits.length === 0) return null;
+                return (
+                  <>
+                    <div style={{fontSize:10, fontWeight:600, color:"#22d3ee", margin:"14px 0 6px", textTransform:"uppercase", letterSpacing:0.6}}>
+                      Últimos cierres simulados ({myExits.length})
+                    </div>
+                    <table style={{width:"100%", fontSize:10, fontFamily:"monospace"}}>
+                      <thead><tr style={{color:"#666"}}>
+                        <th style={{textAlign:"left", padding:"3px 4px"}}>coin</th>
+                        <th style={{textAlign:"left"}}>vs prod</th>
+                        <th style={{textAlign:"right"}}>delta gross</th>
+                        <th style={{textAlign:"right"}}>hold</th>
+                      </tr></thead>
+                      <tbody>
+                        {myExits.map((x, i) => (
+                          <tr key={i} style={{borderTop:"1px solid #181828"}}>
+                            <td style={{padding:"3px 4px", color:"#e0e0e8"}}>{x.coin}</td>
+                            <td style={{color:"#888"}}>{x.kind || "—"}</td>
+                            <td style={{textAlign:"right", color: (x.deltaGrossPnl ?? 0) >= 0 ? "#22c55e" : "#ef4444"}}>
+                              {x.deltaGrossPnl != null ? (x.deltaGrossPnl >= 0 ? "+" : "") + Number(x.deltaGrossPnl).toFixed(3) : "—"}
+                            </td>
+                            <td style={{textAlign:"right", color:"#888"}}>{x.simHoldSec ? Math.round(x.simHoldSec/60)+"m" : "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </>
+                );
+              })()}
+            </div>
+
+            {/* Action buttons row */}
+            <div style={{display:"flex", gap:8, flexWrap:"wrap", padding:"12px 16px",
+                         borderTop:"1px solid #1f1f30", background:"#0a0a13", justifyContent:"flex-end"}}>
+              <button onClick={() => { promoteToBot(v.name); }}
+                style={{padding:"7px 14px", fontSize:11, background:"#1a1a2e", border:"1px solid #a78bfa", borderRadius:5, color:"#a78bfa", cursor:"pointer", fontWeight:600}}>
+                → Promover al bot
+              </button>
+              <button onClick={() => editVariant(v)}
+                style={{padding:"7px 14px", fontSize:11, background:"#1a1a2e", border:"1px solid #3b82f6", borderRadius:5, color:"#3b82f6", cursor:"pointer"}}>
+                ✎ {t("shadow.edit")}
+              </button>
+              <button onClick={() => { setDetailsModal(null); openDeleteModal(v.name); }}
+                style={{padding:"7px 14px", fontSize:11, background:"#1a1a2e", border:"1px solid #ef4444", borderRadius:5, color:"#ef4444", cursor:"pointer"}}>
+                🗑 {t("shadow.remove")}
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    })()}
+
+    {/* ── Library modal (2026-04-27) ─────────────────────────────── */}
+    {showLibrary && (
+      <div onClick={() => setShowLibrary(false)}
+        style={{position:"fixed", inset:0, background:"rgba(3,4,10,0.78)", zIndex:1000,
+                display:"flex", alignItems:"center", justifyContent:"center",
+                backdropFilter:"blur(3px)", padding:"4vh 4vw"}}>
+        <div onClick={e => e.stopPropagation()}
+          style={{background:"#0d0d17", border:"1px solid #2a2a40", borderRadius:10,
+                  width:"100%", maxWidth:880, maxHeight:"92vh", overflow:"auto",
+                  boxShadow:"0 20px 60px rgba(0,0,0,0.6)"}}>
+          <div style={{display:"flex", alignItems:"center", justifyContent:"space-between",
+                       padding:"12px 16px", borderBottom:"1px solid #1f1f30",
+                       position:"sticky", top:0, background:"#0d0d17", zIndex:1}}>
+            <div style={{fontSize:13, fontWeight:600, color:"#67e8f9"}}>📚 Biblioteca de strategies</div>
+            <button onClick={() => setShowLibrary(false)}
+              style={{background:"transparent", border:"none", color:"#888", fontSize:22, cursor:"pointer", lineHeight:1}}>×</button>
+          </div>
+          <div style={{padding:14}}>
+            <div style={{display:"flex", gap:8, flexWrap:"wrap", marginBottom:12}}>
+              <span style={{fontSize:10, color:"#888", alignSelf:"center"}}>Modo:</span>
+              {["ALL","SCALP","NORMAL","SWING"].map(m => (
+                <button key={m} onClick={() => setLibraryMode(m)}
+                  style={{padding:"3px 10px", fontSize:10, fontFamily:"monospace",
+                          background: libraryMode === m ? "#3b1d8a" : "#1a1a2e",
+                          border:"1px solid " + (libraryMode === m ? "#a78bfa" : "#333"),
+                          color: libraryMode === m ? "#e0e0e8" : "#888",
+                          borderRadius:4, cursor:"pointer"}}>
+                  {m}
+                </button>
+              ))}
+            </div>
+            <div style={{display:"flex", gap:6, flexWrap:"wrap", marginBottom:14}}>
+              <span style={{fontSize:10, color:"#888", alignSelf:"center"}}>Categoría:</span>
+              {["ALL","FAST_ROI","PATIENT","TIGHT_SL","WIDE_TP","QUALITY_FILTER","AGGRESSIVE","CONSERVATIVE","HYBRID","EXPERIMENTAL"].map(c => (
+                <button key={c} onClick={() => setLibraryCat(c)}
+                  style={{padding:"3px 8px", fontSize:9, fontFamily:"monospace",
+                          background: libraryCat === c ? "#0e4f63" : "#1a1a2e",
+                          border:"1px solid " + (libraryCat === c ? "#22d3ee" : "#333"),
+                          color: libraryCat === c ? "#67e8f9" : "#888",
+                          borderRadius:4, cursor:"pointer"}}>
+                  {c}
+                </button>
+              ))}
+            </div>
+            <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(280px, 1fr))", gap:8}}>
+              {libraryPresets
+                .filter(p => libraryMode === "ALL" || p.mode === libraryMode)
+                .filter(p => libraryCat === "ALL" || p.category === libraryCat)
+                .map(p => (
+                  <div key={p.id} style={{padding:10, background:"#0a0a13", border:"1px solid #2a2a40", borderRadius:6}}>
+                    <div style={{display:"flex", justifyContent:"space-between", alignItems:"start", gap:6, marginBottom:4}}>
+                      <div style={{fontSize:11, fontWeight:600, color:"#e0e0e8"}}>{p.name}</div>
+                      <span style={{fontSize:8, padding:"1px 6px", borderRadius:3,
+                                    background: "#0e4f63", color:"#67e8f9", whiteSpace:"nowrap"}}>
+                        {p.mode}/{p.category}
+                      </span>
+                    </div>
+                    <div style={{fontSize:10, color:"#888", lineHeight:1.4, marginBottom:6}}>{p.description}</div>
+                    <div style={{fontSize:9, fontFamily:"monospace", color:"#666", marginBottom:8}}>
+                      {p.roiTable && <div>ROI: <span style={{color:"#a78bfa"}}>{p.roiTable}</span></div>}
+                      <div>
+                        {p.slPctOverride != null && <span>SL <span style={{color:"#fca5a5"}}>{p.slPctOverride}%</span> · </span>}
+                        {p.tpPctOverride != null && <span>TP <span style={{color:"#86efac"}}>{p.tpPctOverride}%</span> · </span>}
+                        <span>prio {p.priority}</span>
+                      </div>
+                    </div>
+                    <button onClick={() => libraryInstallShadow(p.id)}
+                      style={{padding:"5px 10px", fontSize:10, fontWeight:600,
+                              background:"#0e4f63", border:"1px solid #22d3ee", borderRadius:4,
+                              color:"#67e8f9", cursor:"pointer", width:"100%"}}>
+                      Probar como shadow
+                    </button>
+                  </div>
+                ))}
+              {libraryPresets.length === 0 && (
+                <div style={{color:"#666", fontSize:11, padding:8, gridColumn:"1/-1"}}>Cargando…</div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+
     {/* ── In-app flash toast (replaces native alert) ────────────────── */}
     {flash && (
       <div style={{
@@ -5225,7 +5537,337 @@ function ShadowModeTab() {
         </>
       )}
     </Modal>
+
+    {/* ── B1 Confluence Variants (V65) ─────────────────────────────────
+        SEPARATE section from exit shadow variants. Per-user (multi-tenant).
+        User creates variants with custom B1 confluence params; evaluator
+        runs them in parallel against real signals; this section shows the
+        hypothetical net P&L impact so user can decide whether to flip the
+        bot toggle ON. */}
+    <ConfluenceVariantsSection />
   </>);
+}
+
+// ── Confluence Variants Section (V65) ────────────────────────────────
+// Standalone CRUD + stats panel for B1 confluence shadow variants. Lives
+// inside the Shadow tab so the user has all "what-if" experimentation in
+// one place. The bot's actual B1 toggle is in /trading/config — completely
+// independent.
+function ConfluenceVariantsSection() {
+  const [variants, setVariants] = React.useState([]);
+  const [stats, setStats] = React.useState({});
+  const [hours, setHours] = React.useState(24);
+  const [showForm, setShowForm] = React.useState(false);
+  const [editing, setEditing] = React.useState(null);
+  const [detail, setDetail] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState(null);
+
+  const refresh = React.useCallback(async () => {
+    setBusy(true); setErr(null);
+    try {
+      const [vR, sR] = await Promise.all([
+        fetch(API + "/api/shadow/confluence/variants", {credentials:"include"}),
+        fetch(API + "/api/shadow/confluence/variants/stats?hours=" + hours, {credentials:"include"}),
+      ]);
+      if (!vR.ok || !sR.ok) throw new Error("HTTP " + vR.status + "/" + sR.status);
+      const v = await vR.json();
+      const s = await sR.json();
+      setVariants(Array.isArray(v) ? v : []);
+      const byId = {};
+      (Array.isArray(s) ? s : []).forEach(row => { byId[row.variantId] = row; });
+      setStats(byId);
+    } catch (e) { setErr(e.message || String(e)); }
+    setBusy(false);
+  }, [hours]);
+
+  React.useEffect(() => { refresh(); const t = setInterval(refresh, 30000); return () => clearInterval(t); }, [refresh]);
+
+  const onDelete = async (v) => {
+    if (!confirm(`Eliminar variant "${v.name}"? Las evaluaciones asociadas tambien se borraran.`)) return;
+    try {
+      const r = await fetch(API + "/api/shadow/confluence/variants/" + v.id, { method: "DELETE", credentials: "include" });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      await refresh();
+    } catch (e) { alert("Error: " + (e.message || e)); }
+  };
+
+  const fmtNet = (n) => {
+    if (n == null) return "—";
+    const num = Number(n);
+    const color = num > 0 ? "#22c55e" : num < 0 ? "#ef4444" : "#aaa";
+    const sign = num > 0 ? "+" : "";
+    return <span style={{color, fontWeight: 600}}>{sign}${num.toFixed(2)}</span>;
+  };
+
+  return (
+    <div className="panel" style={{marginTop: 20}}>
+      <h3 className="section-title">
+        🎯 B1 Confluence Variants
+        <span style={{fontSize: 11, color: "#888", marginLeft: 8, fontWeight: 400}}>
+          (V65 · evaluación paralela "what-if" del filtro confluence)
+        </span>
+      </h3>
+      <p style={{fontSize: 11, color: "#888", marginBottom: 12}}>
+        Crea variants con parámetros custom. Cada variant evalúa cada señal real en paralelo y registra qué <b>habría</b> bloqueado.
+        Sin afectar producción. Cuando una variant te convenza, vete a <code>Trading → Config → B1 Confluence Filter</code> y actívalo manualmente.
+      </p>
+
+      {err && <div style={{color: "#ef4444", fontSize: 11, marginBottom: 8}}>⚠️ {err}</div>}
+
+      <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexWrap: "wrap", gap: 8}}>
+        <div>
+          <label style={{fontSize: 10, color: "#888", marginRight: 6}}>Stats ventana:</label>
+          <select value={hours} onChange={e => setHours(Number(e.target.value))} style={{fontSize: 11, padding: "2px 6px"}}>
+            <option value={6}>6h</option>
+            <option value={24}>24h</option>
+            <option value={72}>72h</option>
+            <option value={168}>7d</option>
+          </select>
+          <span style={{fontSize: 10, color: "#666", marginLeft: 8}}>Auto-refresh 30s</span>
+        </div>
+        <button onClick={() => { setEditing(null); setShowForm(true); }}
+                style={{background: "#7c3aed", color: "white", border: 0, padding: "6px 12px", borderRadius: 6, fontWeight: 600, fontSize: 11}}>
+          + Nueva Variant
+        </button>
+      </div>
+
+      {variants.length === 0 ? (
+        <div style={{color: "#666", fontSize: 11, padding: 20, textAlign: "center", border: "1px dashed #333", borderRadius: 6}}>
+          No tienes variants. Crea una para empezar a ver el "what-if".
+        </div>
+      ) : (
+        <div style={{overflowX: "auto"}}>
+          <table style={{width: "100%", fontSize: 11, borderCollapse: "collapse"}}>
+            <thead>
+              <tr style={{borderBottom: "1px solid #333", color: "#888"}}>
+                <th style={{textAlign: "left", padding: "6px 4px"}}>Nombre</th>
+                <th style={{textAlign: "center", padding: "6px 4px"}}>ON/OFF</th>
+                <th style={{textAlign: "center", padding: "6px 4px"}}>Max fails</th>
+                <th style={{textAlign: "center", padding: "6px 4px"}}>Checks</th>
+                <th style={{textAlign: "right", padding: "6px 4px"}}>Evals</th>
+                <th style={{textAlign: "right", padding: "6px 4px"}}>Habría bloq.</th>
+                <th style={{textAlign: "right", padding: "6px 4px"}}>Net hipotético</th>
+                <th style={{textAlign: "center", padding: "6px 4px"}}>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {variants.map(v => {
+                const s = stats[v.id] || {};
+                const checksOn = [];
+                if (v.confluenceCheckTrend1h) checksOn.push("trend1h");
+                if (v.confluenceCheckBtcMacro) checksOn.push("btc");
+                if (v.confluenceCheckPricePosition) checksOn.push("pp");
+                if (v.confluenceCheckRsiExtreme) checksOn.push("rsi");
+                return (
+                  <tr key={v.id} style={{borderBottom: "1px solid #222", cursor: "pointer"}} onClick={() => setDetail(v)}>
+                    <td style={{padding: "6px 4px", color: "#e0e0e8", fontWeight: 600}}>{v.name}</td>
+                    <td style={{padding: "6px 4px", textAlign: "center"}}>
+                      <span style={{color: v.enabled ? "#22c55e" : "#666", fontSize: 10}}>{v.enabled ? "ON" : "OFF"}</span>
+                    </td>
+                    <td style={{padding: "6px 4px", textAlign: "center", color: "#aaa"}}>{v.confluenceMaxFailedChecks}</td>
+                    <td style={{padding: "6px 4px", textAlign: "center", color: "#888", fontSize: 10}}>{checksOn.join(", ") || "—"}</td>
+                    <td style={{padding: "6px 4px", textAlign: "right", color: "#aaa"}}>{s.totalEvaluations ?? 0}</td>
+                    <td style={{padding: "6px 4px", textAlign: "right", color: "#f59e0b"}}>{s.wouldBlockCount ?? 0}</td>
+                    <td style={{padding: "6px 4px", textAlign: "right"}}>{fmtNet(s.netHypothetical)}</td>
+                    <td style={{padding: "6px 4px", textAlign: "center"}} onClick={e => e.stopPropagation()}>
+                      <button onClick={() => { setEditing(v); setShowForm(true); }}
+                              style={{background: "#374151", color: "#e0e0e8", border: 0, padding: "3px 8px", borderRadius: 4, fontSize: 10, marginRight: 4, cursor: "pointer"}}>Editar</button>
+                      <button onClick={() => onDelete(v)}
+                              style={{background: "#7f1d1d", color: "#fca5a5", border: 0, padding: "3px 8px", borderRadius: 4, fontSize: 10, cursor: "pointer"}}>Quitar</button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Form modal */}
+      {showForm && <ConfluenceVariantForm initial={editing} onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); refresh(); }} />}
+      {/* Detail modal */}
+      {detail && <ConfluenceVariantDetail variant={detail} stats={stats[detail.id]} hours={hours} onClose={() => setDetail(null)} />}
+    </div>
+  );
+}
+
+// Form for create / edit confluence variant.
+function ConfluenceVariantForm({ initial, onClose, onSaved }) {
+  const isEdit = !!initial;
+  const [form, setForm] = React.useState(initial || {
+    name: "",
+    enabled: true,
+    confluenceMaxFailedChecks: 2,
+    confluenceCheckTrend1h: true,
+    confluenceCheckBtcMacro: true,
+    confluenceCheckPricePosition: true,
+    confluenceCheckRsiExtreme: true,
+    confluenceBtcMacroMaxAgainstPct: 0.50,
+    confluenceMaxPricePositionLong: 0.85,
+    confluenceMinPricePositionShort: 0.15,
+    confluenceRsiMaxLong: 75.0,
+    confluenceRsiMinShort: 25.0,
+  });
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState(null);
+
+  const submit = async () => {
+    if (!form.name || !form.name.trim()) { setErr("Nombre obligatorio"); return; }
+    setBusy(true); setErr(null);
+    try {
+      const url = isEdit
+        ? API + "/api/shadow/confluence/variants/" + initial.id
+        : API + "/api/shadow/confluence/variants";
+      const r = await fetch(url, {
+        method: isEdit ? "PUT" : "POST",
+        credentials: "include",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(form),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        throw new Error(d.error || ("HTTP " + r.status));
+      }
+      onSaved();
+    } catch (e) { setErr(e.message || String(e)); }
+    setBusy(false);
+  };
+
+  const setF = (k, v) => setForm(p => ({...p, [k]: v}));
+
+  return (
+    <div onClick={onClose} style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:50, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
+      <div onClick={e => e.stopPropagation()} style={{background:"#1a1a26", border:"1px solid #333", borderRadius:8, padding:20, maxWidth:500, width:"100%", maxHeight:"90vh", overflowY:"auto"}}>
+        <h3 style={{marginTop:0, color:"#e0e0e8"}}>{isEdit ? "Editar" : "Nueva"} Confluence Variant</h3>
+        {err && <div style={{color:"#ef4444", fontSize:11, marginBottom:8}}>⚠️ {err}</div>}
+
+        <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, fontSize:11}}>
+          <div style={{gridColumn:"1 / span 2"}}>
+            <label style={{color:"#888", display:"block", marginBottom:2}}>Nombre</label>
+            <input value={form.name} onChange={e => setF("name", e.target.value)} disabled={isEdit}
+                   style={{width:"100%", padding:6, background:"#0f0f17", border:"1px solid #333", color:"#e0e0e8", borderRadius:4}}/>
+          </div>
+          <div>
+            <label style={{color:"#888", display:"block", marginBottom:2}}>Activa</label>
+            <button onClick={() => setF("enabled", !form.enabled)}
+                    style={{padding:"6px 12px", background:form.enabled?"#16a34a":"#374151", color:"white", border:0, borderRadius:4, fontWeight:600}}>
+              {form.enabled ? "ON" : "OFF"}
+            </button>
+          </div>
+          <div>
+            <label style={{color:"#888", display:"block", marginBottom:2}}>Max fails (bloquea si ≥)</label>
+            <input type="number" min="1" value={form.confluenceMaxFailedChecks} onChange={e => setF("confluenceMaxFailedChecks", Number(e.target.value))}
+                   style={{width:"100%", padding:6, background:"#0f0f17", border:"1px solid #333", color:"#e0e0e8", borderRadius:4}}/>
+          </div>
+
+          <div style={{gridColumn:"1 / span 2", borderTop:"1px solid #333", paddingTop:10, marginTop:6, color:"#888", fontSize:10}}>CHECKS HABILITADOS</div>
+          {[
+            ["confluenceCheckTrend1h", "trend1h contradice side"],
+            ["confluenceCheckBtcMacro", "BTC macro 30m contra"],
+            ["confluenceCheckPricePosition", "price position extrema"],
+            ["confluenceCheckRsiExtreme", "RSI extremo"],
+          ].map(([k, lbl]) => (
+            <div key={k}>
+              <label style={{color:"#aaa", display:"flex", alignItems:"center", gap:6, cursor:"pointer"}}>
+                <input type="checkbox" checked={!!form[k]} onChange={e => setF(k, e.target.checked)}/>
+                {lbl}
+              </label>
+            </div>
+          ))}
+
+          <div style={{gridColumn:"1 / span 2", borderTop:"1px solid #333", paddingTop:10, marginTop:6, color:"#888", fontSize:10}}>UMBRALES</div>
+          <div>
+            <label style={{color:"#888", display:"block", marginBottom:2}}>BTC max against % (30m)</label>
+            <input type="number" step="0.05" min="0" value={form.confluenceBtcMacroMaxAgainstPct}
+                   onChange={e => setF("confluenceBtcMacroMaxAgainstPct", Number(e.target.value))}
+                   style={{width:"100%", padding:6, background:"#0f0f17", border:"1px solid #333", color:"#e0e0e8", borderRadius:4}}/>
+          </div>
+          <div>
+            <label style={{color:"#888", display:"block", marginBottom:2}}>Price pos max LONG</label>
+            <input type="number" step="0.05" min="0" max="1" value={form.confluenceMaxPricePositionLong}
+                   onChange={e => setF("confluenceMaxPricePositionLong", Number(e.target.value))}
+                   style={{width:"100%", padding:6, background:"#0f0f17", border:"1px solid #333", color:"#e0e0e8", borderRadius:4}}/>
+          </div>
+          <div>
+            <label style={{color:"#888", display:"block", marginBottom:2}}>Price pos min SHORT</label>
+            <input type="number" step="0.05" min="0" max="1" value={form.confluenceMinPricePositionShort}
+                   onChange={e => setF("confluenceMinPricePositionShort", Number(e.target.value))}
+                   style={{width:"100%", padding:6, background:"#0f0f17", border:"1px solid #333", color:"#e0e0e8", borderRadius:4}}/>
+          </div>
+          <div>
+            <label style={{color:"#888", display:"block", marginBottom:2}}>RSI max LONG</label>
+            <input type="number" step="1" min="0" max="100" value={form.confluenceRsiMaxLong}
+                   onChange={e => setF("confluenceRsiMaxLong", Number(e.target.value))}
+                   style={{width:"100%", padding:6, background:"#0f0f17", border:"1px solid #333", color:"#e0e0e8", borderRadius:4}}/>
+          </div>
+          <div>
+            <label style={{color:"#888", display:"block", marginBottom:2}}>RSI min SHORT</label>
+            <input type="number" step="1" min="0" max="100" value={form.confluenceRsiMinShort}
+                   onChange={e => setF("confluenceRsiMinShort", Number(e.target.value))}
+                   style={{width:"100%", padding:6, background:"#0f0f17", border:"1px solid #333", color:"#e0e0e8", borderRadius:4}}/>
+          </div>
+        </div>
+
+        <div style={{display:"flex", justifyContent:"flex-end", gap:8, marginTop:16}}>
+          <button onClick={onClose} disabled={busy}
+                  style={{padding:"6px 14px", background:"#374151", color:"#e0e0e8", border:0, borderRadius:4}}>Cancelar</button>
+          <button onClick={submit} disabled={busy}
+                  style={{padding:"6px 14px", background:"#7c3aed", color:"white", border:0, borderRadius:4, fontWeight:600}}>
+            {busy ? "..." : (isEdit ? "Guardar" : "Crear")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Read-only detail modal: config + stats summary.
+function ConfluenceVariantDetail({ variant, stats, hours, onClose }) {
+  const v = variant;
+  const s = stats || {};
+  const fmtNet = (n) => {
+    if (n == null) return "—";
+    const num = Number(n);
+    const color = num > 0 ? "#22c55e" : num < 0 ? "#ef4444" : "#aaa";
+    return <span style={{color, fontWeight:600}}>{(num > 0 ? "+" : "") + "$" + num.toFixed(2)}</span>;
+  };
+  return (
+    <div onClick={onClose} style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:50, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
+      <div onClick={e => e.stopPropagation()} style={{background:"#1a1a26", border:"1px solid #333", borderRadius:8, padding:20, maxWidth:500, width:"100%", maxHeight:"90vh", overflowY:"auto"}}>
+        <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12}}>
+          <h3 style={{margin:0, color:"#e0e0e8"}}>{v.name}</h3>
+          <button onClick={onClose} style={{background:"transparent", border:0, color:"#888", fontSize:18, cursor:"pointer"}}>×</button>
+        </div>
+
+        <div style={{color:"#7c3aed", fontSize:10, fontWeight:700, marginBottom:6}}>STATS ({hours}h)</div>
+        <table style={{width:"100%", fontSize:11, marginBottom:14}}>
+          <tbody>
+            <tr><td style={{color:"#888", padding:"3px 0"}}>Total evaluaciones</td><td style={{color:"#e0e0e8", textAlign:"right"}}>{s.totalEvaluations ?? 0}</td></tr>
+            <tr><td style={{color:"#888", padding:"3px 0"}}>Habría bloqueado</td><td style={{color:"#f59e0b", textAlign:"right"}}>{s.wouldBlockCount ?? 0}</td></tr>
+            <tr><td style={{color:"#888", padding:"3px 0"}}>Outcome conocido</td><td style={{color:"#aaa", textAlign:"right"}}>{s.blockedWithKnownOutcome ?? 0}</td></tr>
+            <tr><td style={{color:"#888", padding:"3px 0"}}>· Losers bloqueados (bueno)</td><td style={{color:"#22c55e", textAlign:"right"}}>{s.blockedLosers ?? 0}</td></tr>
+            <tr><td style={{color:"#888", padding:"3px 0"}}>· Winners bloqueados (malo)</td><td style={{color:"#ef4444", textAlign:"right"}}>{s.blockedWinners ?? 0}</td></tr>
+            <tr><td style={{color:"#888", padding:"3px 0"}}>$ ahorrado de losers</td><td style={{textAlign:"right"}}>{s.savedFromLosers != null ? "+$" + Number(s.savedFromLosers).toFixed(2) : "—"}</td></tr>
+            <tr><td style={{color:"#888", padding:"3px 0"}}>$ perdido de winners</td><td style={{textAlign:"right"}}>{s.lostFromWinners != null ? "−$" + Number(s.lostFromWinners).toFixed(2) : "—"}</td></tr>
+            <tr style={{borderTop:"1px solid #333"}}><td style={{color:"#e0e0e8", padding:"6px 0", fontWeight:700}}>Net hipotético</td><td style={{textAlign:"right"}}>{fmtNet(s.netHypothetical)}</td></tr>
+          </tbody>
+        </table>
+
+        <div style={{color:"#7c3aed", fontSize:10, fontWeight:700, marginBottom:6}}>CONFIG</div>
+        <table style={{width:"100%", fontSize:11}}>
+          <tbody>
+            <tr><td style={{color:"#888", padding:"3px 0"}}>Activa</td><td style={{textAlign:"right", color:v.enabled?"#22c55e":"#666"}}>{v.enabled ? "ON" : "OFF"}</td></tr>
+            <tr><td style={{color:"#888", padding:"3px 0"}}>Max failed checks</td><td style={{textAlign:"right", color:"#e0e0e8"}}>{v.confluenceMaxFailedChecks}</td></tr>
+            <tr><td style={{color:"#888", padding:"3px 0"}}>trend1h check</td><td style={{textAlign:"right"}}>{v.confluenceCheckTrend1h ? "✓" : "—"}</td></tr>
+            <tr><td style={{color:"#888", padding:"3px 0"}}>BTC macro check</td><td style={{textAlign:"right"}}>{v.confluenceCheckBtcMacro ? "✓ (max " + v.confluenceBtcMacroMaxAgainstPct + "%)" : "—"}</td></tr>
+            <tr><td style={{color:"#888", padding:"3px 0"}}>price position check</td><td style={{textAlign:"right"}}>{v.confluenceCheckPricePosition ? "✓ (L<" + v.confluenceMaxPricePositionLong + ", S>" + v.confluenceMinPricePositionShort + ")" : "—"}</td></tr>
+            <tr><td style={{color:"#888", padding:"3px 0"}}>RSI extremo check</td><td style={{textAlign:"right"}}>{v.confluenceCheckRsiExtreme ? "✓ (L<" + v.confluenceRsiMaxLong + ", S>" + v.confluenceRsiMinShort + ")" : "—"}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
 // ── Help Tab ──────────────────────────────────────────────────────────

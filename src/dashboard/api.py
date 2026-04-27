@@ -1157,6 +1157,38 @@ def create_app(
     async def shadow_variant_promote(name: str, body: dict, request: Request):
         return await _shadow_proxy("POST", f"/api/admin/shadow/variants/{name}/promote", request, body=body)
 
+    # ── B1 Confluence shadow variants (V65) ──
+    # Per-user (multi-tenant) — proxies the bot's /api/shadow/confluence/*
+    # endpoints. Variants are user-scoped, NOT admin. Exposes CRUD + stats.
+
+    @app.get("/api/shadow/confluence/variants")
+    async def confluence_variants_list(request: Request):
+        return await _shadow_proxy("GET", "/api/shadow/confluence/variants", request)
+
+    @app.post("/api/shadow/confluence/variants")
+    async def confluence_variants_create(body: dict, request: Request):
+        return await _shadow_proxy("POST", "/api/shadow/confluence/variants", request, body=body)
+
+    @app.put("/api/shadow/confluence/variants/{vid}")
+    async def confluence_variants_update(vid: int, body: dict, request: Request):
+        return await _shadow_proxy("PUT", f"/api/shadow/confluence/variants/{vid}", request, body=body)
+
+    @app.delete("/api/shadow/confluence/variants/{vid}")
+    async def confluence_variants_delete(vid: int, request: Request):
+        return await _shadow_proxy("DELETE", f"/api/shadow/confluence/variants/{vid}", request)
+
+    @app.get("/api/shadow/confluence/variants/{vid}/stats")
+    async def confluence_variants_stats(vid: int, request: Request):
+        qs = request.url.query
+        suffix = f"?{qs}" if qs else ""
+        return await _shadow_proxy("GET", f"/api/shadow/confluence/variants/{vid}/stats{suffix}", request)
+
+    @app.get("/api/shadow/confluence/variants/stats")
+    async def confluence_variants_all_stats(request: Request):
+        qs = request.url.query
+        suffix = f"?{qs}" if qs else ""
+        return await _shadow_proxy("GET", f"/api/shadow/confluence/variants/stats{suffix}", request)
+
     # ── Strategies (Fase P del engine overhaul, 2026-04-25) ──
     # Proxy a /api/strategies del bot. El platform muestra las strategies del
     # user logueado (mismo JWT) + permite crear desde plantillas o importar
@@ -1188,6 +1220,22 @@ def create_app(
     @app.delete("/api/strategies/{strategy_id}")
     async def strategies_delete(strategy_id: int, request: Request):
         return await _shadow_proxy("DELETE", f"/api/strategies/{strategy_id}", request)
+
+    # ── Library: catálogo de presets curados (2026-04-27) ──────────
+    # Una sola fuente de verdad en el bot; el platform actúa de proxy.
+    @app.get("/api/strategies/library")
+    async def strategies_library(request: Request):
+        qs = request.url.query
+        suffix = f"?{qs}" if qs else ""
+        return await _shadow_proxy("GET", f"/api/strategies/library{suffix}", request)
+
+    @app.post("/api/strategies/library/install")
+    async def strategies_library_install(body: dict, request: Request):
+        return await _shadow_proxy("POST", "/api/strategies/library/install", request, body=body)
+
+    @app.post("/api/strategies/library/install-as-shadow")
+    async def strategies_library_install_shadow(body: dict, request: Request):
+        return await _shadow_proxy("POST", "/api/strategies/library/install-as-shadow", request, body=body)
 
     # ── Serve frontend ──
     _static = Path(os.path.dirname(os.path.abspath(__file__))) / "static"
