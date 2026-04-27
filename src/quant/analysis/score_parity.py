@@ -24,6 +24,29 @@ class ScoreParityAnalyzer:
         uf = f"AND user_id = {user_id}" if user_id else ""
         uf_where = f"WHERE user_id = {user_id}" if user_id else ""
 
+        # Bug fix 2026-04-27: trades adopted/manual/external NEVER pass through
+        # the bot's signal scoring (they're picked up post-hoc by the reconcile
+        # branch or the user closing positions from the HL UI). Including them
+        # in score parity would always report 100*adopted/total trades as
+        # "missing scores" — which is by design, not a bug. We exclude them
+        # from BOTH the all-rows numerator and denominator so the resulting
+        # coverage_pct reflects only the bot-driven entries that actually
+        # ran the scoring pipeline.
+        # entry_tag values used: 'adopted' (race fix v2), 'manual' (user UI close),
+        # 'backfill_*' (V59 historical). exit_reason '%EXTERNAL%' covers
+        # RECONCILE_EXTERNAL / MANUAL_EXTERNAL / SL_EXTERNAL (external close paths).
+        # Note: trade_outcomes (platform) does not carry the bot's `origin` column,
+        # so we infer "non-bot-driven" via entry_tag + exit_reason patterns.
+        score_excl = (
+            "AND coalesce(entry_tag, '') NOT IN ('adopted', 'manual') "
+            "AND coalesce(entry_tag, '') NOT LIKE 'backfill_%' "
+            "AND coalesce(exit_reason, '') NOT LIKE '%EXTERNAL%'"
+        )
+        if uf_where:
+            uf_where = f"{uf_where} {score_excl}"
+        else:
+            uf_where = f"WHERE 1=1 {score_excl}"
+
         result: dict[str, Any] = {
             "trade_scores": {},
             "signal_scores": {},

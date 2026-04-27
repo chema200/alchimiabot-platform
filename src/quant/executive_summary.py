@@ -347,12 +347,22 @@ class ExecutiveSummaryBuilder:
 
     def _extract_data_quality_issues(self, score_parity: dict,
                                       analysis: dict) -> list[str]:
+        # 2026-04-27: this list shows up as "Problemas de calidad" in the
+        # Conclusions tab. We only flag REAL issues now — adopted/manual/
+        # external trades are excluded upstream in score_parity.analyze()
+        # so missing-score reports here mean the bot's scoring pipeline is
+        # actually broken for bot-driven entries (vs the previous noise from
+        # adopted positions which never had scores by design).
         issues = []
         for anomaly in score_parity.get("anomalies", []):
             issues.append(f"[{anomaly['severity'].upper()}] {anomaly['message']}")
 
         if score_parity.get("coverage_pct", 0) < 80:
-            issues.append(f"Score coverage is only {score_parity['coverage_pct']}% - some trades lack complete scoring")
+            issues.append(
+                f"Score coverage is only {score_parity['coverage_pct']}% on bot-driven entries — "
+                f"adopted/manual/external trades are already excluded, so this means the live "
+                f"scoring pipeline is dropping data on legit signals. Check engine logs."
+            )
 
         if score_parity.get("status") == "NO_DATA":
             issues.append("No trade or signal data found in database")

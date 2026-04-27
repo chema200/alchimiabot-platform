@@ -1803,9 +1803,22 @@ function SystemTab() {
       </div>
       <LivePulse intervalSec={3} />
     </div>
+
+    {/* 2026-04-27: explanatory banner — users were confused why "only 20 coins"
+        when the bot trades 60+. The platform ingests a SUBSET for tick-by-tick
+        quant analysis (orderbook, microstructure, features). Bot trading
+        universe is independent. */}
+    <div style={{background:"rgba(56,189,248,0.06)", border:"1px solid rgba(56,189,248,0.20)", borderRadius:8, padding:"10px 14px", marginBottom:14, fontSize:11.5, color:"#cbd5e1", lineHeight:1.55}}>
+      <span style={{color:"#38bdf8", fontWeight:700, marginRight:6}}>ℹ️ Importante:</span>
+      Estas son las coins que el <b>platform</b> ingesta tick-by-tick para análisis quant
+      (orderbook, microstructura, features). <b>NO</b> son las que el bot trade —
+      el bot opera ~60 coins independientemente. El subset reducido aquí evita saturar
+      la BD con eventos de mercado innecesarios.
+    </div>
+
     <div className="grid">
       <MC label={t("system.card.status")} value={status.status?.toUpperCase()} color="green" />
-      <MC label={t("system.card.coins")} value={status.features?.coins_tracked || 0} sub={t("system.card.coins_sub")} color="purple" />
+      <MC label={t("system.card.coins")} value={status.features?.coins_tracked || 0} sub="ingestadas (no las que opera el bot)" color="purple" />
       <MC label={t("system.card.events")} value={(status.features?.events_ingested || 0).toLocaleString()} sub={t("system.card.events_sub")} />
       <MC label={t("system.card.features")} value={status.features?.total_features || 0} sub={t("system.card.features_sub")} color="blue" />
     </div>
@@ -1876,6 +1889,16 @@ function FeaturesTab() {
         <div className="page-sub">{t("features.subtitle")}</div>
       </div>
       <LivePulse intervalSec={5} />
+    </div>
+    {/* 2026-04-27: same clarification as in System tab — features here are
+        only computed for the platform-ingested coin subset, NOT the bot
+        trading universe. */}
+    <div style={{background:"rgba(56,189,248,0.06)", border:"1px solid rgba(56,189,248,0.20)", borderRadius:8, padding:"10px 14px", marginBottom:14, fontSize:11.5, color:"#cbd5e1", lineHeight:1.55}}>
+      <span style={{color:"#38bdf8", fontWeight:700, marginRight:6}}>ℹ️</span>
+      Features (RSI, EMA, ATR, etc.) calculadas en tiempo real para las {coins.length} coins
+      que el platform ingesta tick-by-tick. Si quieres añadir más coins al análisis quant,
+      configúralo en <code style={{background:"#0a0a13", padding:"2px 6px", borderRadius:3}}>config/settings.py → INGEST_COINS</code>.
+      <b> El bot puede tradear coins que NO aparecen aquí</b> — usa sus propios indicadores via API.
     </div>
     {coins.length === 0 ? (
       <div className="card" style={{padding:20, textAlign:"center", color:"#888", fontSize:12}}>{t("common.no_features_yet")}</div>
@@ -2039,10 +2062,11 @@ function DailyReportTab() {
   const [page, setPage] = useState(0);  // pagination
   const PAGE_SIZE = 15;
 
-  // Generate list of last 90 days. We do NOT auto-load any reports anymore —
-  // a "daily report" for a day with zero trades is just a wall of zeros that
-  // looks like stale data to the user. The UI now waits for an explicit
-  // click on a row before generating anything.
+  // Generate list of last 90 days. 2026-04-27: AUTO-LOAD the visible page so
+  // the table shows real data on first paint. Empty days render as
+  // "no activity" inline (handled in the row template) so they're visually
+  // distinct from "not loaded yet". Auto-load only the current page's 15 days
+  // to keep the request volume bounded; pagination triggers next batch.
   useEffect(() => {
     const d = [];
     for (let i = 0; i < 90; i++) {
@@ -2058,6 +2082,17 @@ function DailyReportTab() {
       setReports(prev => ({...prev, [dateStr]: d}));
     }).catch(() => {});
   };
+
+  // Auto-load current page in parallel — fires on tab mount AND on page change.
+  useEffect(() => {
+    if (days.length === 0) return;
+    const visible = days.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+    visible.forEach(d => {
+      if (!reports[d]) loadDayQuiet(d);
+    });
+    // intentionally not depending on `reports` to avoid re-triggering on every load completion
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [days, page]);
 
   const loadDay = (dateStr) => {
     if (reports[dateStr]) { setSelected(dateStr); return; }
@@ -2109,7 +2144,7 @@ function DailyReportTab() {
                   <td style={{textAlign:"right"}}>{r ? (p.profit_factor || 0) : "-"}</td>
                   <td style={{textAlign:"right", color: issueCount > 0 ? "#eab308" : "#22c55e"}}>{r ? issueCount : "-"}</td>
                 </>)}
-                <td style={{textAlign:"right"}}>{!r && <span onClick={(e) => { e.stopPropagation(); loadDay(d); }} style={{color:"#666", fontSize:10, cursor:"pointer"}}>{t("daily.load_cell")}</span>}</td>
+                <td style={{textAlign:"right"}}>{!r && <span style={{color:"#444", fontSize:10}}>…</span>}</td>
               </tr>
             );
           })}
@@ -3251,29 +3286,96 @@ function ResearchTab() {
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState("daily_summary");
+  const [err, setErr] = useState(null);
+  const [fetchedAt, setFetchedAt] = useState(null);
 
-  const loadReport = () => {
+  const loadReport = async () => {
     setLoading(true);
-    fetch(API + "/api/reports/full").then(r => r.json()).then(d => { setReport(d); setLoading(false); }).catch(() => setLoading(false));
+    setErr(null);
+    try {
+      const r = await fetch(API + "/api/reports/full", {credentials: "include"});
+      if (!r.ok) throw new Error("HTTP " + r.status + " " + r.statusText);
+      const d = await r.json();
+      if (!d || typeof d !== "object") throw new Error("Respuesta inválida del servidor");
+      setReport(d);
+      setFetchedAt(new Date());
+    } catch (e) {
+      setErr(e.message || String(e));
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { loadReport(); }, []);
 
-  const views = ["daily_summary", "wr_by_coin", "wr_by_side", "wr_by_hour", "pnl_by_mode", "pnl_by_tag", "pnl_by_exit_reason", "fee_analysis", "poison_coins", "rescuable_coins", "signal_blocked_vs_entered"];
+  // Each view = (id, friendly label, what it shows). Surfaces meaning instead
+  // of `wr_by_coin → "wr by coin"` which the user couldn't parse at a glance.
+  const views = [
+    {id: "daily_summary", label: "Resumen diario", tip: "PnL gross/fees/net + WR agregados por día (todos los modos, todas las strategies)."},
+    {id: "wr_by_coin", label: "WR por coin", tip: "Win-rate y PnL acumulado de cada coin que has operado. Útil para detectar coins crónicamente perdedoras."},
+    {id: "wr_by_side", label: "WR por LONG/SHORT", tip: "Asimetría direccional: si LONG va mucho mejor que SHORT (o viceversa) puede ser bias del market o del bot."},
+    {id: "wr_by_hour", label: "WR por hora", tip: "Performance por hora del día (UTC). Detecta franjas horarias donde el bot rinde mal."},
+    {id: "pnl_by_mode", label: "PnL por modo", tip: "Comparativa SCALP / NORMAL / SWING. Ayuda a decidir si concentrar el budget en un modo."},
+    {id: "pnl_by_tag", label: "PnL por entry_tag", tip: "PnL agrupado por la etiqueta que el motor pone a la entrada (trend_5m+macro+strategy:X)."},
+    {id: "pnl_by_exit_reason", label: "PnL por motivo salida", tip: "Cuánto cierra cada tipo de exit (ROI/TP/SL/TIMEOUT). Si SL pierde mucho más que TP gana, falla la asimetría."},
+    {id: "fee_analysis", label: "Análisis de fees", tip: "Coins donde las fees se están comiendo el gross. fee_killed = trades positivos en gross pero negativos en net."},
+    {id: "poison_coins", label: "Coins venenosas", tip: "Top 15 peor avg_pnl. Candidatas a bloquear desde Coin Profile (mín 3 trades)."},
+    {id: "rescuable_coins", label: "Coins ganadoras", tip: "Top 15 mejor avg_pnl. Candidatas a más allocation o whitelist (mín 3 trades)."},
+    {id: "signal_blocked_vs_entered", label: "Señales: bloqueadas vs entradas", tip: "Cuántas señales evaluó el motor y qué hizo (BLOCKED/ENTER). Compara scores promedio de cada bucket."},
+  ];
 
-  if (loading) return <div className="loading">{t("research.generating")}</div>;
+  const currentView = views.find(v => v.id === view) || views[0];
+
+  if (loading && !report) return <div className="loading">{t("research.generating")}</div>;
+  if (err && !report) return (
+    <div style={{padding:20}}>
+      <div style={{color:"#ef4444", marginBottom:10}}>⚠️ Error cargando reportes: <code>{err}</code></div>
+      <div style={{color:"#888", fontSize:11, marginBottom:12}}>
+        Si ves "Unauthorized" o 401, tu sesión ha caducado — recarga la página y vuelve a entrar. Si ves "HTTP 500", revisa los logs del platform (<code>logs/v2-platform.log</code>).
+      </div>
+      <button onClick={loadReport} className="tab">Reintentar</button>
+    </div>
+  );
   if (!report) return <div className="loading">{t("research.no_data_yet")} <button onClick={loadReport} className="tab">{t("research.load")}</button></div>;
 
   const data = report[view] || [];
   const cols = data.length > 0 ? Object.keys(data[0]) : [];
 
+  // Row counts per view — surfaces empty datasets BEFORE the user clicks.
+  const counts = {};
+  for (const v of views) counts[v.id] = (report[v.id] || []).length;
+
   return (<>
-    <div className="page-title">{t("research.title")}<div className="page-sub">{t("research.subtitle")}</div></div>
-    <div style={{display:"flex", gap:4, flexWrap:"wrap", marginBottom:16}}>
-      {views.map(v => (
-        <button key={v} className={"tab " + (view === v ? "active" : "")} onClick={() => setView(v)}>{v.replace(/_/g, " ")}</button>
-      ))}
-      <button className="tab" onClick={loadReport} style={{marginLeft:"auto"}}>{t("research.refresh")}</button>
+    <div className="page-title">
+      {t("research.title")}
+      <div className="page-sub">
+        {t("research.subtitle")}
+        {fetchedAt && <span style={{marginLeft:8, color:"#666", fontSize:10}}>· cargado {fetchedAt.toLocaleTimeString()}</span>}
+      </div>
+    </div>
+    {err && (
+      <div style={{background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.3)", color:"#fca5a5", padding:8, borderRadius:4, marginBottom:12, fontSize:11}}>
+        ⚠️ Última recarga falló: <code>{err}</code> · mostrando datos previos
+      </div>
+    )}
+    <div style={{display:"flex", gap:4, flexWrap:"wrap", marginBottom:8}}>
+      {views.map(v => {
+        const n = counts[v.id] || 0;
+        const isActive = view === v.id;
+        return (
+          <button key={v.id} className={"tab " + (isActive ? "active" : "")} onClick={() => setView(v.id)}
+            title={v.tip + (n === 0 ? " · (sin datos)" : ` · ${n} filas`)}
+            style={{opacity: n === 0 ? 0.55 : 1}}>
+            {v.label} <span style={{fontSize:9, color: n === 0 ? "#666" : "#888", marginLeft:4}}>({n})</span>
+          </button>
+        );
+      })}
+      <button className="tab" onClick={loadReport} style={{marginLeft:"auto"}} disabled={loading}>
+        {loading ? "..." : t("research.refresh")}
+      </button>
+    </div>
+    <div style={{fontSize:11, color:"#888", marginBottom:8, padding:"6px 10px", background:"#0a0a14", borderRadius:4, border:"1px solid #1a1a2e"}}>
+      <span style={{color:"#a78bfa", fontWeight:600}}>{currentView.label}:</span> {currentView.tip}
     </div>
     <div className="card scroll">
       <table>
@@ -3291,7 +3393,14 @@ function ResearchTab() {
           ))}
         </tbody>
       </table>
-      {data.length === 0 && <div className="loading">{t("research.no_data_report")}</div>}
+      {data.length === 0 && (
+        <div className="loading" style={{padding:20}}>
+          {t("research.no_data_report")}
+          <div style={{color:"#666", fontSize:10, marginTop:8}}>
+            Esta vista está vacía. Posibles motivos: aún no hay trades del tipo que la query agrega, o la tabla fuente está vacía para tu user_id.
+          </div>
+        </div>
+      )}
     </div>
   </>);
 }
@@ -3411,12 +3520,16 @@ function TradesTab() {
   const [loading, setLoading] = useState(false);
   const [byStrategy, setByStrategy] = useState(null);
   const [byTemplate, setByTemplate] = useState(null);
+  const [allStrategies, setAllStrategies] = useState(null);
 
   useEffect(() => {
     fetch("/api/trades?limit=100").then(r=>r.json()).then(setTrades).catch(()=>{});
     fetch("/api/trades/snapshots/stats").then(r=>r.json()).then(setSnapStats).catch(()=>{});
     fetch("/api/bot/trades/by-strategy").then(r=>r.json()).then(setByStrategy).catch(()=>{});
     fetch("/api/bot/trades/by-template").then(r=>r.json()).then(setByTemplate).catch(()=>{});
+    // Bot strategy catalog (per-user, all modes) — used to compute coverage
+    // (X of Y strategies have fired) and surface idle strategies.
+    fetch("/api/strategies").then(r=>r.json()).then(d => setAllStrategies(Array.isArray(d) ? d : [])).catch(()=>setAllStrategies([]));
   }, []);
 
   const loadDetail = (id) => {
@@ -3551,9 +3664,55 @@ function TradesTab() {
   };
   const StrategyPanel = () => {
     const hasData = (byStrategy && byStrategy.length > 0) || (byTemplate && byTemplate.length > 0);
-    if (!hasData) return null;
+    if (!hasData && !(allStrategies && allStrategies.length > 0)) return null;
+    // Coverage: which enabled strategies actually fired vs. those still idle.
+    // Joined by id (preferred) or by name+mode as a fallback for the legacy
+    // rows that pre-date strategy_id attribution.
+    const enabled = (allStrategies || []).filter(s => s.enabled);
+    const firedIds = new Set((byStrategy || []).map(r => r.strategy_id).filter(x => x != null));
+    const firedNames = new Set((byStrategy || []).map(r => (r.strategy_name || "").toLowerCase()));
+    const isFired = (s) => firedIds.has(s.id) || firedNames.has((s.name || "").toLowerCase());
+    const idle = enabled.filter(s => !isFired(s));
+    const totalEnabled = enabled.length;
+    const firedCount = totalEnabled - idle.length;
+    const coveragePct = totalEnabled > 0 ? Math.round((firedCount / totalEnabled) * 100) : 0;
     return (<div style={{background:"#0a0a14",border:"1px solid #1a1a2e",borderRadius:8,padding:12,marginBottom:16}}>
       <h4 style={{fontSize:13,fontWeight:700,color:"#a78bfa",marginBottom:10}}>📊 Strategy Performance</h4>
+      {/* Coverage strip — % of enabled strategies that have actually fired. */}
+      {totalEnabled > 0 && (
+        <div style={{marginBottom:12,padding:10,background:"#0e0e1a",border:"1px solid #1a1a2e",borderRadius:6}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+            <div>
+              <div style={{fontSize:10,color:"#888",textTransform:"uppercase",marginBottom:2}}>Coverage</div>
+              <div style={{fontSize:13,fontWeight:700,color:coveragePct >= 70 ? "#22c55e" : coveragePct >= 40 ? "#fbbf24" : "#ef4444"}}>
+                {firedCount} de {totalEnabled} estrategias activas han disparado · {coveragePct}%
+              </div>
+              <div style={{fontSize:10,color:"#666",marginTop:2}}>
+                Ratio entre estrategias enabled que han generado al menos un trade y el total habilitado en el bot.
+              </div>
+            </div>
+            <div style={{flex:"1 1 200px",minWidth:160,height:8,background:"#1a1a2e",borderRadius:4,overflow:"hidden"}}>
+              <div style={{width:coveragePct+"%",height:"100%",background:coveragePct >= 70 ? "#22c55e" : coveragePct >= 40 ? "#fbbf24" : "#ef4444",transition:"width 0.3s"}}></div>
+            </div>
+          </div>
+          {idle.length > 0 && (
+            <div style={{marginTop:10,paddingTop:8,borderTop:"1px solid #1a1a2e"}}>
+              <div style={{fontSize:10,color:"#888",marginBottom:6,textTransform:"uppercase"}}>Estrategias activas sin trades ({idle.length})</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                {idle.map((s,i) => {
+                  const c = tplColor(s.template);
+                  return (<span key={i} title={`mode=${s.mode || "?"} · template=${s.template || "—"} · 0 trades`} style={{padding:"2px 8px",borderRadius:4,fontSize:10,fontWeight:700,background:c.bg,color:c.fg,border:"1px solid "+c.bd}}>
+                    {s.name} <span style={{color:"#666",fontWeight:400,marginLeft:4}}>{s.mode}</span>
+                  </span>);
+                })}
+              </div>
+              <div style={{fontSize:10,color:"#666",marginTop:6}}>
+                Estas estrategias están habilitadas pero todavía no han producido ningún trade. Pueden estar esperando una señal que cumpla sus condiciones, o ser demasiado restrictivas.
+              </div>
+            </div>
+          )}
+        </div>
+      )}
       {/* By template (archetype) — stable across rename */}
       {byTemplate && byTemplate.length > 0 && (
         <div style={{marginBottom:12}}>
@@ -5199,7 +5358,9 @@ function ShadowModeTab() {
          show the head-to-head: "if Relax had been active for trades that
          Abierto fired, would it have closed better?". */}
     {byStrategy && byStrategy.length > 0 && (<>
-      <h3 className="section-title">📊 A/B Strategy Test</h3>
+      <h3 className="section-title">📊 A/B Strategy Test
+        <Tip text="Toma cada trade real y simula qué habría pasado si la salida hubiese sido evaluada por la estrategia de la variante en su lugar. Σ ΔPnL positivo = la variante habría cerrado mejor que la estrategia real en ese mismo conjunto de entradas. Mira la columna 'n' para ver cuántos trades alimentan cada comparación — pocos samples = ruido." />
+      </h3>
       <div className="card" style={{marginBottom:12, padding:8}}>
         <div style={{fontSize:10, color:"#888", marginBottom:6}}>
           Roll-up of shadow exits over the last {exitsHours}h, grouped by the
