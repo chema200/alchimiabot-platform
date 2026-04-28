@@ -4298,10 +4298,12 @@ function ShadowModeTab() {
     return () => clearTimeout(t);
   }, [flash]);
 
-  // Auto-wizard state — siguiente / siguiente / finalizar style.
-  // step 1 = pick template, 2 = pick mode + preview, 3 = done flash
-  const [wizard, setWizard] = useState(null); // null | {step, template, mode, preview, busy, error}
-  const wizardOpen = (template) => setWizard({step: 2, template, mode: "NORMAL", preview: null, busy: false, error: null});
+  // Auto-wizard state — V74 (2026-04-28): mode is now implicit from the
+  // active mode tab (no more dropdown asking "what mode is this for?"
+  // because the user is already inside SCALP/NORMAL/SWING). Step 2 still
+  // shows preview + finalize but with the mode pre-selected.
+  const [wizard, setWizard] = useState(null); // null | {step, template, mode, preview, busy, error, selectedNames}
+  const wizardOpen = (template) => setWizard({step: 2, template, mode: shadowMode, preview: null, busy: false, error: null, selectedNames: null});
   const wizardClose = () => setWizard(null);
   const wizardLoadPreview = useCallback(async (template, mode) => {
     setWizard(w => ({...w, busy: true, error: null, preview: null}));
@@ -4318,10 +4320,17 @@ function ShadowModeTab() {
     if (!wizard) return;
     setWizard(w => ({...w, busy: true, error: null}));
     try {
+      // V74 (2026-04-28) — pass `selectedNames` if the user unchecked some
+      // variants in the preview. null/empty means "create them all" (legacy
+      // behaviour). If the backend ignores the field, we still create them
+      // all and live with the (small) inconvenience until next iteration.
+      const selected = wizard.selectedNames === null
+        ? null
+        : Array.from(wizard.selectedNames);
       const r = await fetch(API + "/api/shadow/variants/auto", {
         method: "POST", credentials: "include",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({template: wizard.template, mode: wizard.mode}),
+        body: JSON.stringify({template: wizard.template, mode: wizard.mode, selectedNames: selected}),
       });
       const j = await r.json();
       if (!r.ok || j.success === false) throw new Error(j.error || "finalize failed");
@@ -4395,20 +4404,29 @@ function ShadowModeTab() {
       const iData  = await jsonOrDefault(iResp, {variants: [], windowDays: impactDays});
       const bsData = await jsonOrDefault(bsResp, []);
 
-      // Client-side filter helper for endpoints that don't yet narrow by
-      // mode. Every row from the backend carries a `mode` field for trade
-      // outcomes / evaluations / exits. Variants from the auto-templates
-      // already arrive scoped because the GET ?mode= filter was applied
-      // server-side, but for entry-side variants where mode is encoded as
-      // block_modes (negative — "DON'T fire on these modes") we honour
-      // that here too so a NORMAL variant doesn't appear in SCALP tab.
+      // Client-side filter helper. The bot's API serialises blockModes as a
+      // camelCase array (e.g. ["SCALP","SWING"] meaning "DON'T fire on these
+      // modes"). The platform's own confluence variants serve `mode` as a
+      // direct string. Both shapes need to be honoured here so SCALP tab
+      // doesn't show NORMAL-scoped variants and vice-versa.
       const matchesMode = (row) => {
         if (row == null) return true;
+        // Direct positive mode field (confluence variants, evaluation rows).
         if (row.mode && typeof row.mode === "string") return row.mode === shadowMode;
-        if (row.block_modes && typeof row.block_modes === "string") {
+        // Negative blockModes list (entry-side shadow_variants).
+        if (Array.isArray(row.blockModes)) {
+          return !row.blockModes.includes(shadowMode);
+        }
+        // Legacy: blockModes serialised as a comma-separated string.
+        if (typeof row.blockModes === "string") {
+          if (row.blockModes === "") return true;
+          return !row.blockModes.split(",").map(s => s.trim()).includes(shadowMode);
+        }
+        // Older snake_case fallback (shouldn't appear after V74 but harmless).
+        if (typeof row.block_modes === "string" && row.block_modes !== "") {
           return !row.block_modes.split(",").map(s => s.trim()).includes(shadowMode);
         }
-        return true; // no mode info — pass through
+        return true;
       };
 
       const vAll = Array.isArray(vData) ? vData : [];
@@ -4599,6 +4617,44 @@ function ShadowModeTab() {
     logs:        { label: "Logs detalle",        emoji: "🔍", help: "Línea por línea: cada candidato evaluado y cada salida comparada. Útil para investigar casos concretos cuando algo te llama la atención." },
   };
   const cur = MODE_META[shadowMode] || MODE_META.NORMAL;
+  // ELI5 metadata for the auto-templates — surfaced in the wizard modal so
+  // the user reads in trader Spanish what each template actually tests and
+  // what to expect from it. NO programming jargon.
+  const WIZARD_META = {
+    STRATEGY_AB:    { icon:"🧬", label:"A/B de estrategias",
+                      eli5: "Crea una variante por cada estrategia que tienes activa en este modo. Cada una imita exactamente lo que haría esa estrategia si fuera la única que disparara.",
+                      expect: "Te dice cuál de tus estrategias habría dado más ganancia en los mismos trades. La 'campeona' es candidata a quedarse sola en producción." },
+    SL_SWEEP:       { icon:"🛡️", label:"Barrido de Stop Loss",
+                      eli5: "3 variantes con stop loss distinto: estricto, normal, holgado. Mismo trade, distinta tolerancia a la pérdida.",
+                      expect: "Si la holgada gana mucho más → tu SL actual está cortando ganadoras. Si la estricta gana → estás aguantando pérdidas que deberías cortar antes." },
+    TP_SWEEP:       { icon:"🎯", label:"Barrido de Take Profit",
+                      eli5: "3 variantes con take profit distinto: rápido, medio, amplio. Mismo trade, distinto objetivo de cierre.",
+                      expect: "Si la amplia gana → estás cerrando demasiado pronto y dejando dinero. Si la rápida gana → tu TP actual es muy ambicioso y los precios se dan la vuelta antes." },
+    PATIENCE:       { icon:"⏱️", label:"Paciencia (ROI)",
+                      eli5: "3 perfiles de paciencia: cierra rápido al primer beneficio, equilibrado, o aguanta más tiempo en posición.",
+                      expect: "Mide si vale la pena esperar más tiempo. En mercado lateral la rápida suele ganar; en tendencia clara la paciente." },
+    QUALITY_FILTER: { icon:"🔎", label:"Filtros de calidad",
+                      eli5: "3 variantes que rechazan entradas según cuán arriesgadas son: solo HIGH risk, MED+HIGH, o WEAK también.",
+                      expect: "Te dice si ser más selectivo aumenta el net (menos trades pero mejores) o si pierdes oportunidades buenas con falsos positivos." },
+    COIN_AB:        { icon:"💰", label:"A/B por liquidez",
+                      eli5: "3 variantes que solo operan en coins de liquidez ALTA, MEDIA o BAJA. Útil para saber dónde tu edge es real.",
+                      expect: "Si la HIGH gana → mejor quedarte con BTC/ETH/SOL/HYPE. Si la LOW gana → tu edge está en memecoins." },
+    SIZE_AB:        { icon:"📦", label:"A/B de tamaño",
+                      eli5: "3 variantes con tamaño de posición distinto: pequeño, medio, grande. Útil para saber si tu edge escala.",
+                      expect: "Si gana el grande sin más slippage → puedes subir colateral. Si solo el pequeño gana → tu estrategia es sensible al tamaño." },
+    ENTRY_TIMING:   { icon:"⚡", label:"Momento de entrada",
+                      eli5: "3 variantes que entran antes (señal débil), normal o esperando confirmación (señal fuerte).",
+                      expect: "Mide si vale esperar más confirmación. Esperar reduce trades pero mejora win rate; entrar antes da más oportunidades pero más ruido." },
+    TRAIL_SWEEP:    { icon:"🧲", label:"Trailing stop",
+                      eli5: "3 variantes con trailing stop distinto: estricto, normal, holgado. Cuándo dejar correr al ganador.",
+                      expect: "Si el holgado gana → tu trailing actual cierra ganadoras demasiado pronto. Si el estricto gana → das de más al peak y luego retroceden." },
+    SIDE_AB:        { icon:"⇅", label:"Solo LONG vs solo SHORT",
+                      eli5: "2 variantes: una solo abre LONG, otra solo SHORT. Mide en qué dirección tienes ventaja real.",
+                      expect: "Si una pierde mucho más que la otra → desactiva ese lado en producción. Tu edge no es bidireccional siempre." },
+    COOLDOWN_AB:    { icon:"⏳", label:"Cooldown entre trades",
+                      eli5: "3 variantes con tiempo de espera distinto entre trades de la misma coin: 5, 10 o 30 minutos.",
+                      expect: "Cooldown corto = más trades pero más ruido (revenge trading). Cooldown largo = menos trades pero cada uno más selectivo." },
+  };
 
   return (<>
     <div className="page-title" style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12, flexWrap:"wrap"}}>
@@ -4987,89 +5043,151 @@ function ShadowModeTab() {
     <div className="card" style={{marginBottom:12, padding:12}}>
       <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(220px, 1fr))", gap:8}}>
         {[
-          {id:"STRATEGY_AB",    icon:"🧬", label:"A/B de estrategias",   desc:"Una variante por estrategia activa del modo. Mide cuál cierra mejor."},
-          {id:"SL_SWEEP",       icon:"🛡️", label:"Barrido de Stop Loss", desc:"3 variantes: SL 0.30 / 0.40 / 0.50 %. ¿SL más ajustado o más amplio?"},
-          {id:"TP_SWEEP",       icon:"🎯", label:"Barrido de Take Profit", desc:"3 variantes: TP 0.40 / 0.60 / 0.80 %. ¿Cerramos demasiado pronto?"},
-          {id:"PATIENCE",       icon:"⏱️", label:"Paciencia (ROI)",     desc:"3 perfiles ROI: rápida / normal / paciente. ¿Aguantamos más?"},
-          {id:"QUALITY_FILTER", icon:"🔎", label:"Filtros de calidad",   desc:"3 variantes bloqueando entradas HIGH / MED+HIGH / WEAK."},
-        ].map(card => (
-          <button key={card.id} type="button" onClick={() => { wizardOpen(card.id); wizardLoadPreview(card.id, "NORMAL"); }}
-            style={{padding:"10px 12px", textAlign:"left", background:"#0a0a13", border:"1px solid #333", borderRadius:6, color:"#ccc", cursor:"pointer", fontSize:11}}>
-            <div style={{fontWeight:600, color:"#a78bfa", marginBottom:3}}>{card.icon} {card.label}</div>
-            <div style={{fontSize:10, color:"#888", lineHeight:1.4}}>{card.desc}</div>
-          </button>
-        ))}
+          // Templates already shipped server-side (the original 5).
+          {id:"STRATEGY_AB",    ready:true},
+          {id:"SL_SWEEP",       ready:true},
+          {id:"TP_SWEEP",       ready:true},
+          {id:"PATIENCE",       ready:true},
+          {id:"QUALITY_FILTER", ready:true},
+          // 2026-04-28 templates — landing in this same release.
+          {id:"COIN_AB",        ready:true},
+          {id:"SIZE_AB",        ready:true},
+          {id:"ENTRY_TIMING",   ready:true},
+          {id:"TRAIL_SWEEP",    ready:true},
+          {id:"SIDE_AB",        ready:true},
+          {id:"COOLDOWN_AB",    ready:true},
+        ].map(card => {
+          const meta = WIZARD_META[card.id];
+          if (!meta) return null;
+          return (
+            <button key={card.id} type="button"
+              onClick={() => { wizardOpen(card.id); wizardLoadPreview(card.id, shadowMode); }}
+              title={meta.eli5 + (meta.expect ? "\n\n💡 " + meta.expect : "")}
+              style={{padding:"12px 14px", textAlign:"left", background:"linear-gradient(180deg, rgba(255,255,255,0.02), transparent)", border:"1px solid #1a1a2e", borderRadius:8, color:"#ccc", cursor:"pointer", fontSize:11, transition:"all 0.15s", position:"relative"}}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = cur.color + "66"; e.currentTarget.style.background = "rgba(255,255,255,0.03)"; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = "#1a1a2e"; e.currentTarget.style.background = "linear-gradient(180deg, rgba(255,255,255,0.02), transparent)"; }}>
+              <div style={{fontWeight:700, color:"#e0e0e8", marginBottom:5, fontSize:12, display:"flex", alignItems:"center", gap:6}}>
+                <span style={{fontSize:14}}>{meta.icon}</span>
+                {meta.label}
+                <span style={{marginLeft:"auto", fontSize:9, color:"#555"}}>?</span>
+              </div>
+              <div style={{fontSize:10, color:"#888", lineHeight:1.5}}>{meta.eli5}</div>
+            </button>
+          );
+        })}
       </div>
     </div>
 
-    {/* ── Wizard modal — preview + confirm ──────────────────────────── */}
-    {wizard && (
-      <div onClick={wizardClose}
-        style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center"}}>
-        <div onClick={(e) => e.stopPropagation()}
-          style={{background:"#0a0a13", border:"1px solid #333", borderRadius:8, padding:20, maxWidth:680, width:"90%", maxHeight:"85vh", overflow:"auto"}}>
-          <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12}}>
-            <h3 style={{margin:0, color:"#e0e0e8"}}>Asistente: {wizard.template}</h3>
-            <button onClick={wizardClose} style={{background:"transparent", border:"none", color:"#888", fontSize:22, cursor:"pointer"}}>×</button>
-          </div>
-
-          <div style={{marginBottom:12}}>
-            <label style={{fontSize:11, color:"#888", display:"block", marginBottom:6}}>Modo</label>
-            <div style={{display:"flex", gap:8}}>
-              {["SCALP", "NORMAL", "SWING"].map(m => (
-                <button key={m} type="button"
-                  onClick={() => { setWizard(w => ({...w, mode: m})); wizardLoadPreview(wizard.template, m); }}
-                  disabled={wizard.busy}
-                  style={{flex:1, padding:"6px 10px", fontSize:11, background: wizard.mode === m ? "#3b1d8a" : "#1a1a2e",
-                          border:"1px solid " + (wizard.mode === m ? "#a78bfa" : "#333"), borderRadius:4,
-                          color: wizard.mode === m ? "#e0e0e8" : "#888", cursor: wizard.busy ? "default" : "pointer"}}>
-                  {m}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {wizard.busy && <div style={{color:"#888", fontSize:11, padding:12}}>Cargando previsualización…</div>}
-          {wizard.error && <div style={{color:"#ef4444", fontSize:11, padding:12, background:"#2a1a1a", borderRadius:4}}>❌ {wizard.error}</div>}
-
-          {wizard.preview && !wizard.busy && (
-            <div>
-              <div style={{fontSize:11, color:"#a78bfa", padding:"8px 0", borderBottom:"1px solid #222", marginBottom:8}}>
-                {wizard.preview.description}
-              </div>
-              <div style={{fontSize:10, color:"#666", marginBottom:6}}>Se crearán {wizard.preview.variants.length} variante(s):</div>
-              <div style={{maxHeight:280, overflow:"auto", fontFamily:"monospace", fontSize:10, color:"#ccc"}}>
-                {wizard.preview.variants.map((v, i) => (
-                  <div key={i} style={{padding:"6px 8px", borderBottom:"1px dotted #181828"}}>
-                    <div style={{color:"#e0e0e8", fontWeight:600}}>{v.name}</div>
-                    <div style={{color:"#888", fontSize:9, marginTop:2}}>
-                      {v.slPctOverride != null && <span>SL={v.slPctOverride}%  </span>}
-                      {v.tpPctOverride != null && <span>TP={v.tpPctOverride}%  </span>}
-                      {v.roiTableOverride && <span>ROI={v.roiTableOverride}  </span>}
-                      {v.maxHoldMinutesOverride && <span>maxHold={v.maxHoldMinutesOverride}m  </span>}
-                      {v.strategyOverrideId && <span>strategyId={v.strategyOverrideId}  </span>}
-                      {v.blockLateEntryRisks && v.blockLateEntryRisks.length > 0 && <span>blockRisks={v.blockLateEntryRisks.join(",")}  </span>}
-                      {v.blockQualityLabels && v.blockQualityLabels.length > 0 && <span>blockLabels={v.blockQualityLabels.join(",")}  </span>}
-                      {v.blockModes && v.blockModes.length > 0 && <span>onlyMode={["SCALP","NORMAL","SWING"].filter(x => !v.blockModes.includes(x)).join("/")}  </span>}
-                    </div>
+    {/* ── Wizard modal — V74 (2026-04-28): premium two-step flow.
+         Mode is FIXED to the active tab (no more "what mode is this for?"
+         dropdown — you're already inside SCALP/NORMAL/SWING). Preview shows
+         every variant the template would create with a CHECKBOX so the user
+         picks 1, some, or all. The header explains in plain Spanish what the
+         template does and what to expect. */}
+    {wizard && (() => {
+      const tplMeta = WIZARD_META[wizard.template] || {label: wizard.template, eli5: "", expect: ""};
+      const variants = wizard.preview?.variants || [];
+      // selectedNames === null means "all selected" (default). Switching to a
+      // Set lets the user uncheck individuals.
+      const isSelected = (name) => wizard.selectedNames === null || wizard.selectedNames.has(name);
+      const toggleSelected = (name) => setWizard(w => {
+        const next = new Set(w.selectedNames === null ? variants.map(v => v.name) : w.selectedNames);
+        if (next.has(name)) next.delete(name); else next.add(name);
+        return {...w, selectedNames: next};
+      });
+      const selectAll = () => setWizard(w => ({...w, selectedNames: null}));
+      const selectNone = () => setWizard(w => ({...w, selectedNames: new Set()}));
+      const selectedCount = wizard.selectedNames === null ? variants.length : wizard.selectedNames.size;
+      return (
+        <div onClick={wizardClose}
+          style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.78)", backdropFilter:"blur(2px)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center"}}>
+          <div onClick={(e) => e.stopPropagation()}
+            style={{background:"linear-gradient(180deg, #0c0c18 0%, #08080f 100%)", border:"1px solid " + cur.color + "44", borderRadius:12, padding:24, maxWidth:780, width:"92%", maxHeight:"88vh", overflow:"auto", boxShadow:"0 20px 60px rgba(0,0,0,0.5)"}}>
+            {/* Header */}
+            <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:16, gap:12}}>
+              <div style={{flex:1, minWidth:0}}>
+                <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:6, flexWrap:"wrap"}}>
+                  <h3 style={{margin:0, color:"#e0e0e8", fontSize:18}}>{tplMeta.icon} {tplMeta.label}</h3>
+                  <span style={{padding:"3px 10px", borderRadius:999, background: cur.bg, border: "1px solid " + cur.color + "55", color: cur.color, fontSize:10, fontWeight:700, letterSpacing:0.5}}>
+                    {cur.emoji} Modo: {shadowMode}
+                  </span>
+                </div>
+                {tplMeta.eli5 && (
+                  <div style={{fontSize:12, color:"#bbb", lineHeight:1.5, marginBottom:6}}>
+                    <span style={{color:"#888", fontWeight:600}}>¿Qué hace?</span> {tplMeta.eli5}
                   </div>
-                ))}
+                )}
+                {tplMeta.expect && (
+                  <div style={{fontSize:11, color:"#888", lineHeight:1.5, fontStyle:"italic"}}>
+                    💡 {tplMeta.expect}
+                  </div>
+                )}
               </div>
-              <div style={{marginTop:12, display:"flex", gap:8, justifyContent:"flex-end"}}>
-                <button onClick={wizardClose} disabled={wizard.busy}
-                  style={{padding:"6px 14px", fontSize:11, background:"#1a1a2e", border:"1px solid #333", color:"#888", borderRadius:4, cursor:"pointer"}}>
-                  Cancelar
-                </button>
-                <button onClick={wizardFinalize} disabled={wizard.busy || wizard.preview.variants.length === 0}
-                  style={{padding:"6px 14px", fontSize:11, background:"#3b1d8a", border:"1px solid #a78bfa", color:"#e0e0e8", borderRadius:4, cursor:"pointer", fontWeight:600}}>
-                  Finalizar — crear {wizard.preview.variants.length}
-                </button>
-              </div>
+              <button onClick={wizardClose} style={{background:"transparent", border:"none", color:"#888", fontSize:24, cursor:"pointer", padding:0, lineHeight:1}}>×</button>
             </div>
-          )}
+
+            {wizard.busy && <div style={{color:"#888", fontSize:12, padding:18, textAlign:"center"}}>⏳ Cargando previsualización…</div>}
+            {wizard.error && <div style={{color:"#ef4444", fontSize:12, padding:12, background:"#2a1a1a", border:"1px solid #ef444455", borderRadius:6}}>❌ {wizard.error}</div>}
+
+            {wizard.preview && !wizard.busy && (
+              <div>
+                <div style={{fontSize:11, color:"#a78bfa", padding:"10px 12px", marginBottom:10, background:"rgba(167,139,250,0.05)", borderLeft:"3px solid #a78bfa", borderRadius:4}}>
+                  {wizard.preview.description}
+                </div>
+
+                {/* Selection controls */}
+                <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8, fontSize:11, color:"#888"}}>
+                  <div>
+                    <strong style={{color:"#e0e0e8"}}>{selectedCount}</strong> de {variants.length} seleccionada(s) — desmarca las que no quieras
+                  </div>
+                  <div style={{display:"flex", gap:6}}>
+                    <button onClick={selectAll} style={{padding:"3px 8px", fontSize:10, background:"transparent", border:"1px solid #333", color:"#888", borderRadius:4, cursor:"pointer"}}>Todas</button>
+                    <button onClick={selectNone} style={{padding:"3px 8px", fontSize:10, background:"transparent", border:"1px solid #333", color:"#888", borderRadius:4, cursor:"pointer"}}>Ninguna</button>
+                  </div>
+                </div>
+
+                <div style={{maxHeight:320, overflow:"auto", border:"1px solid #1a1a2e", borderRadius:6}}>
+                  {variants.map((v, i) => {
+                    const checked = isSelected(v.name);
+                    return (
+                      <label key={i} style={{display:"flex", alignItems:"flex-start", gap:10, padding:"10px 12px",
+                                              borderBottom: i < variants.length - 1 ? "1px solid #181828" : "none",
+                                              cursor:"pointer", background: checked ? "rgba(167,139,250,0.04)" : "transparent"}}>
+                        <input type="checkbox" checked={checked} onChange={() => toggleSelected(v.name)}
+                          style={{marginTop:2, accentColor: cur.color, cursor:"pointer"}} />
+                        <div style={{flex:1, minWidth:0}}>
+                          <div style={{color:"#e0e0e8", fontWeight:600, fontSize:12}}>{v.name}</div>
+                          <div style={{color:"#888", fontSize:10, marginTop:3, fontFamily:"monospace"}}>
+                            {v.slPctOverride != null && <span>SL={v.slPctOverride}% · </span>}
+                            {v.tpPctOverride != null && <span>TP={v.tpPctOverride}% · </span>}
+                            {v.roiTableOverride && <span>ROI={v.roiTableOverride} · </span>}
+                            {v.maxHoldMinutesOverride && <span>maxHold={v.maxHoldMinutesOverride}m · </span>}
+                            {v.strategyOverrideId && <span>strategy=#{v.strategyOverrideId} · </span>}
+                            {v.blockLateEntryRisks && v.blockLateEntryRisks.length > 0 && <span>bloquea_riesgos={v.blockLateEntryRisks.join("/")} · </span>}
+                            {v.blockQualityLabels && v.blockQualityLabels.length > 0 && <span>bloquea_calidad={v.blockQualityLabels.join("/")}</span>}
+                          </div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+
+                <div style={{marginTop:14, display:"flex", gap:8, justifyContent:"flex-end"}}>
+                  <button onClick={wizardClose} disabled={wizard.busy}
+                    style={{padding:"8px 16px", fontSize:11, background:"transparent", border:"1px solid #333", color:"#888", borderRadius:6, cursor:"pointer"}}>
+                    Cancelar
+                  </button>
+                  <button onClick={wizardFinalize} disabled={wizard.busy || selectedCount === 0}
+                    style={{padding:"8px 16px", fontSize:12, background: selectedCount === 0 ? "#1a1a2e" : cur.bg, border:"1px solid " + (selectedCount === 0 ? "#333" : cur.color), color: selectedCount === 0 ? "#666" : cur.color, borderRadius:6, cursor: selectedCount === 0 ? "default" : "pointer", fontWeight:700}}>
+                    ✨ Crear {selectedCount} variante{selectedCount === 1 ? "" : "s"} en {shadowMode}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
-    )}
+      );
+    })()}
 
     {/* ── Action button: open the manual create form in a modal ─────── */}
     <div style={{display:"flex", gap:8, flexWrap:"wrap", marginBottom:14}}>
@@ -5090,19 +5208,21 @@ function ShadowModeTab() {
         <div style={{color:"#666", fontSize:11, padding:8}}>{t("shadow.active_empty")}</div>
       ) : (
         <table style={{width:"100%", fontSize:11}}>
-          <thead><tr style={{textAlign:"left", color:"#888", borderBottom:"1px solid #222"}}>
-            <th style={{padding:"6px 4px"}}>{t("shadow.col.name")}</th>
-            <th>{t("shadow.col.late_risks")}</th>
-            <th>{t("shadow.col.labels")}</th>
-            <th>{t("shadow.col.sides")}</th>
-            <th>{t("shadow.col.modes")}</th>
-            <th>{t("shadow.col.coins")}</th>
-            <th>{t("shadow.col.min_score")}</th>
-            <th>{t("shadow.col.collat_override")}</th>
-            <th>{t("shadow.col.exhausted")}</th>
-            <th>{t("shadow.col.exit_overrides")}</th>
-            <th style={{textAlign:"right"}}>Impacto ({impactDays}d)</th>
-            <th></th>
+          {/* V74 (2026-04-28) — column headers carry inline tooltips so the
+              user knows what each chip means without programming jargon. */}
+          <thead><tr style={{textAlign:"left", color:"#888", borderBottom:"1px solid #222", textTransform:"uppercase", fontSize:10, letterSpacing:0.5}}>
+            <th style={{padding:"8px 4px"}} title="Identificador único de la variante.">Nombre</th>
+            <th title="Niveles de 'riesgo de entrada tardía' que esta variante BLOQUEA. Si el motor cataloga una entry como HIGH risk y la variante bloquea HIGH, la simulación no abre.">Late risks</th>
+            <th title="Etiquetas de calidad que la variante BLOQUEA (A_PLUS, WEAK, etc).">Labels</th>
+            <th title="Lados que la variante BLOQUEA. Vacío = LONG y SHORT iguales.">Sides</th>
+            <th title="A qué modo se aplica esta variante. Cambia el modo activo arriba para ver las del otro modo.">Modos</th>
+            <th title="Coins que la variante BLOQUEA (no opera en ellas).">Coins</th>
+            <th title="Score mínimo del setup para considerar la entrada (0 = usa el del preset). Subirlo = más selectivo.">Min score</th>
+            <th title="Colateral por trade simulado en USD. 'prod' = usa el del preset real.">Colat $</th>
+            <th title="Si está ON, la variante bloquea entradas en momentum agotado (movimientos largos sin continuación)." >Agotada</th>
+            <th title="Overrides de salida: ROI / SL / TP / max-hold. Vacío = usa los del preset.">Exit overrides</th>
+            <th style={{textAlign:"right"}} title={"Análisis de impacto sobre los últimos " + impactDays + " días: cómo habría cerrado esta variante vs producción real, y verdict (Recomendada / Positiva / Perdedora / Sin datos)."}>Impacto ({impactDays}d) ?</th>
+            <th title="Si la variante tiene verdict positivo, aparece el botón verde para promoverla a strategy real del bot."></th>
           </tr></thead>
           <tbody>
             {variants.map(v => {
@@ -5139,7 +5259,25 @@ function ShadowModeTab() {
                   <td style={{color:"#f59e0b"}}>{setStr(v.blockLateEntryRisks) || <span style={{color:"#555"}}>—</span>}</td>
                   <td style={{color:"#f59e0b"}}>{setStr(v.blockQualityLabels) || <span style={{color:"#555"}}>—</span>}</td>
                   <td style={{color:"#f59e0b"}}>{setStr(v.blockSides) || <span style={{color:"#555"}}>—</span>}</td>
-                  <td style={{color:"#f59e0b"}}>{setStr(v.blockModes) || <span style={{color:"#555"}}>—</span>}</td>
+                  <td style={{color:"#aaa", fontSize:11}}>{(() => {
+                    // V74 (2026-04-28) — friendly mode label. blockModes is
+                    // negative ("don't fire on these"), so we flip it to the
+                    // positive form "Solo X" / "Todos" so the user reads
+                    // exactly the modes the variant covers without having to
+                    // do mental arithmetic.
+                    const blocked = Array.isArray(v.blockModes)
+                      ? v.blockModes
+                      : (typeof v.blockModes === "string" && v.blockModes ? v.blockModes.split(",").map(s => s.trim()) : []);
+                    const all = ["SCALP","NORMAL","SWING"];
+                    const allowed = all.filter(m => !blocked.includes(m));
+                    if (allowed.length === all.length) return <span style={{color:"#888"}}>Todos</span>;
+                    if (allowed.length === 1) {
+                      const m = allowed[0];
+                      const c = m === "SCALP" ? "#22c55e" : m === "SWING" ? "#f59e0b" : "#a78bfa";
+                      return <span style={{color:c, fontWeight:600}}>Solo {m}</span>;
+                    }
+                    return <span style={{color:"#aaa"}}>{allowed.join(" + ")}</span>;
+                  })()}</td>
                   <td style={{color:"#f59e0b"}}>{setStr(v.blockCoins) || <span style={{color:"#555"}}>—</span>}</td>
                   <td style={{color:"#aaa"}}>{v.minScoreOverride > 0 ? v.minScoreOverride : <span style={{color:"#555"}}>—</span>}</td>
                   <td style={{color:"#aaa"}}>{v.collateralOverrideUsd > 0 ? ("$" + v.collateralOverrideUsd) : <span style={{color:"#555"}}>prod</span>}</td>
