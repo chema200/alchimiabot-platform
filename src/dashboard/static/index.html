@@ -5093,29 +5093,38 @@ function ShadowModeTab() {
         Library + auto wizard + manual form + active variants table */}
     {shadowSection === "experiments" && (<>
 
-    {/* ── Library: catálogo de presets curados, instalable como shadow ─ */}
-    <h3 className="section-title">📚 Biblioteca de strategies (Shadow)
-      <Tip text="Catálogo de 78 presets curados (26 por modo). Cada uno se puede registrar como shadow variant para A/B test sin riesgo. Si te gusta lo que ves, lo promocionas a producción luego desde el bot." />
+    {/* ── Library: catálogo de presets curados, instalable como shadow ─
+         Conceptually different from the wizard: this is a catalogue of 78
+         pre-built strategies (curated by hand). Each one becomes ONE shadow
+         variant when you install it. Useful when you want a specific known
+         strategy to A/B against your live one. */}
+    <h3 className="section-title">📚 Catálogo de strategies (instalación 1 a 1)
+      <Tip text="78 strategies pre-fabricadas a mano (26 por modo). Cada vez que instalas una se crea UNA variante shadow con ese set de condiciones. Útil cuando ya sabes qué tipo de estrategia quieres probar." />
     </h3>
-    <div className="card" style={{marginBottom:12, padding:12}}>
+    <div className="card" style={{marginBottom:18, padding:12}}>
+      <div style={{fontSize:11, color:"#888", marginBottom:8, lineHeight:1.5}}>
+        Buscas una receta concreta (ej. "fast-strict NORMAL") y la instalas. <span style={{color:"#aaa"}}>1 click = 1 variante.</span>
+      </div>
       <button type="button" onClick={() => { libraryOpen(); }}
         style={{padding:"10px 14px", fontSize:12, background:"#1a1a2e", border:"1px solid #22d3ee",
                 borderRadius:6, color:"#67e8f9", cursor:"pointer", fontWeight:600}}>
-        🔍 Abrir biblioteca completa
+        🔍 Abrir catálogo completo (78 presets)
       </button>
       <span style={{marginLeft:10, fontSize:10, color:"#666"}}>
-        FAST_ROI · PATIENT · TIGHT_SL · WIDE_TP · QUALITY_FILTER · AGGRESSIVE · CONSERVATIVE · HYBRID · EXPERIMENTAL
+        Categorías: FAST_ROI · PATIENT · TIGHT_SL · WIDE_TP · QUALITY_FILTER · AGGRESSIVE · CONSERVATIVE · HYBRID · EXPERIMENTAL
       </span>
     </div>
 
-    {/* ── Auto-wizard (siguiente / siguiente / finalizar) ─────────────
-         Generates a coherent batch of variants from a high-level preset.
-         Designed for non-technical users: pick a template, pick a mode,
-         confirm preview, done. Each preset card explains the experiment
-         in one line. */}
-    <h3 className="section-title">⚡ Generar variantes automáticas
-      <Tip text="Genera 1 click 3-5 variantes coherentes para un experimento. No pierdes el form manual: estos botones rellenan a Shadow Mode listo para correr." />
+    {/* ── Auto-wizard — DIFFERENT TOOL from the library above.
+         This is an A/B BATCH generator: each card spawns 3-12 variants in
+         one click, each with a different value of one parameter (SL, TP,
+         coin liquidity, side...) so the user can compare them head-to-head. */}
+    <h3 className="section-title">⚡ Asistente A/B (genera lotes para experimentar)
+      <Tip text="Distinto al catálogo de arriba: aquí cada card crea de golpe 3-12 variantes con valores distintos de UN parámetro (SL apretado / medio / amplio, por ejemplo) para que puedas compararlas en paralelo y ver cuál gana." />
     </h3>
+    <div style={{fontSize:11, color:"#888", marginBottom:6, lineHeight:1.5, paddingLeft:2}}>
+      Quieres saber "¿qué SL es mejor para SCALP?". Eliges la card → preview → marcas las que quieres → crear. <span style={{color:"#aaa"}}>1 click = 3 a 12 variantes en batch.</span>
+    </div>
     <div className="card" style={{marginBottom:12, padding:12}}>
       <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(220px, 1fr))", gap:8}}>
         {[
@@ -5163,6 +5172,8 @@ function ShadowModeTab() {
             </button>
           );
         })}
+        {/* B1 Confluence card — same grid, matches wizard-card styling. */}
+        <ConfluenceVariantsSection compact />
       </div>
     </div>
 
@@ -5277,16 +5288,22 @@ function ShadowModeTab() {
       );
     })()}
 
-    {/* ── Action button: open the manual create form in a modal ─────── */}
-    <div style={{display:"flex", gap:8, flexWrap:"wrap", marginBottom:14}}>
+    {/* ── Manual create — para usuarios avanzados que prefieren un único
+         set de overrides hecho a mano en lugar de un lote del wizard. ─ */}
+    <div style={{marginBottom:14, padding:"10px 12px", background:"rgba(167,139,250,0.04)", border:"1px dashed #3b1d8a", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, flexWrap:"wrap"}}>
+      <div style={{flex:"1 1 240px", minWidth:0}}>
+        <div style={{fontSize:11, fontWeight:700, color:"#c4b5fd", marginBottom:2}}>
+          ✏️ ¿Quieres una variante 100% a tu medida?
+        </div>
+        <div style={{fontSize:10, color:"#888", lineHeight:1.5}}>
+          Crea UNA con los overrides que tú elijas (SL, TP, ROI, lados, coins, etc.) en un formulario único — alternativa al lote automático.
+        </div>
+      </div>
       <button type="button" onClick={() => { setForm(EMPTY_FORM()); setEditingName(null); setSubmitMsg(""); setShowFormModal(true); }}
-        style={{padding:"8px 14px", fontSize:12, background:"#3b1d8a", border:"1px solid #a78bfa",
-                color:"#e0e0e8", borderRadius:6, cursor:"pointer", fontWeight:600}}>
-        + Nueva variante manual
+        style={{padding:"9px 16px", fontSize:12, background:"#3b1d8a", border:"1px solid #a78bfa",
+                color:"#e0e0e8", borderRadius:6, cursor:"pointer", fontWeight:600, whiteSpace:"nowrap"}}>
+        + Crear variante manual
       </button>
-      <span style={{alignSelf:"center", fontSize:10, color:"#666"}}>
-        (o usa los preset de "Generar variantes automáticas" arriba)
-      </span>
     </div>
 
     {/* ── Active variants ── */}
@@ -6091,6 +6108,24 @@ function ShadowModeTab() {
                 <div style={{fontSize:11, color:"#888", padding:8, background:"#0a0a13", borderRadius:4}}>
                   Esta variante no está activa actualmente — solo aparece en datos de Impact (probablemente cerrada/eliminada).
                 </div>
+              ) : v._kind === "confluence" ? (
+                <>
+                  {/* V76 (2026-04-28) — confluence variants have a different
+                      shape (B1 pre-entry filter checks). Rendered with their
+                      own field set so the modal stays informative. */}
+                  <Row label="Modo" value={v.mode || "NORMAL"} color="#f43f5e" />
+                  <Row label="Activa" value={v.enabled ? "ON" : "off"} color={v.enabled ? "#22c55e" : "#666"} />
+                  <Row label="Max checks fallidos antes de bloquear" value={v.confluenceMaxFailedChecks ?? "—"} color="#f43f5e" />
+                  <Row label="¿Comprueba trend 1h?" value={v.confluenceCheckTrend1h ? "ON" : "off"} />
+                  <Row label="¿Comprueba BTC macro?" value={v.confluenceCheckBtcMacro ? "ON" : "off"} />
+                  <Row label="¿Comprueba price position?" value={v.confluenceCheckPricePosition ? "ON" : "off"} />
+                  <Row label="¿Comprueba RSI extremo?" value={v.confluenceCheckRsiExtreme ? "ON" : "off"} />
+                  <Row label="BTC macro máximo en contra %" value={v.confluenceBtcMacroMaxAgainstPct ?? "—"} color="#22d3ee" />
+                  <Row label="Price position máximo LONG" value={v.confluenceMaxPricePositionLong ?? "—"} color="#22d3ee" />
+                  <Row label="Price position mínimo SHORT" value={v.confluenceMinPricePositionShort ?? "—"} color="#22d3ee" />
+                  <Row label="RSI máximo LONG" value={v.confluenceRsiMaxLong ?? "—"} color="#22d3ee" />
+                  <Row label="RSI mínimo SHORT" value={v.confluenceRsiMinShort ?? "—"} color="#22d3ee" />
+                </>
               ) : (
                 <>
                   <Row label="late_entry_risk bloqueados" value={setStr(v.blockLateEntryRisks)} color="#f59e0b" />
@@ -6105,6 +6140,8 @@ function ShadowModeTab() {
                   <Row label="SL % override" value={v.slPctOverride != null ? (v.slPctOverride + "%") : "—"} color="#22d3ee" />
                   <Row label="TP % override" value={v.tpPctOverride != null ? (v.tpPctOverride + "%") : "—"} color="#22d3ee" />
                   <Row label="Max hold (min)" value={v.maxHoldMinutesOverride != null ? v.maxHoldMinutesOverride : "—"} color="#22d3ee" />
+                  <Row label="Trailing distance override" value={v.trailingDistancePctOverride != null ? (v.trailingDistancePctOverride + "%") : "—"} color="#22d3ee" />
+                  <Row label="Cooldown override (min)" value={v.cooldownMinOverride != null ? v.cooldownMinOverride : "—"} color="#22d3ee" />
                   {v.strategyOverrideId != null && <Row label="Strategy override id" value={v.strategyOverrideId} color="#a78bfa" />}
                 </>
               )}
@@ -6340,7 +6377,12 @@ function ShadowModeTab() {
 // inside the Shadow tab so the user has all "what-if" experimentation in
 // one place. The bot's actual B1 toggle is in /trading/config — completely
 // independent.
-function ConfluenceVariantsSection() {
+function ConfluenceVariantsSection({ compact = false } = {}) {
+  // V76 (2026-04-28) — `compact` mode hides the duplicated variants table
+  // and only renders the "+ Nueva variante" button + the create/edit modal.
+  // Used from the Shadow Mode Experiments sub-tab so the user can still
+  // create new B1 confluence variants now that the legacy stand-alone
+  // table was removed.
   const [variants, setVariants] = React.useState([]);
   const [stats, setStats] = React.useState({});
   const [hours, setHours] = React.useState(24);
@@ -6386,6 +6428,44 @@ function ConfluenceVariantsSection() {
     const sign = num > 0 ? "+" : "";
     return <span style={{color, fontWeight: 600}}>{sign}${num.toFixed(2)}</span>;
   };
+
+  // V76 (2026-04-28) — compact mode renders the B1-confluence creator as
+  // one more "wizard card" inside the auto A/B grid, matching the visual
+  // language of SL_SWEEP / TP_SWEEP / TRAIL_SWEEP / etc. The form modal
+  // still mounts when showForm flips on.
+  if (compact) {
+    return (<>
+      <button type="button"
+        onClick={() => { setEditing(null); setShowForm(true); }}
+        title={"Crea una variante con parámetros custom del filtro de confluencia (max_fail / RSI / price-position).\n\n💡 Útil para descubrir qué umbral te habría ahorrado más malos trades sin tocar producción."}
+        style={{padding:"12px 14px", textAlign:"left",
+                background:"linear-gradient(180deg, rgba(244,63,94,0.05), transparent)",
+                border:"1px solid #1a1a2e", borderRadius:8,
+                color:"#ccc", cursor:"pointer", fontSize:11,
+                transition:"all 0.15s", position:"relative"}}
+        onMouseEnter={e => { e.currentTarget.style.borderColor = "#f43f5e88"; e.currentTarget.style.background = "rgba(244,63,94,0.06)"; }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor = "#1a1a2e"; e.currentTarget.style.background = "linear-gradient(180deg, rgba(244,63,94,0.05), transparent)"; }}>
+        <div style={{fontWeight:700, color:"#e0e0e8", marginBottom:5, fontSize:12, display:"flex", alignItems:"center", gap:6}}>
+          <span style={{fontSize:14}}>🎯</span>
+          Filtro B1 Confluence
+          <span style={{padding:"1px 6px", fontSize:9, fontWeight:700, color:"#f43f5e", background:"rgba(244,63,94,0.12)", border:"1px solid #f43f5e44", borderRadius:4, marginLeft:4}}>
+            Avanzado
+          </span>
+          <span style={{marginLeft:"auto", fontSize:9, color:"#555"}}>?</span>
+        </div>
+        <div style={{fontSize:10, color:"#888", lineHeight:1.5}}>
+          1 variante con umbrales custom de confluencia (max_fail / RSI / price-position). Mide qué filtro te habría ahorrado más trades malos.
+        </div>
+      </button>
+      {showForm && (
+        <ConfluenceVariantForm
+          initial={editing}
+          onClose={() => setShowForm(false)}
+          onSaved={() => { setShowForm(false); refresh(); }}
+        />
+      )}
+    </>);
+  }
 
   return (
     <div className="panel" style={{marginTop: 20}}>
