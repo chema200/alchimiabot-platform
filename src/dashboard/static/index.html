@@ -6325,12 +6325,13 @@ function ShadowModeTab() {
     </Modal>
 
     {/* ── B1 Confluence Variants (V65) ─────────────────────────────────
-        SEPARATE section from exit shadow variants. Per-user (multi-tenant).
-        User creates variants with custom B1 confluence params; evaluator
-        runs them in parallel against real signals; this section shows the
-        hypothetical net P&L impact so user can decide whether to flip the
-        bot toggle ON. */}
-    <ConfluenceVariantsSection />
+        Removed 2026-04-28 from the global Shadow Mode tab — the variants
+        now live in the unified active variants table (with the B1 badge)
+        scoped per mode. The legacy ConfluenceVariantsSection component is
+        kept defined below so its create/edit form can be re-introduced as
+        a modal triggered from the unified table in the next iter (S2b
+        cleanup). Render disabled to remove the duplicated table. */}
+    {/* <ConfluenceVariantsSection /> */}
   </>);
 }
 
