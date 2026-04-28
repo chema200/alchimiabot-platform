@@ -4204,6 +4204,20 @@ function Modal({ open, title, children, onCancel, onConfirm, confirmLabel, confi
 
 function ShadowModeTab() {
   const { t } = useI18n();
+  // V74/V75 (2026-04-28) — Shadow Mode is now scoped per trading mode.
+  // The backend stores variants tagged with mode (SCALP/NORMAL/SWING) and
+  // every evaluation row carries its own mode. The mode selector at the top
+  // of the tab filters everything below: variant lists, summary, exits, A/B
+  // comparisons, evaluation log. Default NORMAL because that's where the
+  // user has been running variants historically.
+  const [shadowMode, setShadowMode] = useState(() => localStorage.getItem("shadow_mode") || "NORMAL");
+  useEffect(() => { localStorage.setItem("shadow_mode", shadowMode); }, [shadowMode]);
+  // Sub-section the user is looking at. "experiments" = create + active
+  // variants; "results" = decision-grade aggregates; "logs" = forensic
+  // line-by-line evaluation/exit log.
+  const [shadowSection, setShadowSection] = useState(() => localStorage.getItem("shadow_section") || "experiments");
+  useEffect(() => { localStorage.setItem("shadow_section", shadowSection); }, [shadowSection]);
+
   const [variants, setVariants] = useState([]);
   const [evaluations, setEvaluations] = useState([]);
   const [summary, setSummary] = useState({variants: [], totalEvaluations: 0, hours: 24});
@@ -4347,10 +4361,16 @@ function ShadowModeTab() {
     setLoading(true); setErr(null);
     try {
       const qs = filterVariant ? ("?variant=" + encodeURIComponent(filterVariant)) : "";
+      // V74 (2026-04-28) — pass mode to the endpoints that natively support
+      // it (variants list, summary). For the rest we filter client-side
+      // using the `mode` field every shadow row carries — endpoints that
+      // don't yet accept ?mode= keep returning everything and we narrow it
+      // down here so the UI is always per-mode regardless of backend stage.
+      const modeQs = "&mode=" + encodeURIComponent(shadowMode);
       const [vResp, eResp, sResp, xResp, xsResp, iResp, bsResp] = await Promise.all([
-        fetch(API + "/api/shadow/variants", {credentials:"include"}),
+        fetch(API + "/api/shadow/variants?mode=" + encodeURIComponent(shadowMode), {credentials:"include"}),
         fetch(API + "/api/shadow/evaluations" + qs, {credentials:"include"}),
-        fetch(API + "/api/shadow/summary?hours=" + hours, {credentials:"include"}),
+        fetch(API + "/api/shadow/summary?hours=" + hours + modeQs, {credentials:"include"}),
         fetch(API + "/api/shadow/exits" + qs, {credentials:"include"}),
         fetch(API + "/api/shadow/exits/summary?hours=" + exitsHours, {credentials:"include"}),
         fetch(API + "/api/shadow/variants/impact?days=" + impactDays, {credentials:"include"}),
@@ -4374,16 +4394,36 @@ function ShadowModeTab() {
       const xsData = await jsonOrDefault(xsResp, {variants: [], totalExits: 0, hours: exitsHours});
       const iData  = await jsonOrDefault(iResp, {variants: [], windowDays: impactDays});
       const bsData = await jsonOrDefault(bsResp, []);
-      setVariants(Array.isArray(vData) ? vData : []);
-      setEvaluations(Array.isArray(eData) ? eData : []);
+
+      // Client-side filter helper for endpoints that don't yet narrow by
+      // mode. Every row from the backend carries a `mode` field for trade
+      // outcomes / evaluations / exits. Variants from the auto-templates
+      // already arrive scoped because the GET ?mode= filter was applied
+      // server-side, but for entry-side variants where mode is encoded as
+      // block_modes (negative — "DON'T fire on these modes") we honour
+      // that here too so a NORMAL variant doesn't appear in SCALP tab.
+      const matchesMode = (row) => {
+        if (row == null) return true;
+        if (row.mode && typeof row.mode === "string") return row.mode === shadowMode;
+        if (row.block_modes && typeof row.block_modes === "string") {
+          return !row.block_modes.split(",").map(s => s.trim()).includes(shadowMode);
+        }
+        return true; // no mode info — pass through
+      };
+
+      const vAll = Array.isArray(vData) ? vData : [];
+      setVariants(vAll.filter(matchesMode));
+      setEvaluations((Array.isArray(eData) ? eData : []).filter(matchesMode));
       setSummary(sData && typeof sData === "object" && Array.isArray(sData.variants) ? sData : {variants: [], totalEvaluations: 0, hours});
-      setExits(Array.isArray(xData) ? xData : []);
-      setExitsSummary(xsData && typeof xsData === "object" && Array.isArray(xsData.variants) ? xsData : {variants: [], totalExits: 0, hours: exitsHours});
-      setImpact(iData && typeof iData === "object" && Array.isArray(iData.variants) ? iData : {variants: [], windowDays: impactDays});
-      setByStrategy(Array.isArray(bsData) ? bsData : []);
+      setExits((Array.isArray(xData) ? xData : []).filter(matchesMode));
+      const xsVariants = (xsData && Array.isArray(xsData.variants)) ? xsData.variants.filter(matchesMode) : [];
+      setExitsSummary({...(xsData || {}), variants: xsVariants});
+      const iVariants = (iData && Array.isArray(iData.variants)) ? iData.variants.filter(matchesMode) : [];
+      setImpact({...(iData || {}), variants: iVariants, windowDays: impactDays});
+      setByStrategy((Array.isArray(bsData) ? bsData : []).filter(matchesMode));
     } catch (e) { setErr(e.message || String(e)); }
     setLoading(false);
-  }, [hours, filterVariant, exitsHours, impactDays]);
+  }, [hours, filterVariant, exitsHours, impactDays, shadowMode]);
 
   useEffect(() => { refresh(); const t = setInterval(refresh, 15000); return () => clearInterval(t); }, [refresh]);
 
@@ -4544,6 +4584,22 @@ function ShadowModeTab() {
       }}>{children}</button>
   );
 
+  // V74/V75 (2026-04-28) — premium per-mode tabs + sub-section navigation.
+  // Modes are colour-coded so the user can read at a glance which mode they
+  // are configuring. Tooltips explain in trader language (no programming
+  // jargon) what each mode is for.
+  const MODE_META = {
+    SCALP:  { color: "#22c55e", bg: "rgba(34,197,94,0.10)",  label: "SCALP",  emoji: "⚡", help: "Operaciones rápidas (5-15 min). Beneficios pequeños y constantes. SL apretado, TP rápido." },
+    NORMAL: { color: "#a78bfa", bg: "rgba(167,139,250,0.10)", label: "NORMAL", emoji: "🎯", help: "Operativa estándar (15-45 min). Equilibrio entre paciencia y velocidad. La mayoría de variantes históricas viven aquí." },
+    SWING:  { color: "#f59e0b", bg: "rgba(245,158,11,0.10)",  label: "SWING",  emoji: "🌊", help: "Operativa larga (30-120+ min). Solo entradas premium con muchas estrellas alineadas. SL amplio, TP grande." },
+  };
+  const SECTION_META = {
+    experiments: { label: "Experimentos",        emoji: "🧪", help: "Aquí creas y editas tus variantes (los 'qué pasaría si...'). Cada variante simula una idea contra los trades reales sin tocar producción." },
+    results:     { label: "Resultados",          emoji: "📊", help: "Lo que el bot 'habría ganado o perdido' con cada variante. Aquí decides cuál merece pasar a producción y cuál descartar." },
+    logs:        { label: "Logs detalle",        emoji: "🔍", help: "Línea por línea: cada candidato evaluado y cada salida comparada. Útil para investigar casos concretos cuando algo te llama la atención." },
+  };
+  const cur = MODE_META[shadowMode] || MODE_META.NORMAL;
+
   return (<>
     <div className="page-title" style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12, flexWrap:"wrap"}}>
       <div>
@@ -4553,11 +4609,97 @@ function ShadowModeTab() {
       <LivePulse intervalSec={15} />
     </div>
 
+    {/* ─────────── Mode pills (V74/V75 — premium, per-mode scope) ─────────── */}
+    <div style={{
+      display: "flex", alignItems: "center", gap: 8, marginBottom: 14,
+      padding: "10px 14px",
+      background: "linear-gradient(135deg, rgba(255,255,255,0.02) 0%, " + cur.bg + " 100%)",
+      border: "1px solid " + cur.color + "33",
+      borderRadius: 10,
+      flexWrap: "wrap"
+    }}>
+      <div style={{fontSize: 11, color: "#888", fontWeight: 600, letterSpacing: 0.5, textTransform: "uppercase", marginRight: 4}}>
+        Modo activo
+      </div>
+      {["SCALP", "NORMAL", "SWING"].map(m => {
+        const meta = MODE_META[m];
+        const active = m === shadowMode;
+        return (
+          <button key={m}
+            onClick={() => setShadowMode(m)}
+            title={meta.help}
+            style={{
+              padding: "8px 16px",
+              borderRadius: 999,
+              border: "1px solid " + (active ? meta.color : "#222"),
+              background: active ? meta.bg : "transparent",
+              color: active ? meta.color : "#888",
+              fontWeight: active ? 700 : 500,
+              fontSize: 12,
+              letterSpacing: 0.3,
+              cursor: "pointer",
+              display: "flex", alignItems: "center", gap: 6,
+              transition: "all 0.15s ease"
+            }}>
+            <span>{meta.emoji}</span> {meta.label}
+          </button>
+        );
+      })}
+      <div style={{flex: 1, minWidth: 12}} />
+      <div style={{fontSize: 11, color: cur.color, fontWeight: 500, fontStyle: "italic", maxWidth: 480}}>
+        {cur.help}
+      </div>
+    </div>
+
+    {/* ─────────── Sub-section tabs (Experimentos / Resultados / Logs) ─────────── */}
+    <div style={{display: "flex", gap: 4, marginBottom: 16, borderBottom: "1px solid #1a1a2e", flexWrap: "wrap"}}>
+      {Object.entries(SECTION_META).map(([key, meta]) => {
+        const active = key === shadowSection;
+        return (
+          <button key={key}
+            onClick={() => setShadowSection(key)}
+            title={meta.help}
+            style={{
+              padding: "10px 18px",
+              border: "none",
+              borderBottom: "2px solid " + (active ? cur.color : "transparent"),
+              background: "transparent",
+              color: active ? "#e0e0e8" : "#666",
+              fontWeight: active ? 600 : 400,
+              fontSize: 13,
+              cursor: "pointer",
+              display: "flex", alignItems: "center", gap: 8,
+              marginBottom: -1
+            }}>
+            <span>{meta.emoji}</span> {meta.label}
+            <span style={{
+              fontSize: 10, color: "#555", fontWeight: 400, marginLeft: 4,
+              cursor: "help"
+            }}>?</span>
+          </button>
+        );
+      })}
+    </div>
+
+    {/* Helper banner for the active sub-section — explains in plain Spanish
+        what the user is looking at right now, no jargon. */}
+    <div style={{
+      padding: "8px 12px", marginBottom: 14,
+      background: "rgba(255,255,255,0.02)",
+      border: "1px solid #1a1a2e", borderLeft: "3px solid " + cur.color,
+      borderRadius: 4, fontSize: 11, color: "#aaa", lineHeight: 1.5
+    }}>
+      <span style={{color: cur.color, fontWeight: 600}}>{SECTION_META[shadowSection].emoji} {SECTION_META[shadowSection].label}:</span>
+      {" "}{SECTION_META[shadowSection].help}
+    </div>
+
     {err && <div style={{padding:12, background:"#2a1010", border:"1px solid #ef4444", borderRadius:6, color:"#ef4444", marginBottom:12, fontSize:12}}>{err}</div>}
 
-    {/* Impact-window selector pinned compactly — the full impact analysis
-        lives inside each variant's detail modal now (cleaner UX, esp. on
-        mobile where the giant block was overflowing the viewport). */}
+    {/* Impact-window selector — only shown in EXPERIMENTOS where the active
+        variants table consumes the impact analysis (the chip per row reads
+        from `impact` state). Hiding it from RESULTADOS / LOGS keeps each
+        sub-tab focused on its own dataset. */}
+    {shadowSection === "experiments" && (
     <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:14, flexWrap:"wrap"}}>
       <span style={{fontSize:11, color:"#888"}}>{t("shadow.impact_title")} ({t("shadow.impact_meta", {n: impact.variants?.length || 0})}):</span>
       <select value={impactDays} onChange={e => setImpactDays(Number(e.target.value))}
@@ -4570,6 +4712,7 @@ function ShadowModeTab() {
       </select>
       <span style={{fontSize:10, color:"#666"}}>· Pulsa una variante en la tabla para ver su análisis completo</span>
     </div>
+    )}
 
     {/* ── REMOVED 2026-04-27: ANÁLISIS DE IMPACTO panel.
         User feedback: too dominant at top, cuts off on mobile. Replaced by
@@ -4814,6 +4957,10 @@ function ShadowModeTab() {
       )}
     </div></div>{/* close display:none wrapper */}
 
+    {/* ───────────────── SUB-SECTION: EXPERIMENTOS ─────────────────
+        Library + auto wizard + manual form + active variants table */}
+    {shadowSection === "experiments" && (<>
+
     {/* ── Library: catálogo de presets curados, instalable como shadow ─ */}
     <h3 className="section-title">📚 Biblioteca de strategies (Shadow)
       <Tip text="Catálogo de 78 presets curados (26 por modo). Cada uno se puede registrar como shadow variant para A/B test sin riesgo. Si te gusta lo que ves, lo promocionas a producción luego desde el bot." />
@@ -4967,25 +5114,27 @@ function ShadowModeTab() {
               if (v.maxHoldMinutesOverride)   exitChips.push("max=" + v.maxHoldMinutesOverride + "m");
               const imp = (impact.variants || []).find(x => x.name === v.name);
               const verdict = imp?.verdict;
-              const verdictColor = verdict === "CANDIDATE_STRONG" || verdict === "POSITIVE" ? "#22c55e"
-                : verdict === "NEGATIVE" ? "#ef4444"
-                : verdict === "INSUFFICIENT_DATA" ? "#f59e0b"
-                : "#888";
-              const verdictTag = verdict === "CANDIDATE_STRONG" ? "★ FUERTE"
-                : verdict === "POSITIVE" ? "+ POS"
-                : verdict === "NEGATIVE" ? "− NEG"
-                : verdict === "INSUFFICIENT_DATA" ? "? POCO DATOS"
-                : verdict === "OBSERVER" ? "obs"
-                : verdict === "NEUTRAL" ? "≈ neutral"
-                : "—";
+              // Premium verdict mapping (2026-04-28): friendlier labels in
+              // plain Spanish so non-technical users instantly understand
+              // whether they should consider promoting a variant or drop it.
+              const verdictMeta = {
+                "CANDIDATE_STRONG":   { color:"#22c55e", bg:"rgba(34,197,94,0.07)",  label:"★ Recomendada", help:"Esta variante habría dado claramente mejores resultados que producción. Buena candidata para promover." },
+                "POSITIVE":           { color:"#22c55e", bg:"rgba(34,197,94,0.04)",  label:"✓ Positiva",    help:"Esta variante hubiera mejorado el net. Considera promoverla si confirma con más datos." },
+                "NEGATIVE":           { color:"#ef4444", bg:"rgba(239,68,68,0.05)",  label:"✗ Perdedora",   help:"Esta variante hubiera perdido más dinero que producción. NO la promuevas." },
+                "INSUFFICIENT_DATA":  { color:"#f59e0b", bg:"rgba(245,158,11,0.04)", label:"⏳ Sin datos",  help:"Aún no hay trades suficientes para juzgarla. Déjala correr unos días más." },
+                "OBSERVER":           { color:"#888",    bg:"transparent",           label:"👁 Observador", help:"La variante no bloquea ni cambia decisiones, solo registra. Útil para medir, no para promover." },
+                "NEUTRAL":            { color:"#888",    bg:"transparent",           label:"≈ Neutral",     help:"Resultado parecido a producción. No aporta ni quita." },
+              };
+              const vm = verdictMeta[verdict] || { color:"#666", bg:"transparent", label:"—", help:"Aún sin verdict." };
               const deltaPnl = imp?.simNetUsd != null && imp?.realNetUsd != null
                 ? Number(imp.simNetUsd) - Number(imp.realNetUsd)
                 : null;
+              const isPromotable = verdict === "CANDIDATE_STRONG" || verdict === "POSITIVE";
               return (
                 <tr key={v.name} onClick={() => setDetailsModal(v)}
-                  style={{borderBottom:"1px solid #181828", cursor:"pointer"}}
+                  style={{borderBottom:"1px solid #181828", cursor:"pointer", background: vm.bg}}
                   onMouseEnter={e => e.currentTarget.style.background = "#0e0e18"}
-                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                  onMouseLeave={e => e.currentTarget.style.background = vm.bg}>
                   <td style={{padding:"6px 4px", fontWeight:600, color:"#e0e0e8"}}>{v.name}</td>
                   <td style={{color:"#f59e0b"}}>{setStr(v.blockLateEntryRisks) || <span style={{color:"#555"}}>—</span>}</td>
                   <td style={{color:"#f59e0b"}}>{setStr(v.blockQualityLabels) || <span style={{color:"#555"}}>—</span>}</td>
@@ -4996,15 +5145,32 @@ function ShadowModeTab() {
                   <td style={{color:"#aaa"}}>{v.collateralOverrideUsd > 0 ? ("$" + v.collateralOverrideUsd) : <span style={{color:"#555"}}>prod</span>}</td>
                   <td style={{color: v.blockImpulseExhausted ? "#f59e0b" : "#555"}}>{v.blockImpulseExhausted ? "ON" : "off"}</td>
                   <td style={{color:"#22d3ee", fontSize:10}}>{exitChips.length > 0 ? exitChips.join(" · ") : <span style={{color:"#555"}}>—</span>}</td>
-                  <td style={{textAlign:"right", whiteSpace:"nowrap"}}>
-                    <div style={{color: verdictColor, fontSize: 9, fontWeight: 700, letterSpacing: 0.4}}>{verdictTag}</div>
+                  <td style={{textAlign:"right", whiteSpace:"nowrap"}} title={vm.help}>
+                    <div style={{color: vm.color, fontSize: 10, fontWeight: 700, letterSpacing: 0.3, cursor:"help"}}>{vm.label}</div>
                     {deltaPnl != null && (
-                      <div style={{color: deltaPnl >= 0 ? "#22c55e" : "#ef4444", fontSize: 10, fontFamily:"monospace"}}>
+                      <div style={{color: deltaPnl >= 0 ? "#22c55e" : "#ef4444", fontSize: 10, fontFamily:"monospace"}}
+                           title={"Diferencia entre lo que la variante habría ganado y lo que la real ganó. Positivo = la variante gana más."}>
                         {(deltaPnl >= 0 ? "+" : "") + "$" + deltaPnl.toFixed(2)}
                       </div>
                     )}
                   </td>
-                  <td style={{textAlign:"right", color:"#666", fontSize:14, whiteSpace:"nowrap"}}>›</td>
+                  <td style={{textAlign:"right", whiteSpace:"nowrap", paddingRight: 6}}>
+                    {isPromotable ? (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); promoteToBot(v.name); }}
+                        title={"Mete esta variante en el bot como strategy real. CUIDADO: las strategies reales sí afectan tu trading. Solo úsalo cuando los datos confirmen."}
+                        style={{
+                          padding: "4px 10px", borderRadius: 6,
+                          background: "rgba(34,197,94,0.15)", border: "1px solid #22c55e55",
+                          color: "#22c55e", fontWeight: 600, fontSize: 10, cursor: "pointer",
+                          whiteSpace: "nowrap"
+                        }}>
+                        → Promover
+                      </button>
+                    ) : (
+                      <span style={{color:"#666", fontSize:14}}>›</span>
+                    )}
+                  </td>
                 </tr>
               );
             })}
@@ -5184,7 +5350,10 @@ function ShadowModeTab() {
       </div>
     )}
 
-    {/* ── Summary ── */}
+    </>)}{/* end EXPERIMENTOS sub-section */}
+
+    {/* ── Summary (RESULTADOS) ── */}
+    {shadowSection === "results" && (<>
     <h3 className="section-title">{t("shadow.summary_title")}
       <select value={hours} onChange={e => setHours(Number(e.target.value))} style={{marginLeft:10, padding:"2px 6px", fontSize:10, background:"#0a0a13", border:"1px solid #333", color:"#ccc", borderRadius:3}}>
         <option value={1}>1h</option>
@@ -5226,8 +5395,10 @@ function ShadowModeTab() {
         </table>
       )}
     </div>
+    </>)}{/* end Summary RESULTADOS block */}
 
-    {/* ── Recent evaluations ── */}
+    {/* ── Recent evaluations (LOGS) ── */}
+    {shadowSection === "logs" && (<>
     <h3 className="section-title">{t("shadow.decisions_title")}
       <select value={filterVariant} onChange={e => setFilterVariant(e.target.value)} style={{marginLeft:10, padding:"2px 6px", fontSize:10, background:"#0a0a13", border:"1px solid #333", color:"#ccc", borderRadius:3}}>
         <option value="">{t("shadow.all_variants")}</option>
@@ -5273,8 +5444,10 @@ function ShadowModeTab() {
         </div>
       )}
     </div>
+    </>)}{/* end Recent evaluations LOGS block */}
 
-    {/* ── Shadow Exits — resumen por variante ── */}
+    {/* ── Shadow Exits — resumen por variante (RESULTADOS) ── */}
+    {shadowSection === "results" && (<>
     <h3 className="section-title">{t("shadow.exits_title")}
       <select value={exitsHours} onChange={e => setExitsHours(Number(e.target.value))} style={{marginLeft:10, padding:"2px 6px", fontSize:10, background:"#0a0a13", border:"1px solid #333", color:"#ccc", borderRadius:3}}>
         <option value={24}>24h</option>
@@ -5404,8 +5577,10 @@ function ShadowModeTab() {
         </table>
       </div>
     </>)}
+    </>)}{/* end RESULTADOS (Shadow Exits Summary + A/B) block */}
 
-    {/* ── Shadow Exits — filas recientes ── */}
+    {/* ── Shadow Exits — filas recientes (LOGS) ── */}
+    {shadowSection === "logs" && (<>
     <h3 className="section-title">{t("shadow.recent_exits_title")}
       <Tip text={t("shadow.recent_exits_tip")} />
     </h3>
@@ -5469,6 +5644,7 @@ function ShadowModeTab() {
         </div>
       )}
     </div>
+    </>)}{/* end Recent exits LOGS block */}
 
     {/* ── Variant details modal — opens when a row is clicked ───────── */}
     {detailsModal && (() => {
