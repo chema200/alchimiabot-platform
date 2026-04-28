@@ -4617,6 +4617,37 @@ function ShadowModeTab() {
     logs:        { label: "Logs detalle",        emoji: "🔍", help: "Línea por línea: cada candidato evaluado y cada salida comparada. Útil para investigar casos concretos cuando algo te llama la atención." },
   };
   const cur = MODE_META[shadowMode] || MODE_META.NORMAL;
+  // Variant type → friendly badge metadata. Maps name prefix to template
+  // family so the user sees "STRAT" / "SL" / "TP" etc. as a colored chip
+  // before the variant name in the active variants table. Lets them spot
+  // "all my SL sweep variants are negative" at a glance.
+  const VARIANT_TYPE_META = {
+    STRAT:    { label: "STRAT",    color: "#a78bfa", bg: "rgba(167,139,250,0.15)", help: "Variante del A/B de estrategias — imita una estrategia concreta del modo." },
+    SL:       { label: "SL",       color: "#ef4444", bg: "rgba(239,68,68,0.13)",   help: "Variante del barrido de Stop Loss." },
+    TP:       { label: "TP",       color: "#22c55e", bg: "rgba(34,197,94,0.13)",   help: "Variante del barrido de Take Profit." },
+    ROI:      { label: "ROI",      color: "#f59e0b", bg: "rgba(245,158,11,0.13)",  help: "Variante de Paciencia (perfil ROI)." },
+    QUALITY:  { label: "QUAL",     color: "#22d3ee", bg: "rgba(34,211,238,0.13)",  help: "Variante de Filtros de calidad." },
+    COIN:     { label: "COIN",     color: "#ec4899", bg: "rgba(236,72,153,0.13)",  help: "Variante del A/B por liquidez de coin." },
+    SIZE:     { label: "SIZE",     color: "#3b82f6", bg: "rgba(59,130,246,0.13)",  help: "Variante del A/B de tamaño de posición." },
+    TIMING:   { label: "TIMING",   color: "#8b5cf6", bg: "rgba(139,92,246,0.13)",  help: "Variante del Momento de entrada (score min)." },
+    SIDE:     { label: "SIDE",     color: "#10b981", bg: "rgba(16,185,129,0.13)",  help: "Variante de Solo LONG vs Solo SHORT." },
+    LIB:      { label: "LIB",      color: "#06b6d4", bg: "rgba(6,182,212,0.13)",   help: "Instalada desde la Biblioteca de strategies." },
+    MANUAL:   { label: "MANUAL",   color: "#94a3b8", bg: "rgba(148,163,184,0.13)", help: "Variante manual creada por el usuario." },
+  };
+  const variantTypeOf = (name) => {
+    if (!name) return "MANUAL";
+    if (name.startsWith("auto-strat-"))   return "STRAT";
+    if (name.startsWith("auto-sl-"))      return "SL";
+    if (name.startsWith("auto-tp-"))      return "TP";
+    if (name.startsWith("auto-roi-"))     return "ROI";
+    if (name.startsWith("auto-quality-")) return "QUALITY";
+    if (name.startsWith("auto-coin-"))    return "COIN";
+    if (name.startsWith("auto-size-"))    return "SIZE";
+    if (name.startsWith("auto-timing-"))  return "TIMING";
+    if (name.startsWith("auto-side-"))    return "SIDE";
+    if (name.startsWith("lib-"))          return "LIB";
+    return "MANUAL";
+  };
   // ELI5 metadata for the auto-templates — surfaced in the wizard modal so
   // the user reads in trader Spanish what each template actually tests and
   // what to expect from it. NO programming jargon.
@@ -4645,13 +4676,13 @@ function ShadowModeTab() {
     ENTRY_TIMING:   { icon:"⚡", label:"Momento de entrada",
                       eli5: "3 variantes que entran antes (señal débil), normal o esperando confirmación (señal fuerte).",
                       expect: "Mide si vale esperar más confirmación. Esperar reduce trades pero mejora win rate; entrar antes da más oportunidades pero más ruido." },
-    TRAIL_SWEEP:    { icon:"🧲", label:"Trailing stop",
+    TRAIL_SWEEP:    { icon:"🧲", label:"Trailing stop", comingSoon: true,
                       eli5: "3 variantes con trailing stop distinto: estricto, normal, holgado. Cuándo dejar correr al ganador.",
                       expect: "Si el holgado gana → tu trailing actual cierra ganadoras demasiado pronto. Si el estricto gana → das de más al peak y luego retroceden." },
     SIDE_AB:        { icon:"⇅", label:"Solo LONG vs solo SHORT",
                       eli5: "2 variantes: una solo abre LONG, otra solo SHORT. Mide en qué dirección tienes ventaja real.",
                       expect: "Si una pierde mucho más que la otra → desactiva ese lado en producción. Tu edge no es bidireccional siempre." },
-    COOLDOWN_AB:    { icon:"⏳", label:"Cooldown entre trades",
+    COOLDOWN_AB:    { icon:"⏳", label:"Cooldown entre trades", comingSoon: true,
                       eli5: "3 variantes con tiempo de espera distinto entre trades de la misma coin: 5, 10 o 30 minutos.",
                       expect: "Cooldown corto = más trades pero más ruido (revenge trading). Cooldown largo = menos trades pero cada uno más selectivo." },
   };
@@ -4665,88 +4696,106 @@ function ShadowModeTab() {
       <LivePulse intervalSec={15} />
     </div>
 
-    {/* ─────────── Mode pills (V74/V75 — premium, per-mode scope) ─────────── */}
+    {/* ─────────── UNIFIED MODE + SUB-SECTION CONTAINER (V74) ───────────
+         Mode pills + sub-tabs share a single tinted container so the user
+         reads them as the SAME group: "I'm in {mode} → looking at {section}".
+         The mode color flows through the entire container border, the sub-
+         tab active border, the helper banner accent. */}
     <div style={{
-      display: "flex", alignItems: "center", gap: 8, marginBottom: 14,
-      padding: "10px 14px",
-      background: "linear-gradient(135deg, rgba(255,255,255,0.02) 0%, " + cur.bg + " 100%)",
-      border: "1px solid " + cur.color + "33",
-      borderRadius: 10,
-      flexWrap: "wrap"
+      marginBottom: 16,
+      border: "1px solid " + cur.color + "44",
+      borderRadius: 12,
+      overflow: "hidden",
+      background: "linear-gradient(180deg, " + cur.bg + " 0%, transparent 100%)"
     }}>
-      <div style={{fontSize: 11, color: "#888", fontWeight: 600, letterSpacing: 0.5, textTransform: "uppercase", marginRight: 4}}>
-        Modo activo
-      </div>
-      {["SCALP", "NORMAL", "SWING"].map(m => {
-        const meta = MODE_META[m];
-        const active = m === shadowMode;
-        return (
-          <button key={m}
-            onClick={() => setShadowMode(m)}
-            title={meta.help}
-            style={{
-              padding: "8px 16px",
-              borderRadius: 999,
-              border: "1px solid " + (active ? meta.color : "#222"),
-              background: active ? meta.bg : "transparent",
-              color: active ? meta.color : "#888",
-              fontWeight: active ? 700 : 500,
-              fontSize: 12,
-              letterSpacing: 0.3,
-              cursor: "pointer",
-              display: "flex", alignItems: "center", gap: 6,
-              transition: "all 0.15s ease"
-            }}>
-            <span>{meta.emoji}</span> {meta.label}
-          </button>
-        );
-      })}
-      <div style={{flex: 1, minWidth: 12}} />
-      <div style={{fontSize: 11, color: cur.color, fontWeight: 500, fontStyle: "italic", maxWidth: 480}}>
-        {cur.help}
-      </div>
-    </div>
 
-    {/* ─────────── Sub-section tabs (Experimentos / Resultados / Logs) ─────────── */}
-    <div style={{display: "flex", gap: 4, marginBottom: 16, borderBottom: "1px solid #1a1a2e", flexWrap: "wrap"}}>
-      {Object.entries(SECTION_META).map(([key, meta]) => {
-        const active = key === shadowSection;
-        return (
-          <button key={key}
-            onClick={() => setShadowSection(key)}
-            title={meta.help}
-            style={{
-              padding: "10px 18px",
-              border: "none",
-              borderBottom: "2px solid " + (active ? cur.color : "transparent"),
-              background: "transparent",
-              color: active ? "#e0e0e8" : "#666",
-              fontWeight: active ? 600 : 400,
-              fontSize: 13,
-              cursor: "pointer",
-              display: "flex", alignItems: "center", gap: 8,
-              marginBottom: -1
-            }}>
-            <span>{meta.emoji}</span> {meta.label}
-            <span style={{
-              fontSize: 10, color: "#555", fontWeight: 400, marginLeft: 4,
-              cursor: "help"
-            }}>?</span>
-          </button>
-        );
-      })}
-    </div>
+      {/* Top row: mode pills + active mode help text */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 10,
+        padding: "12px 16px",
+        borderBottom: "1px solid " + cur.color + "22",
+        flexWrap: "wrap"
+      }}>
+        <div style={{fontSize: 10, color: "#888", fontWeight: 700, letterSpacing: 0.6, textTransform: "uppercase", marginRight: 4}}>
+          Modo
+        </div>
+        {["SCALP", "NORMAL", "SWING"].map(m => {
+          const meta = MODE_META[m];
+          const active = m === shadowMode;
+          return (
+            <button key={m}
+              onClick={() => setShadowMode(m)}
+              title={meta.help}
+              style={{
+                padding: "7px 14px",
+                borderRadius: 999,
+                border: "1px solid " + (active ? meta.color : "#1a1a2e"),
+                background: active ? meta.bg : "transparent",
+                color: active ? meta.color : "#777",
+                fontWeight: active ? 700 : 500,
+                fontSize: 12,
+                letterSpacing: 0.3,
+                cursor: "pointer",
+                display: "flex", alignItems: "center", gap: 6,
+                transition: "all 0.15s ease"
+              }}>
+              <span>{meta.emoji}</span> {meta.label}
+            </button>
+          );
+        })}
+        <div style={{flex: 1, minWidth: 12}} />
+        <div style={{fontSize: 11, color: cur.color, fontWeight: 500, fontStyle: "italic", maxWidth: 480, opacity: 0.85}}>
+          {cur.help}
+        </div>
+      </div>
 
-    {/* Helper banner for the active sub-section — explains in plain Spanish
-        what the user is looking at right now, no jargon. */}
-    <div style={{
-      padding: "8px 12px", marginBottom: 14,
-      background: "rgba(255,255,255,0.02)",
-      border: "1px solid #1a1a2e", borderLeft: "3px solid " + cur.color,
-      borderRadius: 4, fontSize: 11, color: "#aaa", lineHeight: 1.5
-    }}>
-      <span style={{color: cur.color, fontWeight: 600}}>{SECTION_META[shadowSection].emoji} {SECTION_META[shadowSection].label}:</span>
-      {" "}{SECTION_META[shadowSection].help}
+      {/* Bottom row: sub-section tabs sitting flush below the pills.
+          Active tab carries a thicker bottom border in the mode color so the
+          eye reads "this section is part of THIS mode". */}
+      <div style={{
+        display: "flex", gap: 0,
+        background: "rgba(0,0,0,0.18)",
+        flexWrap: "wrap"
+      }}>
+        {Object.entries(SECTION_META).map(([key, meta]) => {
+          const active = key === shadowSection;
+          return (
+            <button key={key}
+              onClick={() => setShadowSection(key)}
+              title={meta.help}
+              style={{
+                padding: "11px 22px",
+                border: "none",
+                borderBottom: "3px solid " + (active ? cur.color : "transparent"),
+                background: active ? "rgba(255,255,255,0.025)" : "transparent",
+                color: active ? "#e0e0e8" : "#666",
+                fontWeight: active ? 700 : 500,
+                fontSize: 12,
+                letterSpacing: 0.3,
+                cursor: "pointer",
+                display: "flex", alignItems: "center", gap: 8,
+                transition: "all 0.15s ease"
+              }}
+              onMouseEnter={e => { if (!active) e.currentTarget.style.color = "#aaa"; }}
+              onMouseLeave={e => { if (!active) e.currentTarget.style.color = "#666"; }}>
+              <span style={{fontSize: 14}}>{meta.emoji}</span> {meta.label}
+              <span style={{fontSize: 10, color: "#555", fontWeight: 400, marginLeft: 2, cursor: "help"}}>?</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Helper banner — INSIDE the same container so it reads as part of
+          the mode/section context, not as a floating note. */}
+      <div style={{
+        padding: "10px 16px",
+        background: "rgba(0,0,0,0.25)",
+        borderTop: "1px solid " + cur.color + "22",
+        fontSize: 11, color: "#aaa", lineHeight: 1.55
+      }}>
+        <span style={{color: cur.color, fontWeight: 700}}>{SECTION_META[shadowSection].emoji} {SECTION_META[shadowSection].label}:</span>
+        {" "}{SECTION_META[shadowSection].help}
+      </div>
     </div>
 
     {err && <div style={{padding:12, background:"#2a1010", border:"1px solid #ef4444", borderRadius:6, color:"#ef4444", marginBottom:12, fontSize:12}}>{err}</div>}
@@ -5059,16 +5108,28 @@ function ShadowModeTab() {
         ].map(card => {
           const meta = WIZARD_META[card.id];
           if (!meta) return null;
+          const soon = meta.comingSoon === true;
           return (
             <button key={card.id} type="button"
-              onClick={() => { wizardOpen(card.id); wizardLoadPreview(card.id, shadowMode); }}
-              title={meta.eli5 + (meta.expect ? "\n\n💡 " + meta.expect : "")}
-              style={{padding:"12px 14px", textAlign:"left", background:"linear-gradient(180deg, rgba(255,255,255,0.02), transparent)", border:"1px solid #1a1a2e", borderRadius:8, color:"#ccc", cursor:"pointer", fontSize:11, transition:"all 0.15s", position:"relative"}}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = cur.color + "66"; e.currentTarget.style.background = "rgba(255,255,255,0.03)"; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = "#1a1a2e"; e.currentTarget.style.background = "linear-gradient(180deg, rgba(255,255,255,0.02), transparent)"; }}>
+              onClick={soon ? undefined : () => { wizardOpen(card.id); wizardLoadPreview(card.id, shadowMode); }}
+              disabled={soon}
+              title={meta.eli5 + (meta.expect ? "\n\n💡 " + meta.expect : "") + (soon ? "\n\n⏳ Próximamente — necesita campos extra en la BD que llegarán en próxima versión." : "")}
+              style={{padding:"12px 14px", textAlign:"left",
+                      background:"linear-gradient(180deg, rgba(255,255,255,0.02), transparent)",
+                      border:"1px solid #1a1a2e", borderRadius:8,
+                      color:"#ccc", cursor: soon ? "not-allowed" : "pointer",
+                      fontSize:11, transition:"all 0.15s", position:"relative",
+                      opacity: soon ? 0.5 : 1}}
+              onMouseEnter={e => { if (soon) return; e.currentTarget.style.borderColor = cur.color + "66"; e.currentTarget.style.background = "rgba(255,255,255,0.03)"; }}
+              onMouseLeave={e => { if (soon) return; e.currentTarget.style.borderColor = "#1a1a2e"; e.currentTarget.style.background = "linear-gradient(180deg, rgba(255,255,255,0.02), transparent)"; }}>
               <div style={{fontWeight:700, color:"#e0e0e8", marginBottom:5, fontSize:12, display:"flex", alignItems:"center", gap:6}}>
                 <span style={{fontSize:14}}>{meta.icon}</span>
                 {meta.label}
+                {soon && (
+                  <span style={{padding:"1px 6px", fontSize:9, fontWeight:700, color:"#f59e0b", background:"rgba(245,158,11,0.15)", border:"1px solid #f59e0b55", borderRadius:4, marginLeft:4}}>
+                    Próximamente
+                  </span>
+                )}
                 <span style={{marginLeft:"auto", fontSize:9, color:"#555"}}>?</span>
               </div>
               <div style={{fontSize:10, color:"#888", lineHeight:1.5}}>{meta.eli5}</div>
@@ -5211,6 +5272,7 @@ function ShadowModeTab() {
           {/* V74 (2026-04-28) — column headers carry inline tooltips so the
               user knows what each chip means without programming jargon. */}
           <thead><tr style={{textAlign:"left", color:"#888", borderBottom:"1px solid #222", textTransform:"uppercase", fontSize:10, letterSpacing:0.5}}>
+            <th style={{padding:"8px 4px"}} title="Familia de la variante (qué experimento la generó). STRAT=A/B de estrategias · SL/TP=barridos · ROI=paciencia · QUAL=filtros calidad · COIN=por liquidez · SIZE=tamaño · TIMING=momento entrada · SIDE=solo LONG/SHORT · LIB=biblioteca · MANUAL=tú la creaste.">Tipo</th>
             <th style={{padding:"8px 4px"}} title="Identificador único de la variante.">Nombre</th>
             <th title="Niveles de 'riesgo de entrada tardía' que esta variante BLOQUEA. Si el motor cataloga una entry como HIGH risk y la variante bloquea HIGH, la simulación no abre.">Late risks</th>
             <th title="Etiquetas de calidad que la variante BLOQUEA (A_PLUS, WEAK, etc).">Labels</th>
@@ -5255,6 +5317,20 @@ function ShadowModeTab() {
                   style={{borderBottom:"1px solid #181828", cursor:"pointer", background: vm.bg}}
                   onMouseEnter={e => e.currentTarget.style.background = "#0e0e18"}
                   onMouseLeave={e => e.currentTarget.style.background = vm.bg}>
+                  <td style={{padding:"6px 4px"}}>
+                    {(() => {
+                      const tm = VARIANT_TYPE_META[variantTypeOf(v.name)] || VARIANT_TYPE_META.MANUAL;
+                      return (
+                        <span title={tm.help} style={{
+                          display:"inline-block", padding:"2px 7px",
+                          fontSize:9, fontWeight:700, letterSpacing:0.5,
+                          color: tm.color, background: tm.bg,
+                          border: "1px solid " + tm.color + "44",
+                          borderRadius:4, whiteSpace:"nowrap"
+                        }}>{tm.label}</span>
+                      );
+                    })()}
+                  </td>
                   <td style={{padding:"6px 4px", fontWeight:600, color:"#e0e0e8"}}>{v.name}</td>
                   <td style={{color:"#f59e0b"}}>{setStr(v.blockLateEntryRisks) || <span style={{color:"#555"}}>—</span>}</td>
                   <td style={{color:"#f59e0b"}}>{setStr(v.blockQualityLabels) || <span style={{color:"#555"}}>—</span>}</td>
