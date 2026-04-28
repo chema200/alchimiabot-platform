@@ -4217,6 +4217,12 @@ function ShadowModeTab() {
   // line-by-line evaluation/exit log.
   const [shadowSection, setShadowSection] = useState(() => localStorage.getItem("shadow_section") || "experiments");
   useEffect(() => { localStorage.setItem("shadow_section", shadowSection); }, [shadowSection]);
+  // V76 (2026-04-28) — filter / sort state for the active variants table.
+  // Lets the user narrow to a single experiment family or rank by verdict
+  // strength to surface the candidates worth promoting first.
+  const [variantTypeFilter, setVariantTypeFilter] = useState("ALL");
+  const [variantSortBy, setVariantSortBy]         = useState("verdict"); // verdict | name | type | impact
+  const [variantSortDir, setVariantSortDir]       = useState("desc");    // asc | desc
 
   const [variants, setVariants] = useState([]);
   const [evaluations, setEvaluations] = useState([]);
@@ -4376,7 +4382,10 @@ function ShadowModeTab() {
       // don't yet accept ?mode= keep returning everything and we narrow it
       // down here so the UI is always per-mode regardless of backend stage.
       const modeQs = "&mode=" + encodeURIComponent(shadowMode);
-      const [vResp, eResp, sResp, xResp, xsResp, iResp, bsResp] = await Promise.all([
+      // V76 (2026-04-28) — also fetch B1 Confluence variants in the same
+      // refresh so they can live in the unified main table instead of in a
+      // separate section. Filtered by mode just like entry-side ones.
+      const [vResp, eResp, sResp, xResp, xsResp, iResp, bsResp, cvResp] = await Promise.all([
         fetch(API + "/api/shadow/variants?mode=" + encodeURIComponent(shadowMode), {credentials:"include"}),
         fetch(API + "/api/shadow/evaluations" + qs, {credentials:"include"}),
         fetch(API + "/api/shadow/summary?hours=" + hours + modeQs, {credentials:"include"}),
@@ -4384,6 +4393,7 @@ function ShadowModeTab() {
         fetch(API + "/api/shadow/exits/summary?hours=" + exitsHours, {credentials:"include"}),
         fetch(API + "/api/shadow/variants/impact?days=" + impactDays, {credentials:"include"}),
         fetch(API + "/api/shadow/exits/by-strategy?hours=" + exitsHours, {credentials:"include"}),
+        fetch(API + "/api/shadow/confluence/variants?mode=" + encodeURIComponent(shadowMode), {credentials:"include"}),
       ]);
       if (vResp.status === 403 || eResp.status === 403 || sResp.status === 403
           || xResp.status === 403 || xsResp.status === 403 || iResp.status === 403) {
@@ -4430,7 +4440,12 @@ function ShadowModeTab() {
       };
 
       const vAll = Array.isArray(vData) ? vData : [];
-      setVariants(vAll.filter(matchesMode));
+      // V76 — append confluence variants tagged with _kind so the table can
+      // render them as B1 rows in the unified list. They already arrive
+      // mode-filtered server-side so we just merge.
+      const cvData = await jsonOrDefault(cvResp, []);
+      const cvAll = (Array.isArray(cvData) ? cvData : []).map(c => ({...c, _kind: "confluence", name: c.name}));
+      setVariants([...vAll.filter(matchesMode), ...cvAll]);
       setEvaluations((Array.isArray(eData) ? eData : []).filter(matchesMode));
       setSummary(sData && typeof sData === "object" && Array.isArray(sData.variants) ? sData : {variants: [], totalEvaluations: 0, hours});
       setExits((Array.isArray(xData) ? xData : []).filter(matchesMode));
@@ -4632,20 +4647,32 @@ function ShadowModeTab() {
     TIMING:   { label: "TIMING",   color: "#8b5cf6", bg: "rgba(139,92,246,0.13)",  help: "Variante del Momento de entrada (score min)." },
     SIDE:     { label: "SIDE",     color: "#10b981", bg: "rgba(16,185,129,0.13)",  help: "Variante de Solo LONG vs Solo SHORT." },
     LIB:      { label: "LIB",      color: "#06b6d4", bg: "rgba(6,182,212,0.13)",   help: "Instalada desde la Biblioteca de strategies." },
+    TRAIL:    { label: "TRAIL",    color: "#fbbf24", bg: "rgba(251,191,36,0.13)",  help: "Variante del barrido de trailing stop." },
+    COOLDOWN: { label: "COOLDN",   color: "#a3a3a3", bg: "rgba(163,163,163,0.13)", help: "Variante del A/B de cooldown entre trades." },
+    B1:       { label: "B1",       color: "#f43f5e", bg: "rgba(244,63,94,0.13)",   help: "Filtro pre-entry B1 Confluence — bloquea entradas antes de que se abran si fallan checks de calidad (trend, BTC macro, RSI, posición de precio)." },
     MANUAL:   { label: "MANUAL",   color: "#94a3b8", bg: "rgba(148,163,184,0.13)", help: "Variante manual creada por el usuario." },
   };
-  const variantTypeOf = (name) => {
+  const variantTypeOf = (variant) => {
+    // V76 — accepts either a name string (legacy) or a variant object (so
+    // confluence rows tagged with _kind="confluence" can be detected).
+    if (variant && typeof variant === "object") {
+      if (variant._kind === "confluence") return "B1";
+      return variantTypeOf(variant.name);
+    }
+    const name = variant;
     if (!name) return "MANUAL";
-    if (name.startsWith("auto-strat-"))   return "STRAT";
-    if (name.startsWith("auto-sl-"))      return "SL";
-    if (name.startsWith("auto-tp-"))      return "TP";
-    if (name.startsWith("auto-roi-"))     return "ROI";
-    if (name.startsWith("auto-quality-")) return "QUALITY";
-    if (name.startsWith("auto-coin-"))    return "COIN";
-    if (name.startsWith("auto-size-"))    return "SIZE";
-    if (name.startsWith("auto-timing-"))  return "TIMING";
-    if (name.startsWith("auto-side-"))    return "SIDE";
-    if (name.startsWith("lib-"))          return "LIB";
+    if (name.startsWith("auto-strat-"))    return "STRAT";
+    if (name.startsWith("auto-sl-"))       return "SL";
+    if (name.startsWith("auto-tp-"))       return "TP";
+    if (name.startsWith("auto-roi-"))      return "ROI";
+    if (name.startsWith("auto-quality-"))  return "QUALITY";
+    if (name.startsWith("auto-coin-"))     return "COIN";
+    if (name.startsWith("auto-size-"))     return "SIZE";
+    if (name.startsWith("auto-timing-"))   return "TIMING";
+    if (name.startsWith("auto-side-"))     return "SIDE";
+    if (name.startsWith("auto-trail-"))    return "TRAIL";
+    if (name.startsWith("auto-cooldown-")) return "COOLDOWN";
+    if (name.startsWith("lib-"))           return "LIB";
     return "MANUAL";
   };
   // ELI5 metadata for the auto-templates — surfaced in the wizard modal so
@@ -4676,13 +4703,13 @@ function ShadowModeTab() {
     ENTRY_TIMING:   { icon:"⚡", label:"Momento de entrada",
                       eli5: "3 variantes que entran antes (señal débil), normal o esperando confirmación (señal fuerte).",
                       expect: "Mide si vale esperar más confirmación. Esperar reduce trades pero mejora win rate; entrar antes da más oportunidades pero más ruido." },
-    TRAIL_SWEEP:    { icon:"🧲", label:"Trailing stop", comingSoon: true,
+    TRAIL_SWEEP:    { icon:"🧲", label:"Trailing stop",
                       eli5: "3 variantes con trailing stop distinto: estricto, normal, holgado. Cuándo dejar correr al ganador.",
                       expect: "Si el holgado gana → tu trailing actual cierra ganadoras demasiado pronto. Si el estricto gana → das de más al peak y luego retroceden." },
     SIDE_AB:        { icon:"⇅", label:"Solo LONG vs solo SHORT",
                       eli5: "2 variantes: una solo abre LONG, otra solo SHORT. Mide en qué dirección tienes ventaja real.",
                       expect: "Si una pierde mucho más que la otra → desactiva ese lado en producción. Tu edge no es bidireccional siempre." },
-    COOLDOWN_AB:    { icon:"⏳", label:"Cooldown entre trades", comingSoon: true,
+    COOLDOWN_AB:    { icon:"⏳", label:"Cooldown entre trades",
                       eli5: "3 variantes con tiempo de espera distinto entre trades de la misma coin: 5, 10 o 30 minutos.",
                       expect: "Cooldown corto = más trades pero más ruido (revenge trading). Cooldown largo = menos trades pero cada uno más selectivo." },
   };
@@ -5264,6 +5291,58 @@ function ShadowModeTab() {
 
     {/* ── Active variants ── */}
     <h3 className="section-title">{t("shadow.active_title", {n: variants.length})} <Tip text={t("shadow.active_tip")} /></h3>
+
+    {/* V76 (2026-04-28) — filter / sort controls. Type pills + sort dropdown.
+        Lets the user narrow the table to a single experiment family and rank
+        by verdict so the strongest candidates surface at the top. */}
+    {variants.length > 0 && (
+      <div style={{display:"flex", gap:10, alignItems:"center", flexWrap:"wrap", marginBottom:8, padding:"8px 12px", background:"rgba(255,255,255,0.015)", border:"1px solid #1a1a2e", borderRadius:6}}>
+        <span style={{fontSize:10, color:"#666", fontWeight:700, textTransform:"uppercase", letterSpacing:0.5}}>Filtrar:</span>
+        {(() => {
+          const types = ["ALL", ...Object.keys(VARIANT_TYPE_META)];
+          const counts = {};
+          variants.forEach(v => {
+            const t = variantTypeOf(v);
+            counts[t] = (counts[t] || 0) + 1;
+          });
+          counts.ALL = variants.length;
+          return types.filter(t => t === "ALL" || (counts[t] || 0) > 0).map(t => {
+            const meta = t === "ALL" ? {color:"#888", bg:"rgba(255,255,255,0.05)", label:"TODAS"} : VARIANT_TYPE_META[t];
+            const active = variantTypeFilter === t;
+            const n = counts[t] || 0;
+            return (
+              <button key={t}
+                onClick={() => setVariantTypeFilter(t)}
+                title={t === "ALL" ? "Todas las variantes" : meta.help}
+                style={{
+                  padding:"3px 9px", fontSize:10, fontWeight:active ? 700 : 500, letterSpacing:0.4,
+                  color: active ? meta.color : "#888",
+                  background: active ? meta.bg : "transparent",
+                  border: "1px solid " + (active ? meta.color + "66" : "#1a1a2e"),
+                  borderRadius:4, cursor:"pointer", display:"inline-flex", alignItems:"center", gap:4
+                }}>
+                {meta.label} <span style={{opacity:0.6, fontSize:9}}>{n}</span>
+              </button>
+            );
+          });
+        })()}
+        <div style={{flex:1, minWidth:8}} />
+        <span style={{fontSize:10, color:"#666", fontWeight:700, textTransform:"uppercase", letterSpacing:0.5}}>Ordenar:</span>
+        <select value={variantSortBy} onChange={e => setVariantSortBy(e.target.value)}
+                style={{padding:"3px 6px", fontSize:10, background:"#0a0a13", border:"1px solid #333", color:"#ccc", borderRadius:3}}>
+          <option value="verdict">Verdict (mejor primero)</option>
+          <option value="impact">Δ PnL impacto</option>
+          <option value="type">Tipo</option>
+          <option value="name">Nombre</option>
+        </select>
+        <button onClick={() => setVariantSortDir(d => d === "asc" ? "desc" : "asc")}
+                title="Cambiar dirección"
+                style={{padding:"3px 8px", fontSize:11, background:"transparent", border:"1px solid #333", color:"#aaa", borderRadius:3, cursor:"pointer"}}>
+          {variantSortDir === "asc" ? "↑" : "↓"}
+        </button>
+      </div>
+    )}
+
     <div className="card" style={{marginBottom:12}}>
       {variants.length === 0 ? (
         <div style={{color:"#666", fontSize:11, padding:8}}>{t("shadow.active_empty")}</div>
@@ -5287,7 +5366,42 @@ function ShadowModeTab() {
             <th title="Si la variante tiene verdict positivo, aparece el botón verde para promoverla a strategy real del bot."></th>
           </tr></thead>
           <tbody>
-            {variants.map(v => {
+            {(() => {
+              // V76 — apply user filter + sort to the unified variants list.
+              const filtered = variantTypeFilter === "ALL"
+                ? variants
+                : variants.filter(v => variantTypeOf(v) === variantTypeFilter);
+              // Verdict ranking (higher = better candidate to promote).
+              const verdictRank = {
+                "CANDIDATE_STRONG": 5, "POSITIVE": 4, "NEUTRAL": 3,
+                "OBSERVER": 2, "INSUFFICIENT_DATA": 1, "NEGATIVE": 0,
+              };
+              const impForVariant = (v) => (impact.variants || []).find(x => x.name === v.name);
+              const sortKey = (v) => {
+                if (variantSortBy === "name") return (v.name || "").toLowerCase();
+                if (variantSortBy === "type") return variantTypeOf(v);
+                if (variantSortBy === "verdict") {
+                  const imp = impForVariant(v);
+                  return verdictRank[imp?.verdict] ?? -1;
+                }
+                if (variantSortBy === "impact") {
+                  const imp = impForVariant(v);
+                  if (imp?.simNetUsd != null && imp?.realNetUsd != null) {
+                    return Number(imp.simNetUsd) - Number(imp.realNetUsd);
+                  }
+                  return -Infinity;
+                }
+                return 0;
+              };
+              const sorted = [...filtered].sort((a, b) => {
+                const ka = sortKey(a), kb = sortKey(b);
+                let cmp = 0;
+                if (typeof ka === "number" && typeof kb === "number") cmp = ka - kb;
+                else cmp = String(ka).localeCompare(String(kb));
+                return variantSortDir === "asc" ? cmp : -cmp;
+              });
+              return sorted;
+            })().map(v => {
               const setStr = (s) => (s && s.length > 0 ? (Array.isArray(s) ? s : Array.from(s)).join(", ") : null);
               const exitChips = [];
               if (v.roiTableOverride)         exitChips.push("ROI=" + v.roiTableOverride);
@@ -5319,7 +5433,7 @@ function ShadowModeTab() {
                   onMouseLeave={e => e.currentTarget.style.background = vm.bg}>
                   <td style={{padding:"6px 4px"}}>
                     {(() => {
-                      const tm = VARIANT_TYPE_META[variantTypeOf(v.name)] || VARIANT_TYPE_META.MANUAL;
+                      const tm = VARIANT_TYPE_META[variantTypeOf(v)] || VARIANT_TYPE_META.MANUAL;
                       return (
                         <span title={tm.help} style={{
                           display:"inline-block", padding:"2px 7px",
@@ -5358,7 +5472,22 @@ function ShadowModeTab() {
                   <td style={{color:"#aaa"}}>{v.minScoreOverride > 0 ? v.minScoreOverride : <span style={{color:"#555"}}>—</span>}</td>
                   <td style={{color:"#aaa"}}>{v.collateralOverrideUsd > 0 ? ("$" + v.collateralOverrideUsd) : <span style={{color:"#555"}}>prod</span>}</td>
                   <td style={{color: v.blockImpulseExhausted ? "#f59e0b" : "#555"}}>{v.blockImpulseExhausted ? "ON" : "off"}</td>
-                  <td style={{color:"#22d3ee", fontSize:10}}>{exitChips.length > 0 ? exitChips.join(" · ") : <span style={{color:"#555"}}>—</span>}</td>
+                  <td style={{color:"#22d3ee", fontSize:10}}>{(() => {
+                    if (v._kind === "confluence") {
+                      // For B1 confluence variants the meaningful "config" is
+                      // the set of pre-entry checks and their thresholds —
+                      // shown here in compact form so the row is informative
+                      // without forcing the user to open the modal.
+                      const chips = [];
+                      if (v.confluenceMaxFailedChecks != null) chips.push("max_fail=" + v.confluenceMaxFailedChecks);
+                      if (Number(v.confluenceRsiMaxLong) > 0) chips.push("RSI_L≤" + v.confluenceRsiMaxLong);
+                      if (Number(v.confluenceRsiMinShort) > 0) chips.push("RSI_S≥" + v.confluenceRsiMinShort);
+                      if (Number(v.confluenceMaxPricePositionLong) > 0) chips.push("PP_L≤" + v.confluenceMaxPricePositionLong);
+                      if (Number(v.confluenceMinPricePositionShort) > 0) chips.push("PP_S≥" + v.confluenceMinPricePositionShort);
+                      return <span style={{color:"#f43f5e"}} title="Configuración del filtro B1 Confluence — bloquea entradas que fallan más de N de estos checks.">{chips.join(" · ")}</span>;
+                    }
+                    return exitChips.length > 0 ? exitChips.join(" · ") : <span style={{color:"#555"}}>—</span>;
+                  })()}</td>
                   <td style={{textAlign:"right", whiteSpace:"nowrap"}} title={vm.help}>
                     <div style={{color: vm.color, fontSize: 10, fontWeight: 700, letterSpacing: 0.3, cursor:"help"}}>{vm.label}</div>
                     {deltaPnl != null && (
