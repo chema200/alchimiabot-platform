@@ -6,6 +6,7 @@ trade outcomes, signal evaluations, feature snapshots, experiments, etc.
 
 from datetime import datetime, timezone
 from sqlalchemy import Column, BigInteger, String, Float, DateTime, Integer, Text, Boolean, JSON, Index, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase
 
 
@@ -20,6 +21,10 @@ class TradeOutcome(Base):
     __tablename__ = "trade_outcomes"
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
+    # V83 (2026-04-30) — outbox idempotency key. UUID v4 generado en bot
+    # al enqueue. UNIQUE parcial (WHERE NOT NULL) en migration b2e3d4f5a6c7
+    # para no penalizar legacy rows pre-V83 que vienen sin event_id.
+    event_id = Column(UUID(as_uuid=True), nullable=True)
     user_id = Column(BigInteger, nullable=False, default=1, index=True)
     coin = Column(String(20), nullable=False, index=True)
     side = Column(String(10), nullable=False)
@@ -163,6 +168,7 @@ class SignalEvaluation(Base):
     __tablename__ = "signal_evaluations"
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
+    event_id = Column(UUID(as_uuid=True), nullable=True)  # V83 outbox idempotency
     user_id = Column(BigInteger, nullable=False, default=1, index=True)
     coin = Column(String(20), nullable=False, index=True)
     side = Column(String(10), nullable=False)
@@ -228,6 +234,7 @@ class RegimeLabel(Base):
     __tablename__ = "regime_labels"
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
+    event_id = Column(UUID(as_uuid=True), nullable=True)  # V83 outbox idempotency
     user_id = Column(BigInteger, nullable=False, default=1, index=True)
     coin = Column(String(20), nullable=False)
     timestamp = Column(DateTime(timezone=True), nullable=False)
@@ -274,6 +281,7 @@ class ChangeMarker(Base):
     __tablename__ = "change_markers"
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
+    event_id = Column(UUID(as_uuid=True), nullable=True)  # V83 outbox idempotency
     user_id = Column(BigInteger, nullable=False, default=1, index=True)
     timestamp = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     category = Column(String(30), nullable=False)  # PRESET, PROFILE, OPTIMIZER, SHADOW, MANUAL, EVENT, MODE_CHANGE
