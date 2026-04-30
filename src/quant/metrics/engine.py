@@ -150,23 +150,73 @@ class MetricsEngine:
             "total_trades": len(pnls),
         }
 
+    # Fase 5 #26 (2026-04-30) — exit efficiency thresholds.
+    # MIN_MFE_PCT: filtra trades cuyo peak favorable fue tan pequeño que
+    # el ratio pnl/mfe se vuelve numéricamente absurdo (e.g., mfe=0.001%
+    # con pnl=-1% → ratio=-1000). 0.05% es ~el mínimo round-trip fee
+    # típico — por debajo, el trade no tiene info útil de "exit calidad".
+    # CLAMP: ratios extremos por outliers (mfe muy pequeño no filtrado por
+    # rounding) se acotan a [-2, 2] para que el mean no se contamine.
+    # Una eficiencia legítima vive en [-1, 1] aprox; ±2 da margen para
+    # casos límite sin permitir outliers que rompan el agregado.
+    EXIT_EFF_MIN_MFE_PCT = 0.05
+    EXIT_EFF_CLAMP_LO = -2.0
+    EXIT_EFF_CLAMP_HI = 2.0
+
     def _compute_execution(self, trades: list[dict]) -> dict[str, Any]:
-        """Execution quality metrics."""
+        """Execution quality metrics.
+
+        Fase 5 #26: avg_exit_efficiency robustecido contra outliers
+        (filtro de MFE mínimo + clamp). Reporta mean, median y sample
+        count para que ops vea cobertura del cálculo.
+        """
         durations = [t.get("duration_seconds", 0) or 0 for t in trades]
         mfes = [t.get("mfe_pct", 0) or 0 for t in trades]
         maes = [t.get("mae_pct", 0) or 0 for t in trades]
 
-        # Exit efficiency: how much of MFE was captured
-        efficiencies = []
-        for t in trades:
-            mfe = t.get("mfe_pct", 0) or 0
-            pnl_pct = t.get("pnl_pct", 0) or 0
-            if mfe > 0:
-                efficiencies.append(pnl_pct / mfe)
+        eff_data = self._compute_exit_efficiency(trades)
 
         return {
             "avg_duration_sec": round(float(np.mean(durations)), 0) if durations else 0,
             "avg_mfe_pct": round(float(np.mean(mfes)), 4) if mfes else 0,
             "avg_mae_pct": round(float(np.mean(maes)), 4) if maes else 0,
-            "avg_exit_efficiency": round(float(np.mean(efficiencies)), 4) if efficiencies else 0,
+            "avg_exit_efficiency": eff_data["mean"],
+            "median_exit_efficiency": eff_data["median"],
+            "exit_efficiency_sample_size": eff_data["count"],
+            "exit_efficiency_filtered_out": eff_data["filtered_out"],
+        }
+
+    @classmethod
+    def _compute_exit_efficiency(cls, trades: list[dict]) -> dict[str, Any]:
+        """Robust exit efficiency: filter + clamp + mean/median.
+
+        Pre-fix calculaba {@code pnl_pct / mfe} sin filtros — un trade
+        con mfe=0.001% y pnl=-1% generaba ratio -1000 que contaminaba
+        el mean. Post-fix:
+          1. Filtra trades con {@code mfe < MIN_MFE_PCT} (info no
+             confiable).
+          2. Clamp ratio a {@code [CLAMP_LO, CLAMP_HI]}.
+          3. Reporta mean + median + sample size + filter count para
+             que ops tenga visibilidad.
+
+        Pure: testable sin instancia.
+        """
+        ratios = []
+        filtered_out = 0
+        for t in trades:
+            mfe = t.get("mfe_pct", 0) or 0
+            pnl_pct = t.get("pnl_pct", 0) or 0
+            if mfe < cls.EXIT_EFF_MIN_MFE_PCT:
+                filtered_out += 1
+                continue
+            ratio = pnl_pct / mfe
+            ratio = max(cls.EXIT_EFF_CLAMP_LO, min(cls.EXIT_EFF_CLAMP_HI, ratio))
+            ratios.append(ratio)
+        if not ratios:
+            return {"mean": 0.0, "median": 0.0, "count": 0, "filtered_out": filtered_out}
+        return {
+            "mean": round(float(np.mean(ratios)), 4),
+            "median": round(float(np.median(ratios)), 4),
+            "count": len(ratios),
+            "filtered_out": filtered_out,
         }
