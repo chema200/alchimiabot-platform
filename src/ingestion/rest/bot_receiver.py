@@ -11,10 +11,13 @@ Receives:
 
 from datetime import datetime, timezone
 from typing import Any
+import uuid
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 import structlog
 
 from ...storage.postgres.models import SignalEvaluation, TradeOutcome, RegimeLabel, TradeSnapshot
@@ -25,6 +28,10 @@ router = APIRouter(prefix="/api/bot", tags=["bot-integration"])
 
 
 class SignalEvalPayload(BaseModel):
+    # V83 (2026-04-30) — outbox idempotency key. UUID v4 generado en bot
+    # al enqueue. Si está presente, el insert usa ON CONFLICT DO NOTHING.
+    # Si None (bot legacy o snapshot directo), comportamiento previo.
+    event_id: str | None = None
     user_id: int = 1
     coin: str
     side: str
@@ -50,6 +57,7 @@ class SignalEvalPayload(BaseModel):
 
 
 class TradeOutcomePayload(BaseModel):
+    event_id: str | None = None  # V83 outbox idempotency
     user_id: int = 1
     coin: str
     side: str
@@ -106,6 +114,7 @@ class SnapshotPayload(BaseModel):
 
 
 class MarkerPayload(BaseModel):
+    event_id: str | None = None  # V83 outbox idempotency
     user_id: int = 1
     category: str
     label: str
@@ -123,6 +132,7 @@ class MarkerPayload(BaseModel):
 
 
 class RegimeLabelPayload(BaseModel):
+    event_id: str | None = None  # V83 outbox idempotency
     user_id: int = 1
     coin: str
     regime: str
@@ -170,11 +180,44 @@ def set_session_factory(factory):
     _session_factory = factory
 
 
+# V83 — outbox idempotency helpers.
+# Multi-tenant nota: event_id es UUID v4 globalmente único, no hace falta filtrar
+# por user_id en la dedupe (un UUID solo puede pertenecer a un user). Pero los
+# logs sí incluyen user_id para que la observabilidad multi-usuario sea legible.
+
+def _parse_event_id(value: str | None) -> uuid.UUID | None:
+    """Parse event_id string to UUID. Returns None if not provided.
+
+    Raises ValueError if format is invalid (caller should map to HTTP 400).
+    """
+    if not value:
+        return None
+    return uuid.UUID(value)
+
+
+async def _find_by_event_id(session, model, event_id: uuid.UUID | None) -> int | None:
+    """Return existing row id if event_id already ingested, else None."""
+    if event_id is None:
+        return None
+    result = await session.execute(
+        select(model.id).where(model.event_id == event_id)
+    )
+    return result.scalar()
+
+
 @router.post("/signal")
 async def receive_signal(payload: SignalEvalPayload) -> dict:
     """Receive a signal evaluation from agentbot-live."""
     if not _session_factory:
         return JSONResponse(status_code=503, content={"ok": False, "error": "DB not ready"})
+
+    # 400 — payload-level validation that pydantic does not cover.
+    try:
+        eid = _parse_event_id(payload.event_id)
+    except (ValueError, TypeError):
+        logger.warning("bot_receiver.signal_bad_event_id", user_id=payload.user_id,
+                       coin=payload.coin, event_id=payload.event_id)
+        return JSONResponse(status_code=400, content={"ok": False, "error": "invalid event_id format"})
 
     # Infer decision_stage from action if not provided (backward compat)
     stage = payload.decision_stage
@@ -186,90 +229,161 @@ async def receive_signal(payload: SignalEvalPayload) -> dict:
         else:
             stage = None
 
-    record = SignalEvaluation(
-        user_id=payload.user_id,
-        coin=payload.coin,
-        side=payload.side,
-        timestamp=datetime.now(timezone.utc),
-        signal_score=payload.signal_score,
-        trend_score=payload.trend_score,
-        micro_score=payload.micro_score,
-        momentum_score=payload.momentum_score,
-        regime=payload.regime,
-        mode=payload.mode,
-        price=payload.price,
-        action=payload.action,
-        reason=payload.reason,
-        score_min_applied=payload.score_min_applied,
-        config_version=payload.config_version,
-        config_snapshot=payload.config_snapshot or None,
-        features=payload.features,
-        decision_stage=stage,
-        decision_trace=payload.decision_trace or None,
-        diagnostic_trace=payload.diagnostic_trace or None,
-        entry_diagnostics=payload.entry_diagnostics or None,
-        entry_quality_label=payload.entry_quality_label,
-        late_entry_risk=payload.late_entry_risk,
-    )
-
     try:
         async with _session_factory() as session:
-            session.add(record)
-            await session.commit()
-        logger.info("signal_ingested", coin=payload.coin, mode=payload.mode,
-                    score=payload.signal_score, score_min=payload.score_min_applied,
-                    action=payload.action, reason=payload.reason,
-                    stage=stage,
+            dup_id = await _find_by_event_id(session, SignalEvaluation, eid)
+            if dup_id is not None:
+                logger.info("bot_receiver.signal_duplicate", user_id=payload.user_id,
+                            event_id=str(eid), id=dup_id)
+                return {"ok": True, "duplicate": True, "id": dup_id}
+
+            record = SignalEvaluation(
+                event_id=eid,
+                user_id=payload.user_id,
+                coin=payload.coin,
+                side=payload.side,
+                timestamp=datetime.now(timezone.utc),
+                signal_score=payload.signal_score,
+                trend_score=payload.trend_score,
+                micro_score=payload.micro_score,
+                momentum_score=payload.momentum_score,
+                regime=payload.regime,
+                mode=payload.mode,
+                price=payload.price,
+                action=payload.action,
+                reason=payload.reason,
+                score_min_applied=payload.score_min_applied,
+                config_version=payload.config_version,
+                config_snapshot=payload.config_snapshot or None,
+                features=payload.features,
+                decision_stage=stage,
+                decision_trace=payload.decision_trace or None,
+                diagnostic_trace=payload.diagnostic_trace or None,
+                entry_diagnostics=payload.entry_diagnostics or None,
+                entry_quality_label=payload.entry_quality_label,
+                late_entry_risk=payload.late_entry_risk,
+            )
+
+            try:
+                session.add(record)
+                await session.commit()
+            except IntegrityError:
+                # Race: concurrent insert with same event_id won. Outbox marks ok.
+                await session.rollback()
+                logger.info("bot_receiver.signal_race_dup", user_id=payload.user_id,
+                            event_id=str(eid))
+                return {"ok": True, "duplicate": True}
+
+        logger.info("signal_ingested", user_id=payload.user_id, coin=payload.coin,
+                    mode=payload.mode, score=payload.signal_score,
+                    score_min=payload.score_min_applied, action=payload.action,
+                    reason=payload.reason, stage=stage,
                     has_trace=payload.decision_trace is not None,
                     has_diag=payload.diagnostic_trace is not None)
         return {"ok": True}
     except Exception as e:
-        logger.warning("bot_receiver.signal_error", error=str(e))
+        logger.warning("bot_receiver.signal_error", user_id=payload.user_id, error=str(e))
         return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
 
 
 @router.post("/signals")
 async def receive_signals(payloads: list[SignalEvalPayload]) -> dict:
-    """Receive a batch of signal evaluations."""
+    """Receive a batch of signal evaluations.
+
+    Idempotent: payloads with event_id that already exists are skipped.
+    Multi-tenant: mixed user_ids in a single batch are handled correctly
+    (event_id is globally unique so user_id filtering is not required for dedupe).
+    """
     if not _session_factory:
         return JSONResponse(status_code=503, content={"ok": False, "error": "DB not ready"})
 
-    records = []
+    # 400 — validate all event_ids before touching DB.
+    parsed: list[tuple[SignalEvalPayload, uuid.UUID | None]] = []
     for p in payloads:
-        # Infer decision_stage from action if not provided (backward compat)
-        stage = p.decision_stage
-        if not stage:
-            if p.action == "ENTER":
-                stage = "ENTER"
-            elif p.action == "BLOCKED":
-                stage = "BLOCKED_POST_CANDIDATE"
-            else:
-                stage = None
-
-        records.append(SignalEvaluation(
-            user_id=p.user_id,
-            coin=p.coin, side=p.side, timestamp=datetime.now(timezone.utc),
-            signal_score=p.signal_score, trend_score=p.trend_score,
-            micro_score=p.micro_score, momentum_score=p.momentum_score,
-            regime=p.regime, mode=p.mode, price=p.price,
-            action=p.action, reason=p.reason,
-            score_min_applied=p.score_min_applied,
-            config_version=p.config_version,
-            config_snapshot=p.config_snapshot or None,
-            features=p.features,
-            decision_stage=stage,
-            decision_trace=p.decision_trace or None,
-            diagnostic_trace=p.diagnostic_trace or None,
-            entry_diagnostics=p.entry_diagnostics or None,
-            entry_quality_label=p.entry_quality_label,
-            late_entry_risk=p.late_entry_risk,
-        ))
+        try:
+            eid = _parse_event_id(p.event_id)
+        except (ValueError, TypeError):
+            logger.warning("bot_receiver.signals_bad_event_id", user_id=p.user_id,
+                           coin=p.coin, event_id=p.event_id)
+            return JSONResponse(status_code=400,
+                                content={"ok": False, "error": f"invalid event_id format for {p.coin}"})
+        parsed.append((p, eid))
 
     try:
         async with _session_factory() as session:
-            session.add_all(records)
-            await session.commit()
-        return {"ok": True, "count": len(records)}
+            # Bulk dedupe — single IN query.
+            existing: set[uuid.UUID] = set()
+            event_ids_to_check = [eid for _, eid in parsed if eid is not None]
+            if event_ids_to_check:
+                res = await session.execute(
+                    select(SignalEvaluation.event_id).where(
+                        SignalEvaluation.event_id.in_(event_ids_to_check)
+                    )
+                )
+                existing = {row for row in res.scalars()}
+
+            now = datetime.now(timezone.utc)
+            records = []
+            skipped = 0
+            for p, eid in parsed:
+                if eid is not None and eid in existing:
+                    skipped += 1
+                    continue
+                stage = p.decision_stage
+                if not stage:
+                    if p.action == "ENTER":
+                        stage = "ENTER"
+                    elif p.action == "BLOCKED":
+                        stage = "BLOCKED_POST_CANDIDATE"
+                    else:
+                        stage = None
+                records.append(SignalEvaluation(
+                    event_id=eid,
+                    user_id=p.user_id,
+                    coin=p.coin, side=p.side, timestamp=now,
+                    signal_score=p.signal_score, trend_score=p.trend_score,
+                    micro_score=p.micro_score, momentum_score=p.momentum_score,
+                    regime=p.regime, mode=p.mode, price=p.price,
+                    action=p.action, reason=p.reason,
+                    score_min_applied=p.score_min_applied,
+                    config_version=p.config_version,
+                    config_snapshot=p.config_snapshot or None,
+                    features=p.features,
+                    decision_stage=stage,
+                    decision_trace=p.decision_trace or None,
+                    diagnostic_trace=p.diagnostic_trace or None,
+                    entry_diagnostics=p.entry_diagnostics or None,
+                    entry_quality_label=p.entry_quality_label,
+                    late_entry_risk=p.late_entry_risk,
+                ))
+
+            if not records:
+                return {"ok": True, "count": 0, "skipped": skipped}
+
+            try:
+                session.add_all(records)
+                await session.commit()
+            except IntegrityError:
+                # Race: concurrent inserter beat us on at least one event_id.
+                # Fallback to per-record insert so the rest still go through.
+                await session.rollback()
+                inserted = 0
+                race_skipped = 0
+                for r in records:
+                    try:
+                        session.add(r)
+                        await session.commit()
+                        inserted += 1
+                    except IntegrityError:
+                        await session.rollback()
+                        race_skipped += 1
+                logger.info("bot_receiver.signals_partial_race",
+                            inserted=inserted, race_skipped=race_skipped,
+                            skipped=skipped)
+                return {"ok": True, "count": inserted,
+                        "skipped": skipped + race_skipped}
+
+        return {"ok": True, "count": len(records), "skipped": skipped}
     except Exception as e:
         logger.warning("bot_receiver.signals_error", error=str(e))
         return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
@@ -286,47 +400,82 @@ async def receive_trade(payload: TradeOutcomePayload) -> dict:
     if not _session_factory:
         return JSONResponse(status_code=503, content={"ok": False, "error": "DB not ready"})
 
-    entry_time = datetime.fromisoformat(payload.entry_time)
-    exit_time = datetime.fromisoformat(payload.exit_time)
+    # 400 — payload-level validation that pydantic does not cover.
+    try:
+        eid = _parse_event_id(payload.event_id)
+    except (ValueError, TypeError):
+        logger.warning("bot_receiver.trade_bad_event_id", user_id=payload.user_id,
+                       coin=payload.coin, event_id=payload.event_id)
+        return JSONResponse(status_code=400, content={"ok": False, "error": "invalid event_id format"})
 
-    record = TradeOutcome(
-        user_id=payload.user_id,
-        coin=payload.coin, side=payload.side,
-        entry_price=payload.entry_price, exit_price=payload.exit_price,
-        size=payload.size, notional=payload.notional, leverage=payload.leverage,
-        gross_pnl=payload.gross_pnl, fee=payload.fee, net_pnl=payload.net_pnl,
-        entry_tag=payload.entry_tag, exit_reason=payload.exit_reason,
-        mode=payload.mode, hold_seconds=payload.hold_seconds,
-        regime=payload.regime, signal_score=payload.signal_score,
-        trend_score=payload.trend_score, micro_score=payload.micro_score,
-        momentum_score=payload.momentum_score,
-        score_min_applied=payload.score_min_applied,
-        config_version=payload.config_version,
-        mfe_pct=payload.mfe_pct, mae_pct=payload.mae_pct,
-        high_water_mark=payload.high_water_mark,
-        entry_features=payload.entry_features,
-        config_snapshot=payload.config_snapshot or None,
-        entry_quality_label=payload.entry_quality_label,
-        late_entry_risk=payload.late_entry_risk,
-        strategy_id=payload.strategy_id,
-        strategy_name=payload.strategy_name,
-        strategy_template=payload.strategy_template,
-        entry_time=entry_time,
-        exit_time=exit_time,
-    )
+    try:
+        entry_time = datetime.fromisoformat(payload.entry_time)
+        exit_time = datetime.fromisoformat(payload.exit_time)
+    except (ValueError, TypeError) as e:
+        logger.warning("bot_receiver.trade_bad_time", user_id=payload.user_id,
+                       coin=payload.coin, entry_time=payload.entry_time,
+                       exit_time=payload.exit_time, error=str(e))
+        return JSONResponse(status_code=400,
+                            content={"ok": False, "error": f"invalid entry_time/exit_time: {e}"})
 
     try:
         from sqlalchemy import text as sql_text
         from datetime import timedelta
 
         async with _session_factory() as session:
-            session.add(record)
-            await session.flush()  # populate record.id without committing
+            # Idempotency — if outbox retried, skip and return existing trade_id.
+            dup_id = await _find_by_event_id(session, TradeOutcome, eid)
+            if dup_id is not None:
+                logger.info("bot_receiver.trade_duplicate", user_id=payload.user_id,
+                            coin=payload.coin, event_id=str(eid), trade_id=dup_id)
+                return {"ok": True, "duplicate": True, "trade_id": dup_id}
+
+            record = TradeOutcome(
+                event_id=eid,
+                user_id=payload.user_id,
+                coin=payload.coin, side=payload.side,
+                entry_price=payload.entry_price, exit_price=payload.exit_price,
+                size=payload.size, notional=payload.notional, leverage=payload.leverage,
+                gross_pnl=payload.gross_pnl, fee=payload.fee, net_pnl=payload.net_pnl,
+                entry_tag=payload.entry_tag, exit_reason=payload.exit_reason,
+                mode=payload.mode, hold_seconds=payload.hold_seconds,
+                regime=payload.regime, signal_score=payload.signal_score,
+                trend_score=payload.trend_score, micro_score=payload.micro_score,
+                momentum_score=payload.momentum_score,
+                score_min_applied=payload.score_min_applied,
+                config_version=payload.config_version,
+                mfe_pct=payload.mfe_pct, mae_pct=payload.mae_pct,
+                high_water_mark=payload.high_water_mark,
+                entry_features=payload.entry_features,
+                config_snapshot=payload.config_snapshot or None,
+                entry_quality_label=payload.entry_quality_label,
+                late_entry_risk=payload.late_entry_risk,
+                strategy_id=payload.strategy_id,
+                strategy_name=payload.strategy_name,
+                strategy_template=payload.strategy_template,
+                entry_time=entry_time,
+                exit_time=exit_time,
+            )
+
+            try:
+                session.add(record)
+                await session.flush()  # populate record.id without committing
+            except IntegrityError:
+                # Race: concurrent insert with same event_id won. Fetch its id.
+                await session.rollback()
+                # New session because rollback may have cleared state.
+                async with _session_factory() as session2:
+                    dup_id = await _find_by_event_id(session2, TradeOutcome, eid)
+                logger.info("bot_receiver.trade_race_dup", user_id=payload.user_id,
+                            coin=payload.coin, event_id=str(eid), trade_id=dup_id)
+                return {"ok": True, "duplicate": True, "trade_id": dup_id}
+
             trade_id = record.id
 
             # Back-link most recent matching ENTER signal evaluation.
             # Window: entry_time - 5min .. entry_time + 1min (signal precedes fill).
             # Pick closest in time, only if not already linked (idempotent).
+            # Multi-tenant: filter by user_id so we never link to another user's signal.
             link_result = await session.execute(sql_text("""
                 UPDATE signal_evaluations
                 SET trade_outcome_id = :trade_id
@@ -355,11 +504,13 @@ async def receive_trade(payload: TradeOutcomePayload) -> dict:
 
             await session.commit()
 
-        logger.info("bot_receiver.trade", coin=payload.coin, net_pnl=payload.net_pnl,
-                    trade_id=trade_id, linked_signal_id=linked_signal_id)
+        logger.info("bot_receiver.trade", user_id=payload.user_id, coin=payload.coin,
+                    net_pnl=payload.net_pnl, trade_id=trade_id,
+                    linked_signal_id=linked_signal_id, event_id=str(eid) if eid else None)
         return {"ok": True, "trade_id": trade_id, "linked_signal_id": linked_signal_id}
     except Exception as e:
-        logger.warning("bot_receiver.trade_error", error=str(e))
+        logger.warning("bot_receiver.trade_error", user_id=payload.user_id,
+                       coin=payload.coin, error=str(e))
         return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
 
 
@@ -421,14 +572,25 @@ async def receive_marker(payload: MarkerPayload) -> dict:
         return JSONResponse(status_code=503, content={"ok": False, "error": "DB not ready"})
 
     try:
+        eid = _parse_event_id(payload.event_id)
+    except (ValueError, TypeError):
+        logger.warning("bot_receiver.marker_bad_event_id", user_id=payload.user_id,
+                       label=payload.label, event_id=payload.event_id)
+        return JSONResponse(status_code=400, content={"ok": False, "error": "invalid event_id format"})
+
+    try:
         from ...quant.markers.marker_service import MarkerService
         service = MarkerService(_session_factory)
-        marker_id = await service.create_marker(**payload.model_dump())
-        logger.info("bot_receiver.marker", category=payload.category,
-                    label=payload.label, id=marker_id)
+        # Replace the str event_id from model_dump with the parsed UUID so
+        # MarkerService can use it directly with the JSONB cast / ON CONFLICT.
+        kwargs = payload.model_dump()
+        kwargs["event_id"] = eid
+        marker_id = await service.create_marker(**kwargs)
+        logger.info("bot_receiver.marker", user_id=payload.user_id,
+                    category=payload.category, label=payload.label, id=marker_id)
         return {"ok": True, "id": marker_id}
     except Exception as e:
-        logger.warning("bot_receiver.marker_error", error=str(e))
+        logger.warning("bot_receiver.marker_error", user_id=payload.user_id, error=str(e))
         return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
 
 
@@ -438,19 +600,41 @@ async def receive_regime(payload: RegimeLabelPayload) -> dict:
     if not _session_factory:
         return JSONResponse(status_code=503, content={"ok": False, "error": "DB not ready"})
 
-    record = RegimeLabel(
-        user_id=payload.user_id,
-        coin=payload.coin, timestamp=datetime.now(timezone.utc),
-        regime=payload.regime, confidence=payload.confidence,
-        trend_strength=payload.trend_strength,
-        volatility_level=payload.volatility_level,
-        details=payload.details,
-    )
+    try:
+        eid = _parse_event_id(payload.event_id)
+    except (ValueError, TypeError):
+        logger.warning("bot_receiver.regime_bad_event_id", user_id=payload.user_id,
+                       coin=payload.coin, event_id=payload.event_id)
+        return JSONResponse(status_code=400, content={"ok": False, "error": "invalid event_id format"})
 
     try:
         async with _session_factory() as session:
-            session.add(record)
-            await session.commit()
+            dup_id = await _find_by_event_id(session, RegimeLabel, eid)
+            if dup_id is not None:
+                logger.info("bot_receiver.regime_duplicate", user_id=payload.user_id,
+                            event_id=str(eid), id=dup_id)
+                return {"ok": True, "duplicate": True, "id": dup_id}
+
+            record = RegimeLabel(
+                event_id=eid,
+                user_id=payload.user_id,
+                coin=payload.coin, timestamp=datetime.now(timezone.utc),
+                regime=payload.regime, confidence=payload.confidence,
+                trend_strength=payload.trend_strength,
+                volatility_level=payload.volatility_level,
+                details=payload.details,
+            )
+
+            try:
+                session.add(record)
+                await session.commit()
+            except IntegrityError:
+                await session.rollback()
+                logger.info("bot_receiver.regime_race_dup", user_id=payload.user_id,
+                            event_id=str(eid))
+                return {"ok": True, "duplicate": True}
+
         return {"ok": True}
     except Exception as e:
+        logger.warning("bot_receiver.regime_error", user_id=payload.user_id, error=str(e))
         return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})

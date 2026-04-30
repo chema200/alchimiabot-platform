@@ -16,12 +16,69 @@ class MarkerService:
         self._sf = session_factory
 
     async def create_marker(self, **kwargs) -> int:
-        """Create a new marker. Returns the new marker ID."""
+        """Create a new marker. Returns the new marker ID.
+
+        V83 (2026-04-30) — if event_id is provided and a marker with that
+        event_id already exists, returns the existing id (idempotent for the
+        bot outbox retry path). Multi-tenant safe: event_id is a global UUID,
+        so it cannot collide between users.
+        """
         cfg = kwargs.get("config_snapshot")
         if cfg is not None and not isinstance(cfg, str):
             cfg = json.dumps(cfg)
 
+        event_id = kwargs.get("event_id")  # already a uuid.UUID or None
+
         async with self._sf() as session:
+            if event_id is not None:
+                # ON CONFLICT DO NOTHING handles the race where two requests
+                # arrive simultaneously with the same event_id.
+                result = await session.execute(text("""
+                    INSERT INTO change_markers
+                    (event_id, user_id, timestamp, category, label, description, source,
+                     coin, side, mode, parameter, old_value, new_value, batch_id,
+                     batch_label, config_snapshot)
+                    VALUES (:event_id, :user_id, NOW(), :category, :label, :description,
+                            :source, :coin, :side, :mode, :parameter, :old_value, :new_value,
+                            :batch_id, :batch_label, CAST(:config_snapshot AS JSONB))
+                    ON CONFLICT (event_id) DO NOTHING
+                    RETURNING id
+                """), {
+                    "event_id": event_id,
+                    "user_id": kwargs.get("user_id", 1),
+                    "category": kwargs.get("category", "MANUAL"),
+                    "label": kwargs.get("label", ""),
+                    "description": kwargs.get("description"),
+                    "source": kwargs.get("source", "USER"),
+                    "coin": kwargs.get("coin"),
+                    "side": kwargs.get("side"),
+                    "mode": kwargs.get("mode"),
+                    "parameter": kwargs.get("parameter"),
+                    "old_value": kwargs.get("old_value"),
+                    "new_value": kwargs.get("new_value"),
+                    "batch_id": kwargs.get("batch_id"),
+                    "batch_label": kwargs.get("batch_label"),
+                    "config_snapshot": cfg,
+                })
+                marker_id = result.scalar()
+
+                if marker_id is None:
+                    # Conflict skipped the insert — fetch existing id.
+                    existing = await session.execute(
+                        text("SELECT id FROM change_markers WHERE event_id = :eid"),
+                        {"eid": event_id},
+                    )
+                    marker_id = existing.scalar()
+                    await session.commit()
+                    logger.info("marker.duplicate", id=marker_id, event_id=str(event_id))
+                    return marker_id
+
+                await session.commit()
+                logger.info("marker.created", id=marker_id, event_id=str(event_id),
+                            category=kwargs.get("category"), label=kwargs.get("label"))
+                return marker_id
+
+            # Legacy path — no event_id supplied (manual UI marker, etc.).
             result = await session.execute(text("""
                 INSERT INTO change_markers
                 (user_id, timestamp, category, label, description, source, coin, side, mode, parameter,
