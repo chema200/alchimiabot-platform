@@ -93,6 +93,13 @@ class TradeOutcomePayload(BaseModel):
     strategy_template: str | None = None
     entry_time: str  # ISO format
     exit_time: str   # ISO format
+    # Fase 2 #6 — provenance del exit_time. Lo aceptamos pero NO lo
+    # persistimos aún (ningún column en trade_outcomes). El platform solo
+    # lo loggea por ahora; cuando añadamos la columna podremos discriminar
+    # trades con timestamps fiables (HL_FILL) de los estimados (FALLBACK_NOW
+    # / ENGINE) en análisis de duración / horario / replay.
+    # Valores: HL_FILL | ENGINE | MANUAL | RECONCILE | FALLBACK_NOW
+    exit_time_source: str | None = None
 
 
 class SnapshotPayload(BaseModel):
@@ -529,9 +536,20 @@ async def receive_trade(payload: TradeOutcomePayload) -> dict:
 
             await session.commit()
 
+        # exit_time_source visible en log para que la auditoría pueda detectar
+        # si llegan FALLBACK_NOW (validator emergency) o si todo el flujo está
+        # devolviendo HL_FILL como esperamos (post-fase-2-#6).
         logger.info("bot_receiver.trade", user_id=payload.user_id, coin=payload.coin,
                     net_pnl=payload.net_pnl, trade_id=trade_id,
-                    linked_signal_id=linked_signal_id, event_id=str(eid) if eid else None)
+                    linked_signal_id=linked_signal_id, event_id=str(eid) if eid else None,
+                    exit_time_source=payload.exit_time_source)
+        # Si llega FALLBACK_NOW, WARN extra — significa que el bot envió un trade
+        # cuyo exit_time tuvo que rellenarse en el validador (bug aguas arriba).
+        if payload.exit_time_source == "FALLBACK_NOW":
+            logger.warning("bot_receiver.trade_fallback_now",
+                           user_id=payload.user_id, coin=payload.coin,
+                           exit_reason=payload.exit_reason, trade_id=trade_id,
+                           note="exit_time was filled by validator (now()) — engine path missed real fill timestamp")
         return {"ok": True, "trade_id": trade_id, "linked_signal_id": linked_signal_id}
     except Exception as e:
         logger.warning("bot_receiver.trade_error", user_id=payload.user_id,
