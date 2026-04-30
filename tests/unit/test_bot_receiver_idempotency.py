@@ -22,6 +22,7 @@ from src.ingestion.rest.bot_receiver import (
     set_session_factory,
     _parse_event_id,
     _find_by_event_id,
+    _warn_if_no_event_id,
 )
 
 
@@ -63,6 +64,43 @@ class TestFindByEventId:
         result = await _find_by_event_id(session, MagicMock(), None)
         assert result is None
         session.execute.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# _warn_if_no_event_id — observability for legacy / misconfigured producers
+# ---------------------------------------------------------------------------
+
+class TestWarnIfNoEventId:
+    """V84 — visibility for any producer that bypasses the event_id contract.
+
+    Post-V83 the bot generates event_id at enqueue, so a missing event_id
+    on critical events means: legacy bot version, manual curl, or a
+    backfill script that didn't follow the convention. The platform does
+    not reject (idempotency degrades gracefully) but logs visibly.
+
+    structlog renders to stdout/stderr, so we use capfd (file-descriptor
+    level capture) instead of caplog.
+    """
+
+    def test_no_event_id_logs_warning(self, capfd):
+        payload = MagicMock(event_id=None, user_id=42, coin="BTC")
+        _warn_if_no_event_id("/trade", payload)
+        out = capfd.readouterr().out + capfd.readouterr().err
+        assert "no_event_id" in out
+        assert "/trade" in out
+        assert "user_id=42" in out
+
+    def test_present_event_id_does_not_log(self, capfd):
+        payload = MagicMock(event_id=str(uuid.uuid4()), user_id=1, coin="BTC")
+        _warn_if_no_event_id("/trade", payload)
+        out = capfd.readouterr().out + capfd.readouterr().err
+        assert "no_event_id" not in out
+
+    def test_empty_event_id_logs_warning(self, capfd):
+        payload = MagicMock(event_id="", user_id=1, coin="BTC")
+        _warn_if_no_event_id("/trade", payload)
+        out = capfd.readouterr().out + capfd.readouterr().err
+        assert "no_event_id" in out
 
 
 # ---------------------------------------------------------------------------

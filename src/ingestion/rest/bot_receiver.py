@@ -205,6 +205,22 @@ async def _find_by_event_id(session, model, event_id: uuid.UUID | None) -> int |
     return result.scalar()
 
 
+def _warn_if_no_event_id(endpoint: str, payload) -> None:
+    """V84 (2026-04-30) — WARN when a critical event arrives without
+    event_id. Post-V83 the bot ALWAYS generates an event_id at enqueue,
+    so missing event_id means: legacy bot version, manual curl, or a
+    backfill script that didn't follow the convention. We don't reject
+    (idempotency degrades gracefully to "insert and hope") but we log
+    visibly so the gap is observable.
+    """
+    if payload.event_id:
+        return
+    logger.warning("bot_receiver.no_event_id",
+                   endpoint=endpoint,
+                   user_id=getattr(payload, "user_id", None),
+                   coin=getattr(payload, "coin", None))
+
+
 @router.post("/signal")
 async def receive_signal(payload: SignalEvalPayload) -> dict:
     """Receive a signal evaluation from agentbot-live."""
@@ -218,6 +234,7 @@ async def receive_signal(payload: SignalEvalPayload) -> dict:
         logger.warning("bot_receiver.signal_bad_event_id", user_id=payload.user_id,
                        coin=payload.coin, event_id=payload.event_id)
         return JSONResponse(status_code=400, content={"ok": False, "error": "invalid event_id format"})
+    _warn_if_no_event_id("/signal", payload)
 
     # Infer decision_stage from action if not provided (backward compat)
     stage = payload.decision_stage
@@ -299,6 +316,7 @@ async def receive_signals(payloads: list[SignalEvalPayload]) -> dict:
 
     # 400 — validate all event_ids before touching DB.
     parsed: list[tuple[SignalEvalPayload, uuid.UUID | None]] = []
+    missing_count = 0
     for p in payloads:
         try:
             eid = _parse_event_id(p.event_id)
@@ -307,7 +325,13 @@ async def receive_signals(payloads: list[SignalEvalPayload]) -> dict:
                            coin=p.coin, event_id=p.event_id)
             return JSONResponse(status_code=400,
                                 content={"ok": False, "error": f"invalid event_id format for {p.coin}"})
+        if eid is None:
+            missing_count += 1
         parsed.append((p, eid))
+    # Single aggregated WARN per batch (vs N individual WARNs that would flood the log).
+    if missing_count:
+        logger.warning("bot_receiver.signals_no_event_id_batch",
+                       missing=missing_count, total=len(payloads))
 
     try:
         async with _session_factory() as session:
@@ -407,6 +431,7 @@ async def receive_trade(payload: TradeOutcomePayload) -> dict:
         logger.warning("bot_receiver.trade_bad_event_id", user_id=payload.user_id,
                        coin=payload.coin, event_id=payload.event_id)
         return JSONResponse(status_code=400, content={"ok": False, "error": "invalid event_id format"})
+    _warn_if_no_event_id("/trade", payload)
 
     try:
         entry_time = datetime.fromisoformat(payload.entry_time)
@@ -577,6 +602,7 @@ async def receive_marker(payload: MarkerPayload) -> dict:
         logger.warning("bot_receiver.marker_bad_event_id", user_id=payload.user_id,
                        label=payload.label, event_id=payload.event_id)
         return JSONResponse(status_code=400, content={"ok": False, "error": "invalid event_id format"})
+    _warn_if_no_event_id("/marker", payload)
 
     try:
         from ...quant.markers.marker_service import MarkerService
@@ -606,6 +632,7 @@ async def receive_regime(payload: RegimeLabelPayload) -> dict:
         logger.warning("bot_receiver.regime_bad_event_id", user_id=payload.user_id,
                        coin=payload.coin, event_id=payload.event_id)
         return JSONResponse(status_code=400, content={"ok": False, "error": "invalid event_id format"})
+    _warn_if_no_event_id("/regime", payload)
 
     try:
         async with _session_factory() as session:
