@@ -136,6 +136,29 @@ def create_app(
             "bot traffic. Set BOT_API_KEY in the environment to allow the bot to push data."
         )
 
+    # P1 multi-tenant — bind API-key auth to specific user_ids. Comma-separated
+    # list of ints. When set, /api/bot/* endpoints reject payloads whose
+    # user_id is not in the list (even if API key is valid). When empty,
+    # legacy unrestricted behaviour (logged as WARN on startup).
+    _raw_uids = os.getenv("BOT_API_KEY_USER_IDS", "").strip()
+    _BOT_API_KEY_USER_IDS: list[int] | None = None
+    if _raw_uids:
+        try:
+            _BOT_API_KEY_USER_IDS = [int(x.strip()) for x in _raw_uids.split(",") if x.strip()]
+        except ValueError:
+            import logging
+            logging.getLogger(__name__).error(
+                "BOT_API_KEY_USER_IDS is malformed (%s) — falling back to unrestricted. "
+                "Expected comma-separated integers (e.g. '1,2,5').", _raw_uids
+            )
+            _BOT_API_KEY_USER_IDS = None
+    if _BOT_API_KEY_USER_IDS is None:
+        import logging
+        logging.getLogger(__name__).warning(
+            "BOT_API_KEY_USER_IDS is not set — /api/bot/* trusts payload user_id. "
+            "For multi-tenant safety set BOT_API_KEY_USER_IDS=1,2,... (allowed bot users)."
+        )
+
     # Auth middleware — protect all /api/ endpoints
     @app.middleware("http")
     async def auth_middleware(request: Request, call_next):
@@ -148,9 +171,11 @@ def create_app(
             key = request.headers.get("X-Bot-Api-Key", "")
             uid = _extract_user_id(request)
             if _BOT_API_KEY and key == _BOT_API_KEY:
+                request.state.allowed_user_ids = _BOT_API_KEY_USER_IDS  # None = unrestricted
                 return await call_next(request)  # bot backend with valid key
             if uid is not None:
                 request.state.user_id = uid
+                request.state.allowed_user_ids = [uid]  # JWT auth: only own user_id
                 return await call_next(request)  # dashboard frontend with valid JWT
             return JSONResponse(status_code=403, content={"error": "Invalid bot API key"})
 
@@ -159,6 +184,7 @@ def create_app(
         if uid is None:
             return JSONResponse(status_code=401, content={"error": "Unauthorized"})
         request.state.user_id = uid
+        request.state.allowed_user_ids = [uid]
         return await call_next(request)
 
     # Login endpoint — proxies to bot API for credential validation

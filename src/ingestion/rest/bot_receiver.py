@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from typing import Any
 import uuid
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -25,6 +25,28 @@ from ...storage.postgres.models import SignalEvaluation, TradeOutcome, RegimeLab
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/api/bot", tags=["bot-integration"])
+
+
+def _check_user_id(request: Request, payload_user_id: int, endpoint: str) -> JSONResponse | None:
+    """P1 multi-tenant — reject if API key is bound to specific user_ids and
+    the payload's user_id is not in that list. Returns a JSONResponse to
+    short-circuit the handler, or None to continue.
+
+    Unrestricted mode (allowed_user_ids is None) preserves legacy behavior
+    so existing single-user deployments keep working until they opt-in by
+    setting BOT_API_KEY_USER_IDS.
+    """
+    allowed = getattr(request.state, "allowed_user_ids", None)
+    if allowed is None:
+        return None
+    if payload_user_id in allowed:
+        return None
+    logger.warning("bot_receiver.user_id_not_allowed",
+                   endpoint=endpoint, payload_user_id=payload_user_id, allowed=allowed)
+    return JSONResponse(
+        status_code=403,
+        content={"ok": False, "error": "user_id not allowed for this API key"},
+    )
 
 
 class SignalEvalPayload(BaseModel):
@@ -229,8 +251,10 @@ def _warn_if_no_event_id(endpoint: str, payload) -> None:
 
 
 @router.post("/signal")
-async def receive_signal(payload: SignalEvalPayload) -> dict:
+async def receive_signal(payload: SignalEvalPayload, request: Request) -> dict:
     """Receive a signal evaluation from agentbot-live."""
+    if (resp := _check_user_id(request, payload.user_id, "/signal")) is not None:
+        return resp
     if not _session_factory:
         return JSONResponse(status_code=503, content={"ok": False, "error": "DB not ready"})
 
@@ -311,13 +335,18 @@ async def receive_signal(payload: SignalEvalPayload) -> dict:
 
 
 @router.post("/signals")
-async def receive_signals(payloads: list[SignalEvalPayload]) -> dict:
+async def receive_signals(payloads: list[SignalEvalPayload], request: Request) -> dict:
     """Receive a batch of signal evaluations.
 
     Idempotent: payloads with event_id that already exists are skipped.
     Multi-tenant: mixed user_ids in a single batch are handled correctly
     (event_id is globally unique so user_id filtering is not required for dedupe).
     """
+    # P1 — reject the WHOLE batch if any payload targets a disallowed user_id,
+    # rather than silently dropping individual items (catches misconfigured bot).
+    for p in payloads:
+        if (resp := _check_user_id(request, p.user_id, "/signals")) is not None:
+            return resp
     if not _session_factory:
         return JSONResponse(status_code=503, content={"ok": False, "error": "DB not ready"})
 
@@ -421,13 +450,15 @@ async def receive_signals(payloads: list[SignalEvalPayload]) -> dict:
 
 
 @router.post("/trade")
-async def receive_trade(payload: TradeOutcomePayload) -> dict:
+async def receive_trade(payload: TradeOutcomePayload, request: Request) -> dict:
     """Receive a completed trade from agentbot-live.
 
     After inserting the trade outcome, attempts to back-link the originating
     ENTER signal_evaluation by matching (coin, side, ~entry_time). This makes
     decision_trace queryable per-trade for ratio/quality analysis.
     """
+    if (resp := _check_user_id(request, payload.user_id, "/trade")) is not None:
+        return resp
     if not _session_factory:
         return JSONResponse(status_code=503, content={"ok": False, "error": "DB not ready"})
 
@@ -558,8 +589,10 @@ async def receive_trade(payload: TradeOutcomePayload) -> dict:
 
 
 @router.post("/snapshot")
-async def receive_snapshot(payload: SnapshotPayload) -> dict:
+async def receive_snapshot(payload: SnapshotPayload, request: Request) -> dict:
     """Receive a position snapshot from agentbot-live (~30s intervals)."""
+    if (resp := _check_user_id(request, payload.user_id, "/snapshot")) is not None:
+        return resp
     if not _session_factory:
         return JSONResponse(status_code=503, content={"ok": False, "error": "DB not ready"})
 
@@ -596,12 +629,14 @@ async def receive_snapshot(payload: SnapshotPayload) -> dict:
 
 
 @router.post("/gate-stats")
-async def receive_gate_stats(payload: GateStatsPayload) -> dict:
+async def receive_gate_stats(payload: GateStatsPayload, request: Request) -> dict:
     """Receive gate rejection telemetry from agentbot-live.
 
     Stored in-memory only — this is live telemetry, not historical data.
     The dashboard polls /api/markers/gate-stats to display.
     """
+    if (resp := _check_user_id(request, payload.user_id, "/gate-stats")) is not None:
+        return resp
     uid = payload.user_id
     _latest_gate_stats[uid] = payload.model_dump()
     _latest_gate_stats_at[uid] = datetime.now(timezone.utc)
@@ -609,8 +644,10 @@ async def receive_gate_stats(payload: GateStatsPayload) -> dict:
 
 
 @router.post("/marker")
-async def receive_marker(payload: MarkerPayload) -> dict:
+async def receive_marker(payload: MarkerPayload, request: Request) -> dict:
     """Receive a change marker from agentbot-live."""
+    if (resp := _check_user_id(request, payload.user_id, "/marker")) is not None:
+        return resp
     if not _session_factory:
         return JSONResponse(status_code=503, content={"ok": False, "error": "DB not ready"})
 
@@ -639,8 +676,10 @@ async def receive_marker(payload: MarkerPayload) -> dict:
 
 
 @router.post("/regime")
-async def receive_regime(payload: RegimeLabelPayload) -> dict:
+async def receive_regime(payload: RegimeLabelPayload, request: Request) -> dict:
     """Receive regime classification from agentbot-live."""
+    if (resp := _check_user_id(request, payload.user_id, "/regime")) is not None:
+        return resp
     if not _session_factory:
         return JSONResponse(status_code=503, content={"ok": False, "error": "DB not ready"})
 
