@@ -36,7 +36,7 @@ class TradeOutcome(Base):
     gross_pnl = Column(Float, default=0)
     fee = Column(Float, default=0)
     net_pnl = Column(Float, default=0)
-    entry_tag = Column(String(50))
+    entry_tag = Column(String(100))
     exit_reason = Column(String(50))
     mode = Column(String(20))
     hold_seconds = Column(Integer)
