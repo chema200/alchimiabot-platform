@@ -130,11 +130,34 @@ def create_app(
     # Bot receiver API key (shared secret between bot and platform)
     _BOT_API_KEY = os.getenv("BOT_API_KEY", "")
     if not _BOT_API_KEY:
+        # P2.3 audit-2026-05-11: en prod un BOT_API_KEY vacio es bug
+        # operacional. Sin la clave /api/bot/* rechaza al bot real, y la
+        # rama trusted-service del bot's /api/auth/login pierde el bypass
+        # Turnstile. Fail-hard fuerza atencion antes de exponer a users.
+        _platform_env = os.getenv("PLATFORM_ENV", "dev").strip().lower()
+        if _platform_env == "prod":
+            raise RuntimeError(
+                "BOT_API_KEY no configurado en PLATFORM_ENV=prod. "
+                "Set BOT_API_KEY env var antes de arrancar. Negarse a "
+                "arrancar es preferible a tener /api/bot/* sin auth."
+            )
         import logging
         logging.getLogger(__name__).error(
-            "BOT_API_KEY is not configured — /api/bot/* will reject unauthenticated "
-            "bot traffic. Set BOT_API_KEY in the environment to allow the bot to push data."
+            "BOT_API_KEY is not configured (dev) — /api/bot/* will reject "
+            "unauthenticated bot traffic. Set BOT_API_KEY in the environment "
+            "to allow the bot to push data."
         )
+
+    # JWT secret (shared with bot to validate dashboard tokens)
+    if not _JWT_SECRET:
+        _platform_env = os.getenv("PLATFORM_ENV", "dev").strip().lower()
+        if _platform_env == "prod":
+            raise RuntimeError(
+                "JWT_SECRET no configurado en PLATFORM_ENV=prod. "
+                "Sin el secret el platform no puede validar tokens del bot "
+                "-> todos los endpoints user-facing devolveran 401. "
+                "Set JWT_SECRET (mismo valor que el bot) antes de arrancar."
+            )
 
     # P1 multi-tenant — bind API-key auth to specific user_ids. Comma-separated
     # list of ints. When set, /api/bot/* endpoints reject payloads whose
