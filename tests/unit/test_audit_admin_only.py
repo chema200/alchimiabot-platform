@@ -18,82 +18,78 @@ Post-fix:
 from unittest.mock import MagicMock
 
 import pytest
-from fastapi import HTTPException, Request
+from fastapi import HTTPException
 
-from src.dashboard.api import _extract_role, _require_admin
-
-
-def _mk_request_with_jwt(jwt_payload):
-    """Construct a Request stub whose _decode_jwt would return the given payload."""
-    req = MagicMock(spec=Request)
-    req.headers = {}
-    req.cookies = {}
-    # We can't trivially mock the module-level _decode_jwt without patching.
-    # Instead the tests below use monkeypatch on _decode_jwt.
-    return req
+# NOTE: importamos los helpers dentro de cada test (no a module-level)
+# porque otros tests del mismo run pueden reload src.dashboard.api
+# (e.g. test_security_headers.py llama importlib.import_module despues
+# de borrar el modulo del cache). Importar lazy garantiza que cada
+# test referencia la version current del modulo, y monkeypatch sobre
+# src.dashboard.api._decode_jwt afecta el codepath real.
 
 
 class TestExtractRole:
     def test_no_jwt_returns_none(self, monkeypatch):
-        monkeypatch.setattr("src.dashboard.api._decode_jwt", lambda r: None)
-        assert _extract_role(MagicMock()) is None
+        from src.dashboard import api as api_mod
+        monkeypatch.setattr(api_mod, "_decode_jwt", lambda r: None)
+        assert api_mod._extract_role(MagicMock()) is None
 
     def test_role_present_returns_uppercased(self, monkeypatch):
-        monkeypatch.setattr("src.dashboard.api._decode_jwt",
+        from src.dashboard import api as api_mod
+        monkeypatch.setattr(api_mod, "_decode_jwt",
                             lambda r: {"uid": 1, "role": "admin"})
-        assert _extract_role(MagicMock()) == "ADMIN"
+        assert api_mod._extract_role(MagicMock()) == "ADMIN"
 
     def test_role_missing_returns_none(self, monkeypatch):
-        # JWT valido pero sin claim "role" -> None (no asume ADMIN ni BASIC).
-        monkeypatch.setattr("src.dashboard.api._decode_jwt",
+        from src.dashboard import api as api_mod
+        monkeypatch.setattr(api_mod, "_decode_jwt",
                             lambda r: {"uid": 1})
-        assert _extract_role(MagicMock()) is None
+        assert api_mod._extract_role(MagicMock()) is None
 
 
 class TestRequireAdmin:
     def test_no_jwt_raises_401(self, monkeypatch):
-        monkeypatch.setattr("src.dashboard.api._decode_jwt", lambda r: None)
+        from src.dashboard import api as api_mod
+        monkeypatch.setattr(api_mod, "_decode_jwt", lambda r: None)
         with pytest.raises(HTTPException) as exc:
-            _require_admin(MagicMock())
+            api_mod._require_admin(MagicMock())
         assert exc.value.status_code == 401
 
     def test_basic_user_raises_403(self, monkeypatch):
-        # User autenticado pero no admin -> 403, no se cae al codigo
-        # protegido.
-        monkeypatch.setattr("src.dashboard.api._decode_jwt",
+        from src.dashboard import api as api_mod
+        monkeypatch.setattr(api_mod, "_decode_jwt",
                             lambda r: {"uid": 5, "role": "BASIC"})
         with pytest.raises(HTTPException) as exc:
-            _require_admin(MagicMock())
+            api_mod._require_admin(MagicMock())
         assert exc.value.status_code == 403
         assert exc.value.detail == "admin_only"
 
     def test_pro_user_raises_403(self, monkeypatch):
-        # Para no-admins explicitos (PRO, PREMIUM): tambien 403.
-        # PREMIUM no es admin a efectos de operacion del platform.
-        monkeypatch.setattr("src.dashboard.api._decode_jwt",
+        from src.dashboard import api as api_mod
+        monkeypatch.setattr(api_mod, "_decode_jwt",
                             lambda r: {"uid": 5, "role": "PRO"})
         with pytest.raises(HTTPException) as exc:
-            _require_admin(MagicMock())
+            api_mod._require_admin(MagicMock())
         assert exc.value.status_code == 403
 
     def test_premium_user_raises_403(self, monkeypatch):
-        monkeypatch.setattr("src.dashboard.api._decode_jwt",
+        from src.dashboard import api as api_mod
+        monkeypatch.setattr(api_mod, "_decode_jwt",
                             lambda r: {"uid": 5, "role": "PREMIUM"})
         with pytest.raises(HTTPException) as exc:
-            _require_admin(MagicMock())
+            api_mod._require_admin(MagicMock())
         assert exc.value.status_code == 403
 
     def test_admin_user_returns_uid(self, monkeypatch):
-        # Happy path: admin pasa el guard y recibe su uid.
-        monkeypatch.setattr("src.dashboard.api._decode_jwt",
+        from src.dashboard import api as api_mod
+        monkeypatch.setattr(api_mod, "_decode_jwt",
                             lambda r: {"uid": 1, "role": "ADMIN"})
-        uid = _require_admin(MagicMock())
+        uid = api_mod._require_admin(MagicMock())
         assert uid == 1
 
     def test_admin_lowercase_also_passes(self, monkeypatch):
-        # _extract_role normaliza a uppercase, asi que un JWT con "admin"
-        # tambien pasa. Acomoda inconsistencia futura en el bot signer.
-        monkeypatch.setattr("src.dashboard.api._decode_jwt",
+        from src.dashboard import api as api_mod
+        monkeypatch.setattr(api_mod, "_decode_jwt",
                             lambda r: {"uid": 1, "role": "admin"})
-        uid = _require_admin(MagicMock())
+        uid = api_mod._require_admin(MagicMock())
         assert uid == 1

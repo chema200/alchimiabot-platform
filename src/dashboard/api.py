@@ -166,6 +166,43 @@ def create_app(
         allow_credentials=True,
     )
 
+    # P1.8 audit-2026-05-15 — HTTP security headers en TODAS las respuestas.
+    # Click-jacking + MIME-sniffing + CSP minima. La CSP es laxa porque el
+    # platform sirve un index.html que usa Babel en browser (legacy, ver
+    # P0-5 del audit frontend) — eval() necesario. Para Stripe/Turnstile
+    # se permiten sus dominios. frame-ancestors 'none' = el dashboard
+    # no se puede embeber en iframe ajeno.
+    _SECURITY_HEADERS_PLATFORM = {
+        "X-Frame-Options": "DENY",
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()",
+        "Content-Security-Policy": (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' "
+            "https://challenges.cloudflare.com https://js.stripe.com; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: blob: https:; "
+            "font-src 'self' data:; "
+            "connect-src 'self' https://api.alchimiabot.com https://labs.alchimiabot.com "
+            "https://api.stripe.com https://challenges.cloudflare.com; "
+            "frame-src https://js.stripe.com https://challenges.cloudflare.com; "
+            "frame-ancestors 'none'; "
+            "base-uri 'self'; "
+            "form-action 'self' https://*.stripe.com"
+        ),
+    }
+
+    @app.middleware("http")
+    async def security_headers_middleware(request: Request, call_next):
+        response = await call_next(request)
+        for header, value in _SECURITY_HEADERS_PLATFORM.items():
+            # Solo seteamos si NO existe ya (algun handler puede tener
+            # politica propia, p.ej. el endpoint de download de un CSV).
+            if header not in response.headers:
+                response.headers[header] = value
+        return response
+
     # Bot receiver API key (shared secret between bot and platform)
     _BOT_API_KEY = os.getenv("BOT_API_KEY", "")
     if not _BOT_API_KEY:
