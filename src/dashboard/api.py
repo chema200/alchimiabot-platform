@@ -892,6 +892,12 @@ def create_app(
         async def list_trades(request: Request, limit: int = 50, offset: int = 0) -> list[dict]:
             """List trades with verdict info, paginated, per user."""
             uid = _uid(request)
+            # P2 audit-2026-05-15 — cap limit a 500 para evitar DoS interno.
+            # Pre-fix un user autenticado podia pedir ?limit=10000000 y
+            # cargar memoria con 10M filas. Frontend pagina con limit=50,
+            # 500 es 10x el default y suficiente para export CSV.
+            limit = max(1, min(int(limit), 500))
+            offset = max(0, int(offset))
             from sqlalchemy import text as sql_text
             async with session_factory() as session:
                 result = await session.execute(sql_text("""
@@ -1141,11 +1147,16 @@ def create_app(
 
         @app.get("/api/markers")
         async def list_markers(request: Request, limit: int = 50, days: int = 90) -> list[dict]:
+            # P2 audit-2026-05-15 — cap limit/days para evitar DoS interno.
+            limit = max(1, min(int(limit), 500))
+            days = max(1, min(int(days), 365))
             from fastapi.encoders import jsonable_encoder
             return jsonable_encoder(await _marker_service.get_markers(limit=limit, days=days, user_id=_uid(request)))
 
         @app.get("/api/markers/recent-impacts")
         async def recent_impacts(request: Request, limit: int = 10) -> list[dict]:
+            # P2 audit-2026-05-15 — cap limit para evitar DoS interno.
+            limit = max(1, min(int(limit), 100))
             from fastapi.encoders import jsonable_encoder
             return jsonable_encoder(await _marker_service.get_recent_with_impact(limit=limit, user_id=_uid(request)))
 
