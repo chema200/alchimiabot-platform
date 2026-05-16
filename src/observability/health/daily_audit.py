@@ -42,15 +42,10 @@ class DailyAudit:
         self._running = False
 
     async def _get_token(self) -> str:
-        """Get JWT token from bot."""
-        try:
-            async with httpx.AsyncClient(timeout=5) as client:
-                r = await client.post(f"{self._bot_url}/api/auth/login",
-                    json={"username": "chema200", "password": "iotron4321"})
-                if r.status_code == 200:
-                    self._auth_token = r.json().get("token", "")
-        except Exception:
-            pass
+        """Get JWT token from bot. Credentials read from env via _bot_auth helper."""
+        from ._bot_auth import get_bot_token
+        token = await get_bot_token(self._bot_url)
+        self._auth_token = token or ""
         return self._auth_token
 
     async def _run_audit(self) -> dict[str, Any]:

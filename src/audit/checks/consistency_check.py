@@ -54,13 +54,12 @@ class ConsistencyCheck(AuditCheck):
         return result
 
     async def _get_bot_data(self) -> dict | None:
+        from ...observability.health._bot_auth import get_bot_token
+        token = await get_bot_token(self._bot_url)
+        if token is None:
+            return None
         try:
             async with httpx.AsyncClient(timeout=5) as client:
-                r = await client.post(f"{self._bot_url}/api/auth/login",
-                    json={"username": "chema200", "password": "iotron4321"})
-                if r.status_code != 200:
-                    return None
-                token = r.json()["token"]
                 r = await client.get(f"{self._bot_url}/api/hl/trading/history",
                     headers={"Authorization": f"Bearer {token}"})
                 if r.status_code != 200:

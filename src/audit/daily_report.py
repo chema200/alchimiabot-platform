@@ -112,13 +112,14 @@ class DailyReportGenerator:
                   "ws_stable": False, "cpu_pct": 0, "ram_pct": 0, "issues": []}
 
         # Check bot
-        try:
-            async with httpx.AsyncClient(timeout=3) as c:
-                r = await c.post(f"{self._bot_url}/api/auth/login",
-                    json={"username": "chema200", "password": "iotron4321"})
-                result["bot_running"] = r.status_code == 200
-                if r.status_code == 200:
-                    token = r.json().get("token", "")
+        from ..observability.health._bot_auth import get_bot_token
+        token = await get_bot_token(self._bot_url, timeout_seconds=3.0)
+        if token is None:
+            result["issues"].append("Cannot reach bot API or credentials missing")
+        else:
+            result["bot_running"] = True
+            try:
+                async with httpx.AsyncClient(timeout=3) as c:
                     r2 = await c.get(f"{self._bot_url}/api/hl/status",
                         headers={"Authorization": f"Bearer {token}"})
                     if r2.status_code == 200:
@@ -126,8 +127,8 @@ class DailyReportGenerator:
                         result["ws_stable"] = data.get("connected", False)
                         result["hl_connected"] = data.get("connected", False)
                         result["assets_loaded"] = data.get("assetsLoaded", 0)
-        except Exception:
-            result["issues"].append("Cannot reach bot API")
+            except Exception:
+                result["issues"].append("Bot status endpoint unreachable")
 
         # System resources
         result["cpu_pct"] = round(psutil.cpu_percent(interval=1), 1)
@@ -165,12 +166,11 @@ class DailyReportGenerator:
             result["duplicates"] = r.scalar() or 0
 
         # Bot trades
+        from ..observability.health._bot_auth import get_bot_token
+        token = await get_bot_token(self._bot_url, timeout_seconds=5.0)
         try:
-            async with httpx.AsyncClient(timeout=5) as c:
-                r = await c.post(f"{self._bot_url}/api/auth/login",
-                    json={"username": "chema200", "password": "iotron4321"})
-                if r.status_code == 200:
-                    token = r.json()["token"]
+            if token:
+                async with httpx.AsyncClient(timeout=5) as c:
                     r2 = await c.get(f"{self._bot_url}/api/hl/trading/history",
                         headers={"Authorization": f"Bearer {token}"})
                     if r2.status_code == 200:
