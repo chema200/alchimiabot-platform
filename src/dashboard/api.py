@@ -118,7 +118,20 @@ def create_app(
 ) -> FastAPI:
     app = FastAPI(title="AgentBot Platform", version="0.1.0")
 
-    _allowed_origins = os.getenv("CORS_ORIGINS", "https://bot-v2.alchimiabot.com,https://platform-v2.alchimiabot.com,http://localhost:3001,http://localhost:8190").split(",")
+    # P1.12 audit-2026-05-15 — CORS allowlist.
+    # En prod (PLATFORM_ENV=prod) NO se incluye localhost. En dev se anaden
+    # localhost:3001 (front Next.js) y localhost:8190 (platform) para que el
+    # desarrollo siga funcionando sin tocar env vars.
+    # Los dominios v2 (bot-v2, platform-v2) son stale segun memoria operacional;
+    # los reales son alchimiabot.com y labs.alchimiabot.com.
+    _platform_env_for_cors = os.getenv("PLATFORM_ENV", "dev").strip().lower()
+    _default_origins = "https://alchimiabot.com,https://labs.alchimiabot.com,https://api.alchimiabot.com"
+    if _platform_env_for_cors != "prod":
+        _default_origins += ",http://localhost:3001,http://localhost:8190"
+    _allowed_origins = os.getenv("CORS_ORIGINS", _default_origins).split(",")
+    _allowed_origins = [o.strip() for o in _allowed_origins if o.strip()]
+    if not _allowed_origins:
+        raise RuntimeError("CORS_ORIGINS resolved to empty list — refusing to start with permissive CORS")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=_allowed_origins,
@@ -176,6 +189,19 @@ def create_app(
             )
             _BOT_API_KEY_USER_IDS = None
     if _BOT_API_KEY_USER_IDS is None:
+        # P1.11 audit-2026-05-15: en prod la "trust mode" del legacy es
+        # demasiado peligrosa porque un bug del bot (mandar user_id
+        # equivocado) o una clave filtrada contamina cualquier user. En
+        # prod exigimos la lista explicita.
+        _platform_env_for_uids = os.getenv("PLATFORM_ENV", "dev").strip().lower()
+        if _platform_env_for_uids == "prod":
+            raise RuntimeError(
+                "BOT_API_KEY_USER_IDS no configurado en PLATFORM_ENV=prod. "
+                "Sin la lista de user_ids permitidos, /api/bot/* aceptaria "
+                "payloads con cualquier user_id. Set "
+                "BOT_API_KEY_USER_IDS=1,2,... (csv ints) en .env antes "
+                "de arrancar."
+            )
         import logging
         logging.getLogger(__name__).warning(
             "BOT_API_KEY_USER_IDS is not set — /api/bot/* trusts payload user_id. "

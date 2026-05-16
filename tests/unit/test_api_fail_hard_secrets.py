@@ -58,6 +58,8 @@ class TestProdFailHard:
         monkeypatch.setenv("PLATFORM_ENV", "prod")
         monkeypatch.setenv("BOT_API_KEY", "valid-key")
         monkeypatch.setenv("JWT_SECRET", "valid-secret")
+        # P1.11: en prod tambien hay que setear BOT_API_KEY_USER_IDS.
+        monkeypatch.setenv("BOT_API_KEY_USER_IDS", "1")
         api = _reload_api()
         # create_app() construye la app. Que no tire es suficiente —
         # no necesitamos verificar el conjunto completo de rutas aqui.
@@ -92,3 +94,93 @@ class TestDevDoesNotFail:
         monkeypatch.setenv("JWT_SECRET", "valid-secret")
         api = _reload_api()
         api.create_app()
+
+
+class TestProdRequiresBotApiKeyUserIds:
+    """P1.11 — en prod la lista de user_ids es obligatoria."""
+
+    def test_prod_without_user_ids_raises(self, monkeypatch):
+        monkeypatch.setenv("PLATFORM_ENV", "prod")
+        monkeypatch.setenv("BOT_API_KEY", "valid-key")
+        monkeypatch.setenv("JWT_SECRET", "valid-secret")
+        monkeypatch.delenv("BOT_API_KEY_USER_IDS", raising=False)
+        api = _reload_api()
+        with pytest.raises(RuntimeError, match="BOT_API_KEY_USER_IDS"):
+            api.create_app()
+
+    def test_prod_with_user_ids_does_not_raise(self, monkeypatch):
+        monkeypatch.setenv("PLATFORM_ENV", "prod")
+        monkeypatch.setenv("BOT_API_KEY", "valid-key")
+        monkeypatch.setenv("JWT_SECRET", "valid-secret")
+        monkeypatch.setenv("BOT_API_KEY_USER_IDS", "1,2,3")
+        api = _reload_api()
+        app = api.create_app()
+        assert app is not None
+
+    def test_dev_without_user_ids_does_not_raise(self, monkeypatch):
+        # En dev el legacy "trust mode" se mantiene para no romper "git clone + run".
+        monkeypatch.setenv("PLATFORM_ENV", "dev")
+        monkeypatch.setenv("BOT_API_KEY", "valid-key")
+        monkeypatch.setenv("JWT_SECRET", "valid-secret")
+        monkeypatch.delenv("BOT_API_KEY_USER_IDS", raising=False)
+        api = _reload_api()
+        api.create_app()
+
+
+class TestCorsAllowlist:
+    """P1.12 — CORS allowlist correcto: prod sin localhost, dev con."""
+
+    def test_prod_excludes_localhost(self, monkeypatch):
+        monkeypatch.setenv("PLATFORM_ENV", "prod")
+        monkeypatch.setenv("BOT_API_KEY", "valid-key")
+        monkeypatch.setenv("JWT_SECRET", "valid-secret")
+        monkeypatch.setenv("BOT_API_KEY_USER_IDS", "1")
+        monkeypatch.delenv("CORS_ORIGINS", raising=False)
+        api = _reload_api()
+        app = api.create_app()
+        # Localizamos el CORSMiddleware en la stack
+        cors = next(
+            (m for m in app.user_middleware
+             if "CORSMiddleware" in str(getattr(m, "cls", m))),
+            None
+        )
+        assert cors is not None
+        origins = cors.kwargs.get("allow_origins", [])
+        # Cero localhost en prod
+        assert not any("localhost" in o for o in origins), origins
+        # Sí dominios reales
+        assert any("alchimiabot.com" in o for o in origins), origins
+
+    def test_dev_includes_localhost(self, monkeypatch):
+        monkeypatch.setenv("PLATFORM_ENV", "dev")
+        monkeypatch.setenv("BOT_API_KEY", "valid-key")
+        monkeypatch.setenv("JWT_SECRET", "valid-secret")
+        monkeypatch.delenv("BOT_API_KEY_USER_IDS", raising=False)
+        monkeypatch.delenv("CORS_ORIGINS", raising=False)
+        api = _reload_api()
+        app = api.create_app()
+        cors = next(
+            (m for m in app.user_middleware
+             if "CORSMiddleware" in str(getattr(m, "cls", m))),
+            None
+        )
+        assert cors is not None
+        origins = cors.kwargs.get("allow_origins", [])
+        assert any("localhost:3001" in o for o in origins), origins
+
+    def test_explicit_cors_origins_env_wins(self, monkeypatch):
+        # Si el operador setea CORS_ORIGINS, gana sobre los defaults.
+        monkeypatch.setenv("PLATFORM_ENV", "prod")
+        monkeypatch.setenv("BOT_API_KEY", "valid-key")
+        monkeypatch.setenv("JWT_SECRET", "valid-secret")
+        monkeypatch.setenv("BOT_API_KEY_USER_IDS", "1")
+        monkeypatch.setenv("CORS_ORIGINS", "https://custom.example.com")
+        api = _reload_api()
+        app = api.create_app()
+        cors = next(
+            (m for m in app.user_middleware
+             if "CORSMiddleware" in str(getattr(m, "cls", m))),
+            None
+        )
+        origins = cors.kwargs.get("allow_origins", [])
+        assert origins == ["https://custom.example.com"]
