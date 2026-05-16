@@ -38,7 +38,7 @@ class ExecutiveSummaryBuilder:
         metrics = self._metrics_engine.compute(trades) if trades else {}
         analysis = self._analysis_engine.analyze(trades, signals) if trades else {}
         decisions = self._decision_engine.generate(metrics, analysis, trades) if trades else []
-        score_parity = await self._score_parity.analyze()
+        score_parity = await self._score_parity.analyze(user_id=user_id)
 
         # Extract key metrics
         g = metrics.get("global", {})

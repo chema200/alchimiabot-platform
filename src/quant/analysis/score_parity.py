@@ -16,13 +16,25 @@ class ScoreParityAnalyzer:
     def __init__(self, session_factory) -> None:
         self._sf = session_factory
 
-    async def analyze(self, user_id: int | None = None) -> dict[str, Any]:
-        """Run full score parity analysis, scoped to user_id if provided."""
+    async def analyze(self, user_id: int) -> dict[str, Any]:
+        """Run full score parity analysis, scoped to user_id.
+
+        P1.10 audit-2026-05-15:
+          - user_id ahora OBLIGATORIO (no default None). Pre-fix llamadas
+            sin user_id ejecutaban contra TODOS los tenants.
+          - Filtros user_id ahora con bind param (:uid) en vez de f-string.
+            La concatenacion estaba "safe" porque user_id venia del JWT
+            como int, pero si en algun refactor llega como str es SQLi
+            trivial. Bind param elimina el riesgo entero.
+        """
         from sqlalchemy import text
 
-        # Build user filter clause
-        uf = f"AND user_id = {user_id}" if user_id else ""
-        uf_where = f"WHERE user_id = {user_id}" if user_id else ""
+        if not isinstance(user_id, int):
+            raise TypeError(f"score_parity.analyze: user_id must be int, got {type(user_id).__name__}")
+
+        # Filtros parametrizados — siempre presentes (user_id obligatorio).
+        uf = "AND user_id = :uid"
+        uf_where = "WHERE user_id = :uid"
 
         # Bug fix 2026-04-27: trades adopted/manual/external NEVER pass through
         # the bot's signal scoring (they're picked up post-hoc by the reconcile
@@ -76,7 +88,7 @@ class ScoreParityAnalyzer:
                                 AND trend_score IS NOT NULL AND trend_score > 0
                                 AND micro_score IS NOT NULL AND micro_score > 0 THEN 1 END) as all_present
                 FROM trade_outcomes {uf_where}
-            """))
+            """), {"uid": user_id})
             trade_row = trade_result.mappings().first()
 
             if trade_row and trade_row["total"] > 0:
@@ -117,7 +129,7 @@ class ScoreParityAnalyzer:
                                 AND micro_score IS NOT NULL THEN 1 END) as all_present
                 FROM signal_evaluations
                 WHERE (action = 'ENTER' OR reason LIKE 'MICRO_BLOCK%') {uf}
-            """))
+            """), {"uid": user_id})
             signal_row = signal_result.mappings().first()
 
             if signal_row and signal_row["total"] > 0:
@@ -149,7 +161,7 @@ class ScoreParityAnalyzer:
                                 AND micro_score IS NOT NULL AND micro_score > 0 THEN 1 END) as all_present
                 FROM trade_outcomes
                 WHERE entry_quality_label IS NOT NULL {uf}
-            """))
+            """), {"uid": user_id})
             pd_trade_row = pd_trade_result.mappings().first()
 
             # ── Post-diagnostics signals ──
@@ -166,18 +178,18 @@ class ScoreParityAnalyzer:
                 FROM signal_evaluations
                 WHERE entry_quality_label IS NOT NULL
                   AND (action = 'ENTER' OR reason LIKE 'MICRO_BLOCK%') {uf}
-            """))
+            """), {"uid": user_id})
             pd_signal_row = pd_signal_result.mappings().first()
 
             # ── Legacy counts ──
             legacy_trade_result = await session.execute(text(f"""
                 SELECT count(*) as total FROM trade_outcomes WHERE entry_quality_label IS NULL {uf}
-            """))
+            """), {"uid": user_id})
             legacy_trade_row = legacy_trade_result.mappings().first()
 
             legacy_signal_result = await session.execute(text(f"""
                 SELECT count(*) as total FROM signal_evaluations WHERE entry_quality_label IS NULL {uf}
-            """))
+            """), {"uid": user_id})
             legacy_signal_row = legacy_signal_result.mappings().first()
 
         # ── Build global coverage block ──
