@@ -93,11 +93,37 @@ def _extract_username(request: Request) -> str | None:
     return payload.get("sub") or None
 
 
+def _extract_role(request: Request) -> str | None:
+    """Extract role claim from JWT (bot signs it into the 'role' claim — BASIC|PRO|PREMIUM|ADMIN)."""
+    payload = _decode_jwt(request)
+    if not payload:
+        return None
+    role = payload.get("role")
+    return str(role).upper() if role else None
+
+
 def _require_user_id(request: Request) -> int:
     """Dependency: extract userId from JWT or raise 401."""
     uid = _extract_user_id(request)
     if uid is None:
         raise HTTPException(401, "Invalid or missing token")
+    return uid
+
+
+def _require_admin(request: Request) -> int:
+    """Dependency: validate JWT + ADMIN role. Returns userId. P1.3/P1.4 audit.
+
+    Pre-fix audit endpoints (status, findings, run, history) eran accesibles
+    a cualquier user autenticado. /api/audit/run en GET disparaba
+    run_all_audits (heavy DB scan) — DoS interno trivial. /api/audit/history
+    SELECT global de audit_runs sin user_id -> leak operacional cross-tenant.
+    """
+    uid = _extract_user_id(request)
+    if uid is None:
+        raise HTTPException(401, "Invalid or missing token")
+    role = _extract_role(request)
+    if role != "ADMIN":
+        raise HTTPException(403, "admin_only")
     return uid
 
 
@@ -1019,22 +1045,30 @@ def create_app(
                 raise HTTPException(404, f"Report '{name}' not found")
             return await method(user_id=_uid(request))
 
-    # ── Audit System ──
+    # ── Audit System (admin-only) ──
+    # P1.3/P1.4 audit-2026-05-15 — todos los endpoints exponen estado
+    # operacional del platform (no scoped por user_id porque audit_runs
+    # es system-wide), asi que gating ADMIN obligatorio. run_all cambia
+    # a POST para evitar CSRF-trigger via <img src> o cache de browser.
     if audit_runner:
         @app.get("/api/audit/status")
-        def audit_status() -> dict:
+        def audit_status(request: Request) -> dict:
+            _require_admin(request)
             return audit_runner.status
 
         @app.get("/api/audit/findings")
-        def audit_findings() -> list[dict]:
+        def audit_findings(request: Request) -> list[dict]:
+            _require_admin(request)
             return audit_runner.findings
 
-        @app.get("/api/audit/run")
-        async def run_all_audits() -> dict:
+        @app.post("/api/audit/run")
+        async def run_all_audits(request: Request) -> dict:
+            _require_admin(request)
             return await audit_runner.run_all_now()
 
         @app.get("/api/audit/history")
-        async def audit_history() -> list[dict]:
+        async def audit_history(request: Request) -> list[dict]:
+            _require_admin(request)
             if not session_factory:
                 return []
             from sqlalchemy import text
