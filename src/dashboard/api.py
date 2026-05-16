@@ -1065,7 +1065,11 @@ def create_app(
             return await _marker_service.calculate_impact(marker_id, force=True, user_id=_uid(request))
 
         @app.post("/api/markers")
-        async def create_marker_manual(payload: dict) -> dict:
+        async def create_marker_manual(payload: dict, request: Request) -> dict:
+            # P0.3 audit-2026-05-15: forzar user_id desde el JWT antes de pasar al
+            # service. Pre-fix el caller controlaba user_id arbitrariamente y
+            # podia insertar markers en cuentas ajenas.
+            payload["user_id"] = _uid(request)
             marker_id = await _marker_service.create_marker(**payload)
             return {"id": marker_id, "ok": True}
 
@@ -1074,9 +1078,12 @@ def create_app(
     # rejecting signals. Used by the dashboard "Gate Stats" panel to
     # surface invisible bottlenecks like the SL viability filter.
     @app.get("/api/bot/gate-stats")
-    async def dashboard_gate_stats() -> dict:
+    async def dashboard_gate_stats(request: Request) -> dict:
+        # P0.4 audit-2026-05-15: usar user_id del JWT, no el default=1.
+        # Pre-fix cualquier user veia las gate stats del admin (filtros,
+        # top SL viability coins, etc) - leak operacional cross-tenant.
         from ..ingestion.rest.bot_receiver import get_latest_gate_stats
-        return get_latest_gate_stats()
+        return get_latest_gate_stats(_uid(request))
 
     # ── Engine Shadow Mode ──
     # Proxies admin endpoints on the bot (/api/admin/shadow/*). Platform
