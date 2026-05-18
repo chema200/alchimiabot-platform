@@ -235,41 +235,26 @@ def create_app(
                 "Set JWT_SECRET (mismo valor que el bot) antes de arrancar."
             )
 
-    # P1 multi-tenant — bind API-key auth to specific user_ids. Comma-separated
-    # list of ints. When set, /api/bot/* endpoints reject payloads whose
-    # user_id is not in the list (even if API key is valid). When empty,
-    # legacy unrestricted behaviour (logged as WARN on startup).
-    _raw_uids = os.getenv("BOT_API_KEY_USER_IDS", "").strip()
-    _BOT_API_KEY_USER_IDS: list[int] | None = None
-    if _raw_uids:
-        try:
-            _BOT_API_KEY_USER_IDS = [int(x.strip()) for x in _raw_uids.split(",") if x.strip()]
-        except ValueError:
-            import logging
-            logging.getLogger(__name__).error(
-                "BOT_API_KEY_USER_IDS is malformed (%s) — falling back to unrestricted. "
-                "Expected comma-separated integers (e.g. '1,2,5').", _raw_uids
-            )
-            _BOT_API_KEY_USER_IDS = None
-    if _BOT_API_KEY_USER_IDS is None:
-        # P1.11 audit-2026-05-15: en prod la "trust mode" del legacy es
-        # demasiado peligrosa porque un bug del bot (mandar user_id
-        # equivocado) o una clave filtrada contamina cualquier user. En
-        # prod exigimos la lista explicita.
-        _platform_env_for_uids = os.getenv("PLATFORM_ENV", "dev").strip().lower()
-        if _platform_env_for_uids == "prod":
-            raise RuntimeError(
-                "BOT_API_KEY_USER_IDS no configurado en PLATFORM_ENV=prod. "
-                "Sin la lista de user_ids permitidos, /api/bot/* aceptaria "
-                "payloads con cualquier user_id. Set "
-                "BOT_API_KEY_USER_IDS=1,2,... (csv ints) en .env antes "
-                "de arrancar."
-            )
-        import logging
-        logging.getLogger(__name__).warning(
-            "BOT_API_KEY_USER_IDS is not set — /api/bot/* trusts payload user_id. "
-            "For multi-tenant safety set BOT_API_KEY_USER_IDS=1,2,... (allowed bot users)."
-        )
+    # 2026-05-18 — Multi-tenant allow-list DINAMICA.
+    #
+    # Pre-fix: BOT_API_KEY_USER_IDS era una lista hardcoded en .env. No
+    # escalaba con self-service signup (cada user nuevo requeria edit
+    # manual del .env del platform).
+    #
+    # Post-fix: ActiveUsersCache pulla la lista del bot cada 60s desde
+    # /api/internal/active-user-ids (mismo BOT_API_KEY como auth). La env
+    # var BOT_API_KEY_USER_IDS se mantiene OPCIONAL como override
+    # operacional (caso emergencia: "solo user 1 puede pushear mientras
+    # debugeo un leak"). Si no esta seteada, modo dinamico automatico.
+    from ._active_users_cache import get_instance as _get_users_cache
+    _users_cache = _get_users_cache()
+
+    @app.on_event("startup")
+    async def _prime_users_cache():
+        # Pre-warm la cache al arrancar. Si el bot no responde aun (race
+        # de boot order), la primera request /api/bot/* hara el lookup
+        # lazy y caera al fallback.
+        await _users_cache.refresh()
 
     # Auth middleware — protect all /api/ endpoints
     @app.middleware("http")
@@ -283,11 +268,18 @@ def create_app(
             key = request.headers.get("X-Bot-Api-Key", "")
             uid = _extract_user_id(request)
             if _BOT_API_KEY and key == _BOT_API_KEY:
-                request.state.allowed_user_ids = _BOT_API_KEY_USER_IDS  # None = unrestricted
+                # Pull dinamico desde el bot (cache 60s); falla-degradacion
+                # mantiene la cache anterior si el bot no responde.
+                await _users_cache.ensure_fresh()
+                # allowed_user_ids = set | None. None = cache vacia +
+                # bot inalcanzable + no override -> caer al "trust mode"
+                # del payload (mejor procesar que perder eventos del
+                # bot real durante un outage transitorio).
+                request.state.allowed_user_ids = _users_cache._cached_ids
                 return await call_next(request)  # bot backend with valid key
             if uid is not None:
                 request.state.user_id = uid
-                request.state.allowed_user_ids = [uid]  # JWT auth: only own user_id
+                request.state.allowed_user_ids = {uid}  # JWT auth: only own user_id
                 return await call_next(request)  # dashboard frontend with valid JWT
             return JSONResponse(status_code=403, content={"error": "Invalid bot API key"})
 
@@ -296,7 +288,7 @@ def create_app(
         if uid is None:
             return JSONResponse(status_code=401, content={"error": "Unauthorized"})
         request.state.user_id = uid
-        request.state.allowed_user_ids = [uid]
+        request.state.allowed_user_ids = {uid}
         return await call_next(request)
 
     # Login endpoint — proxies to bot API for credential validation

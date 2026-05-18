@@ -96,26 +96,40 @@ class TestDevDoesNotFail:
         api.create_app()
 
 
-class TestProdRequiresBotApiKeyUserIds:
-    """P1.11 — en prod la lista de user_ids es obligatoria."""
+class TestBotApiKeyUserIdsBehavior:
+    """2026-05-18 — BOT_API_KEY_USER_IDS ya no es obligatorio. El platform
+    pulla la allow-list dinamicamente del bot (/api/internal/active-user-ids
+    cada 60s). El env var queda como OPCIONAL override operacional para
+    emergencias ("solo user 1 mientras debugeo")."""
 
-    def test_prod_without_user_ids_raises(self, monkeypatch):
+    def test_prod_without_user_ids_does_not_raise_anymore(self, monkeypatch):
+        # Pre-fix tiraba RuntimeError. Post-fix arranca normal en modo dinamico.
         monkeypatch.setenv("PLATFORM_ENV", "prod")
         monkeypatch.setenv("BOT_API_KEY", "valid-key")
         monkeypatch.setenv("JWT_SECRET", "valid-secret")
         monkeypatch.delenv("BOT_API_KEY_USER_IDS", raising=False)
         api = _reload_api()
-        with pytest.raises(RuntimeError, match="BOT_API_KEY_USER_IDS"):
-            api.create_app()
+        # Reset singleton del cache para que pille los env vars nuevos
+        from src.dashboard._active_users_cache import reset_instance_for_tests
+        reset_instance_for_tests()
+        app = api.create_app()
+        assert app is not None
 
-    def test_prod_with_user_ids_does_not_raise(self, monkeypatch):
+    def test_prod_with_user_ids_still_works_as_override(self, monkeypatch):
+        # El override sigue funcional cuando se setea explicitamente.
         monkeypatch.setenv("PLATFORM_ENV", "prod")
         monkeypatch.setenv("BOT_API_KEY", "valid-key")
         monkeypatch.setenv("JWT_SECRET", "valid-secret")
         monkeypatch.setenv("BOT_API_KEY_USER_IDS", "1,2,3")
         api = _reload_api()
+        from src.dashboard._active_users_cache import reset_instance_for_tests
+        reset_instance_for_tests()
         app = api.create_app()
         assert app is not None
+        # El cache singleton creado por create_app debe tener override
+        from src.dashboard._active_users_cache import get_instance
+        cache = get_instance()
+        assert cache.has_override() is True
 
     def test_dev_without_user_ids_does_not_raise(self, monkeypatch):
         # En dev el legacy "trust mode" se mantiene para no romper "git clone + run".

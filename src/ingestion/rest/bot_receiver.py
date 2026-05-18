@@ -28,13 +28,17 @@ router = APIRouter(prefix="/api/bot", tags=["bot-integration"])
 
 
 def _check_user_id(request: Request, payload_user_id: int, endpoint: str) -> JSONResponse | None:
-    """P1 multi-tenant — reject if API key is bound to specific user_ids and
-    the payload's user_id is not in that list. Returns a JSONResponse to
-    short-circuit the handler, or None to continue.
+    """Multi-tenant guard — reject if payload_user_id is not in the
+    request's allow-list. Returns a JSONResponse to short-circuit, or
+    None to continue.
 
-    Unrestricted mode (allowed_user_ids is None) preserves legacy behavior
-    so existing single-user deployments keep working until they opt-in by
-    setting BOT_API_KEY_USER_IDS.
+    2026-05-18 — allowed_user_ids ahora es DINAMICO (poblado por
+    ActiveUsersCache, pull cada 60s desde el bot). Valores:
+      - set/list de ints: allow-list activa (la fuente puede ser cache
+        dinamica, override BOT_API_KEY_USER_IDS, o {uid} en path JWT).
+      - None: cache vacia + sin override + bot inalcanzable. "Trust mode"
+        transitorio — preferimos procesar el evento del bot real durante
+        un outage de auth a perder telemetria.
     """
     allowed = getattr(request.state, "allowed_user_ids", None)
     if allowed is None:
@@ -42,7 +46,8 @@ def _check_user_id(request: Request, payload_user_id: int, endpoint: str) -> JSO
     if payload_user_id in allowed:
         return None
     logger.warning("bot_receiver.user_id_not_allowed",
-                   endpoint=endpoint, payload_user_id=payload_user_id, allowed=allowed)
+                   endpoint=endpoint, payload_user_id=payload_user_id,
+                   allowed_count=len(allowed) if hasattr(allowed, "__len__") else "?")
     return JSONResponse(
         status_code=403,
         content={"ok": False, "error": "user_id not allowed for this API key"},
